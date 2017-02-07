@@ -84,14 +84,11 @@
 #include <QtCore/qabstracteventdispatcher.h>
 #include <QtCore/private/qtimerinfo_unix_p.h>
 #include <QtCore/private/qcfsocketnotifier_p.h>
+#include <QtCore/private/qcore_mac_p.h>
 #include <QtCore/qdebug.h>
 #include <CoreFoundation/CoreFoundation.h>
 
-#ifdef __OBJC__
-@class RunLoopModeTracker;
-#else
-typedef struct objc_object RunLoopModeTracker;
-#endif
+Q_FORWARD_DECLARE_OBJC_CLASS(QT_MANGLE_NAMESPACE(RunLoopModeTracker));
 
 QT_BEGIN_NAMESPACE
 
@@ -245,7 +242,7 @@ private:
     RunLoopSource<> m_postedEventsRunLoopSource;
     RunLoopObserver<> m_runLoopActivityObserver;
 
-    RunLoopModeTracker *m_runLoopModeTracker;
+    QT_MANGLE_NAMESPACE(RunLoopModeTracker) *m_runLoopModeTracker;
 
     QTimerInfoList m_timerInfoList;
     CFRunLoopTimerRef m_runLoopTimer;

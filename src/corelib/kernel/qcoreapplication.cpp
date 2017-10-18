@@ -2928,6 +2928,11 @@ QAbstractEventDispatcher *QCoreApplication::eventDispatcher()
     return 0;
 }
 
+void qt_set_current_thread_to_main_thread()
+{
+    QCoreApplicationPrivate::theMainThread = QThread::currentThread();
+}
+
 /*!
     Sets the event dispatcher for the main thread to \a eventDispatcher. This
     is only possible as long as there is no event dispatcher installed yet. That

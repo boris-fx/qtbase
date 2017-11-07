@@ -35,12 +35,12 @@
 #include <qpainter.h>
 #include <qpixmapcache.h>
 #include <private/qmath_p.h>
-#include <private/qstyle_p.h>
 #include <qmath.h>
 #include <qscrollbar.h>
 #include <qabstractscrollarea.h>
 #include <qwindow.h>
 
+#include "qstyle_p.h"
 #include "qstylehelper_p.h"
 #include <qstringbuilder.h>
 #include "qapplication.h"

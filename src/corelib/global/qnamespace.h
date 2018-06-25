@@ -1803,6 +1803,7 @@ public:
     static bool registerCallback(Callback, qInternalCallback);
     static bool unregisterCallback(Callback, qInternalCallback);
     static bool activateCallbacks(Callback, void **);
+    static void setCurrentThreadToMainThread();
 };
 
 QT_END_NAMESPACE

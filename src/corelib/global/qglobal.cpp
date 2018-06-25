@@ -3864,6 +3864,13 @@ bool QInternal::activateCallbacks(Callback cb, void **parameters)
     return false;
 }
 
+extern void qt_set_current_thread_to_main_thread();
+
+void QInternal::setCurrentThreadToMainThread()
+{
+   qt_set_current_thread_to_main_thread();
+}
+
 /*!
     \macro Q_BYTE_ORDER
     \relates <QtGlobal>

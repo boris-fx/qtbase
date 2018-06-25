@@ -29,7 +29,7 @@ CFLAGS_EXTRA      = /MP /D_CRT_SECURE_NO_WARNINGS /D_SCL_SECURE_NO_WARNINGS /Zc:
 !endif  # !win32-icc
 
 CFLAGS_BARE = -c -Fo./ -Fdqmake.pdb \
-              -W3 -nologo -O1 \
+              -W3 -nologo -O1 -Zi \
               $(CFLAGS_EXTRA) \
               -I$(QMKSRC) -I$(QMKSRC)\library -I$(QMKSRC)\generators -I$(QMKSRC)\generators\unix -I$(QMKSRC)\generators\win32 -I$(QMKSRC)\generators\mac -I$(QMKSRC)\generators\integrity \
               -I$(INC_PATH) -I$(INC_PATH)\QtCore -I$(INC_PATH)\QtCore\$(QT_VERSION) -I$(INC_PATH)\QtCore\$(QT_VERSION)\QtCore \
@@ -46,7 +46,7 @@ CFLAGS   = -Yuqmake_pch.h -FIqmake_pch.h -Fpqmake_pch.pch $(CFLAGS_BARE) $(CFLAG
 CXXFLAGS_BARE = $(CFLAGS_BARE)
 CXXFLAGS = $(CFLAGS)
 
-LFLAGS	    =
+LFLAGS	    = /SUBSYSTEM:CONSOLE /DEBUG /PDB:qmake.pdb
 LIBS	    = ole32.lib advapi32.lib shell32.lib
 LINKQMAKE   = $(LINKER) $(LFLAGS) -OUT:qmake.exe $(OBJS) $(QTOBJS) $(LIBS)
 ADDCLEAN    = qmake.pdb qmake.ilk

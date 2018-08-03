@@ -547,7 +547,17 @@ QLibraryInfo::rawLocation(LibraryLocation loc, PathGroup group)
         }
 #else
         if (loc == PrefixPath) {
-            if (QCoreApplication::instance()) {
+            // Mocha might be used as a plugin. It means that
+            // QCoreApplication::applicationDirPath() or QDir::currentPath() might contain
+            // a wrong value.
+            //
+            // Changing path in argv for QCoreApplication is not an option, because
+            // it could be ignored on some systems. For example, on Linux the path is
+            // calculated based on pid.
+            auto modulePathEnv = qgetenv("MOCHA_PLUGIN_MODULE_PATH");
+            if (!modulePathEnv.isEmpty())
+                baseDir = QDir(QFile::decodeName(modulePathEnv)).canonicalPath();
+            else if (QCoreApplication::instance()) {
 #ifdef Q_OS_DARWIN
                 CFBundleRef bundleRef = CFBundleGetMainBundle();
                 if (bundleRef) {

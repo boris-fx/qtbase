@@ -190,6 +190,25 @@ equals(QT_ARCH, i386):contains(QT_CPU_FEATURES.$$QT_ARCH, sse2):compiler_support
     QMAKE_CXXFLAGS += -mfpmath=sse
 }
 
+# Create soname for module. We need it to avoid potential "dependency hell"
+# when library with the same name and version is already loaded by a host
+linux:!isEmpty(QT_NAMESPACE):!static:!header_module {
+    __FORCE_LINK_CMD = $${QMAKE_LN_SHLIB} -f
+
+    __LIB_PREFIX = lib
+    __LIB_SONAME_BASE_NAME = $$qt5LibraryTarget($$TARGET$$QT_LIBINFIX)_$${QT_NAMESPACE}
+    __LIB_SONAME = $${__LIB_PREFIX}$${__LIB_SONAME_BASE_NAME}.$${QMAKE_EXTENSION_SHLIB}
+    __TARGET_LIB_NAME = $${__LIB_PREFIX}$$qt5LibraryTarget($$TARGET$$QT_LIBINFIX).$${QMAKE_EXTENSION_SHLIB}
+
+    QMAKE_LFLAGS_SONAME *= -Wl,-soname,$${__LIB_SONAME}
+    QMAKE_POST_LINK *= $${__FORCE_LINK_CMD} "$${__TARGET_LIB_NAME}" "$${QT_MODULE_LIB_BASE}/$${__LIB_SONAME}"
+
+    $${__LIB_SONAME_BASE_NAME}.path = $$[QT_INSTALL_LIBS]
+    $${__LIB_SONAME_BASE_NAME}.extra = $${__FORCE_LINK_CMD} "$${__TARGET_LIB_NAME}" "$$[QT_INSTALL_LIBS]/$${__LIB_SONAME}"
+
+    INSTALLS *= $${__LIB_SONAME_BASE_NAME}
+}
+
 android: CONFIG += qt_android_deps no_linker_version_script
 
 !header_module:unix:!isEmpty(QMAKE_LFLAGS_VERSION_SCRIPT):!no_linker_version_script:!static {

@@ -74,7 +74,7 @@ class QWindow;
 
 namespace QStyleHelper
 {
-    QString uniqueName(const QString &key, const QStyleOption *option, const QSize &size);
+    Q_WIDGETS_EXPORT QString uniqueName(const QString &key, const QStyleOption *option, const QSize &size);
     Q_WIDGETS_EXPORT qreal dpiScaled(qreal value);
 #if QT_CONFIG(dial)
     qreal angle(const QPointF &p1, const QPointF &p2);

@@ -86,10 +86,8 @@ static const int blueFrameWidth =  2;  // with of line edit focus frame
 #include <qpa/qplatformtheme.h>
 #include <private/qguiapplication_p.h>
 #include <qstylefactory.h>
-
-#include "qstyle_p.h"
-#include "qstylehelper_p.h"
-#include "qstylecache_p.h"
+#include <private/qstyle_p.h>
+#include <private/qstylehelper_p.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -1299,8 +1297,8 @@ void QPlastiqueStyle::drawPrimitive(PrimitiveElement element, const QStyleOption
 #ifndef QT_NO_GROUPBOX
     case PE_FrameGroupBox:
         if (const QStyleOptionFrame *frame = qstyleoption_cast<const QStyleOptionFrame *>(option)) {
-            QStyleOptionFrameV2 frameV2(*frame);
-            if (frameV2.features & QStyleOptionFrameV2::Flat) {
+            QStyleOptionFrame frameV2(*frame);
+            if (frameV2.features & QStyleOptionFrame::Flat) {
                 QPen oldPen = painter->pen();
                 painter->setPen(borderColor);
                 painter->drawLine(frameV2.rect.topLeft(), frameV2.rect.topRight());
@@ -2441,10 +2439,10 @@ void QPlastiqueStyle::drawControl(ControlElement element, const QStyleOption *op
             bool inverted = false;
             bool bottomToTop = false;
             // Get extra style options if version 2
-            if (const QStyleOptionProgressBarV2 *bar2 = qstyleoption_cast<const QStyleOptionProgressBarV2 *>(option)) {
-                vertical = (bar2->orientation == Qt::Vertical);
-                inverted = bar2->invertedAppearance;
-                bottomToTop = bar2->bottomToTop;
+            if (const QStyleOptionProgressBar *bar = qstyleoption_cast<const QStyleOptionProgressBar *>(option)) {
+                vertical = (bar->orientation == Qt::Vertical);
+                inverted = bar->invertedAppearance;
+                bottomToTop = bar->bottomToTop;
             }
 
             if (vertical) {
@@ -2509,9 +2507,9 @@ void QPlastiqueStyle::drawControl(ControlElement element, const QStyleOption *op
             painter->save();
 
             // Get extra style options if version 2
-            if (const QStyleOptionProgressBarV2 *bar2 = qstyleoption_cast<const QStyleOptionProgressBarV2 *>(option)) {
-                vertical = (bar2->orientation == Qt::Vertical);
-                inverted = bar2->invertedAppearance;
+            if (const QStyleOptionProgressBar *bar = qstyleoption_cast<const QStyleOptionProgressBar *>(option)) {
+                vertical = (bar->orientation == Qt::Vertical);
+                inverted = bar->invertedAppearance;
             }
 
             // If the orientation is vertical, we use a transform to rotate
@@ -3115,17 +3113,13 @@ void QPlastiqueStyle::drawControl(ControlElement element, const QStyleOption *op
         if (const QStyleOptionDockWidget *dockWidget = qstyleoption_cast<const QStyleOptionDockWidget *>(option)) {
             painter->save();
 
-            const QStyleOptionDockWidgetV2 *v2
-                = qstyleoption_cast<const QStyleOptionDockWidgetV2*>(dockWidget);
-            bool verticalTitleBar = v2 == 0 ? false : v2->verticalTitleBar;
-
             // Find text width and title rect
             int textWidth = option->fontMetrics.width(dockWidget->title);
             int margin = 4;
             QRect titleRect = subElementRect(SE_DockWidgetTitleBarText, option, widget);
             QRect rect = dockWidget->rect;
 
-            if (verticalTitleBar) {
+            if (dockWidget->verticalTitleBar) {
                 QRect r = rect;
                 QSize s = r.size();
                 s.transpose();
@@ -5178,7 +5172,7 @@ QRect QPlastiqueStyle::subControlRect(ComplexControl control, const QStyleOption
                         ret.adjust(0, 0, -delta, 0);
                     if (tb->titleBarFlags & Qt::WindowContextHelpButtonHint)
                         ret.adjust(0, 0, -delta, 0);
-                    ret.adjusted(indent, 0, -indent, 0);
+                    ret.adjust(indent, 0, -indent, 0);
                 }
                 break;
             case SC_TitleBarContextHelpButton:

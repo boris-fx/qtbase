@@ -2016,6 +2016,10 @@ MakefileGenerator::writeExtraCompilerTargets(QTextStream &t)
                             for(int i = 0; i < dep_cmd_deps.count(); ++i) {
                                 QString &file = dep_cmd_deps[i];
                                 QString absFile = outDir.absoluteFilePath(file);
+                                if (!exists(absFile)) {
+                                   file = "";
+                                   continue;
+                                }
                                 if (absFile == file) {
                                     // already absolute; don't do any checks.
                                 } else if (exists(absFile)) {
@@ -2104,6 +2108,10 @@ MakefileGenerator::writeExtraCompilerTargets(QTextStream &t)
                         for(int i = 0; i < dep_cmd_deps.count(); ++i) {
                             QString &file = dep_cmd_deps[i];
                             QString absFile = outDir.absoluteFilePath(file);
+                            if (!exists(absFile)) {
+                                file = "";
+                                continue;
+                            }
                             if (absFile == file) {
                                 // already absolute; don't do any checks.
                             } else if (exists(absFile)) {

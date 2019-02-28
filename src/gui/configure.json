@@ -371,7 +371,8 @@
             },
             "headers": "jpeglib.h",
             "sources": [
-                { "libs": "-llibjpeg", "condition": "config.msvc" },
+                { "libs": "-ljpeg", "condition": "features.shared" },
+				{ "libs": "-ljpeg_s", "condition": "!features.shared" },
                 "-ljpeg"
             ]
         },
@@ -383,10 +384,12 @@
             "headers": "png.h",
             "sources": [
                 { "type": "pkgConfig", "args": "libpng" },
-                { "libs": "-llibpng16", "condition": "config.msvc" },
-                { "libs": "-llibpng", "condition": "config.msvc" },
-                { "libs": "-lpng16", "condition": "!config.msvc" },
-                { "libs": "-lpng", "condition": "!config.msvc" },
+                { "libs": "-lpng16", "condition": "features.shared" },
+                { "libs": "-lpng", "condition": "features.shared" },
+				{ "libs": "-lpng16_s -lzlib1_s", "condition": "!features.shared && config.win32" },
+                { "libs": "-lpng_s -lzlib1_s", "condition": "!features.shared && config.win32" },
+				{ "libs": "-lpng16_s", "condition": "!features.shared && !config.win32" },
+                { "libs": "-lpng_s", "condition": "!features.shared && !config.win32" },
                 { "libs": "-s USE_LIBPNG=1", "condition": "config.wasm" }
             ],
             "use": [

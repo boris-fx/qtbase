@@ -206,6 +206,9 @@ QCocoaIntegration::QCocoaIntegration(const QStringList &paramList)
     // by explicitly setting the presentation option to the magic 'default value',
     // which will resolve to an actual value and result in screen invalidation.
     cocoaApplication.presentationOptions = NSApplicationPresentationDefault;
+
+    m_screensObserver = QMacScopedObserver([NSApplication sharedApplication],
+        NSApplicationDidChangeScreenParametersNotification, [&]() { updateScreens(); });
     updateScreens();
 
     QMacInternalPasteboardMime::initializeMimeTypes();
@@ -241,7 +244,7 @@ QCocoaIntegration::~QCocoaIntegration()
 
     // Delete screens in reverse order to avoid crash in case of multiple screens
     while (!mScreens.isEmpty()) {
-        destroyScreen(mScreens.takeLast());
+        QWindowSystemInterface::handleScreenRemoved(mScreens.takeLast());
     }
 
     clearToolbars();
@@ -301,7 +304,7 @@ void QCocoaIntegration::updateScreens()
             screen = new QCocoaScreen(i);
             mScreens.append(screen);
             qCDebug(lcQpaScreen) << "Adding" << screen;
-            screenAdded(screen);
+            QWindowSystemInterface::handleScreenAdded(screen);
         }
         siblings << screen;
     }
@@ -318,7 +321,7 @@ void QCocoaIntegration::updateScreens()
         // Prevent stale references to NSScreen during destroy
         screen->m_screenIndex = -1;
         qCDebug(lcQpaScreen) << "Removing" << screen;
-        destroyScreen(screen);
+        QWindowSystemInterface::handleScreenRemoved(screen);
     }
 }
 
@@ -404,7 +407,16 @@ QPlatformOpenGLContext *QCocoaIntegration::createPlatformOpenGLContext(QOpenGLCo
 
 QPlatformBackingStore *QCocoaIntegration::createPlatformBackingStore(QWindow *window) const
 {
-    return new QCocoaBackingStore(window);
+    QCocoaWindow *platformWindow = static_cast<QCocoaWindow*>(window->handle());
+    if (!platformWindow) {
+        qWarning() << window << "must be created before being used with a backingstore";
+        return nullptr;
+    }
+
+    if (platformWindow->view().layer)
+        return new QCALayerBackingStore(window);
+    else
+        return new QNSWindowBackingStore(window);
 }
 
 QAbstractEventDispatcher *QCocoaIntegration::createEventDispatcher() const

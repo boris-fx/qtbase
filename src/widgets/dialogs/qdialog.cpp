@@ -246,6 +246,13 @@ void QDialogPrivate::deletePlatformHelper()
     window-system properties for the widget (in particular it will
     reset the Qt::Dialog flag).
 
+    \note The parent relationship of the dialog does \e{not} imply
+    that the dialog will always be stacked on top of the parent
+    window. To ensure that the dialog is always on top, make the
+    dialog modal. This also applies for child windows of the dialog
+    itself. To ensure that child windows of the dialog stay on top
+    of the dialog, make the child windows modal as well.
+
     \section1 Modal Dialogs
 
     A \b{modal} dialog is a dialog that blocks input to other
@@ -969,7 +976,7 @@ Qt::Orientation QDialog::orientation() const
 
     Sets the widget, \a extension, to be the dialog's extension,
     deleting any previous extension. The dialog takes ownership of the
-    extension. Note that if 0 is passed any existing extension will be
+    extension. Note that if \nullptr is passed, any existing extension will be
     deleted. This function must only be called while the dialog is hidden.
 
     Instead of using this functionality, we recommend that you simply call

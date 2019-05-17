@@ -346,7 +346,9 @@ public class QtActivityDelegate
                 }
             } else if ((inputHints & ImhHiddenText) != 0) {
                 inputType |= android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD;
-            } else if ((inputHints & ImhSensitiveData) != 0 || (inputHints & ImhNoPredictiveText) != 0) {
+            } else if ((inputHints & ImhSensitiveData) != 0 ||
+                ((inputHints & ImhNoPredictiveText) != 0 &&
+                  System.getenv("QT_ANDROID_ENABLE_WORKAROUND_TO_DISABLE_PREDICTIVE_TEXT") != null)) {
                 inputType |= android.text.InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD;
             }
 
@@ -506,7 +508,8 @@ public class QtActivityDelegate
                     m_rightSelectionHandle = null;
                     m_leftSelectionHandle = null;
                 }
-                m_editPopupMenu.hide();
+                if (m_editPopupMenu != null)
+                    m_editPopupMenu.hide();
                 break;
 
             case CursorHandleShowNormal:
@@ -561,7 +564,8 @@ public class QtActivityDelegate
             }
             m_editPopupMenu.setPosition(editX, editY, editButtons);
         } else {
-            m_editPopupMenu.hide();
+            if (m_editPopupMenu != null)
+                m_editPopupMenu.hide();
         }
     }
 
@@ -604,11 +608,14 @@ public class QtActivityDelegate
         }
         QtNative.loadQtLibraries(loaderParams.getStringArrayList(NATIVE_LIBRARIES_KEY));
         ArrayList<String> libraries = loaderParams.getStringArrayList(BUNDLED_LIBRARIES_KEY);
-        QtNative.loadBundledLibraries(libraries, QtNativeLibrariesDir.nativeLibrariesDir(m_activity));
+        String nativeLibsDir = QtNativeLibrariesDir.nativeLibrariesDir(m_activity);
+        QtNative.loadBundledLibraries(libraries, nativeLibsDir);
         m_mainLib = loaderParams.getString(MAIN_LIBRARY_KEY);
         // older apps provide the main library as the last bundled library; look for this if the main library isn't provided
-        if (null == m_mainLib && libraries.size() > 0)
+        if (null == m_mainLib && libraries.size() > 0) {
             m_mainLib = libraries.get(libraries.size() - 1);
+            libraries.remove(libraries.size() - 1);
+        }
 
         if (loaderParams.containsKey(EXTRACT_STYLE_KEY)) {
             String path = loaderParams.getString(EXTRACT_STYLE_KEY);
@@ -662,8 +669,8 @@ public class QtActivityDelegate
         } catch (Exception e) {
             e.printStackTrace();
         }
-
-        return true;
+        m_mainLib = QtNative.loadMainLibrary(m_mainLib, nativeLibsDir);
+        return m_mainLib != null;
     }
 
     public boolean startApplication()
@@ -726,11 +733,7 @@ public class QtActivityDelegate
                 @Override
                 public void run() {
                     try {
-                        String nativeLibraryDir = QtNativeLibrariesDir.nativeLibrariesDir(m_activity);
-                        QtNative.startApplication(m_applicationParameters,
-                            m_environmentVariables,
-                            m_mainLib,
-                            nativeLibraryDir);
+                        QtNative.startApplication(m_applicationParameters, m_environmentVariables, m_mainLib);
                         m_started = true;
                     } catch (Exception e) {
                         e.printStackTrace();
@@ -741,11 +744,19 @@ public class QtActivityDelegate
         }
         m_layout = new QtLayout(m_activity, startApplication);
 
+        int orientation = m_activity.getResources().getConfiguration().orientation;
+
         try {
             ActivityInfo info = m_activity.getPackageManager().getActivityInfo(m_activity.getComponentName(), PackageManager.GET_META_DATA);
-            if (info.metaData.containsKey("android.app.splash_screen_drawable")) {
+
+            String splashScreenKey = "android.app.splash_screen_drawable_"
+                + (orientation == Configuration.ORIENTATION_LANDSCAPE ? "landscape" : "portrait");
+            if (!info.metaData.containsKey(splashScreenKey))
+                splashScreenKey = "android.app.splash_screen_drawable";
+
+            if (info.metaData.containsKey(splashScreenKey)) {
                 m_splashScreenSticky = info.metaData.containsKey("android.app.splash_screen_sticky") && info.metaData.getBoolean("android.app.splash_screen_sticky");
-                int id = info.metaData.getInt("android.app.splash_screen_drawable");
+                int id = info.metaData.getInt(splashScreenKey);
                 m_splashScreen = new ImageView(m_activity);
                 m_splashScreen.setImageDrawable(m_activity.getResources().getDrawable(id));
                 m_splashScreen.setScaleType(ImageView.ScaleType.FIT_XY);
@@ -765,7 +776,6 @@ public class QtActivityDelegate
                                   new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
                                                              ViewGroup.LayoutParams.MATCH_PARENT));
 
-        int orientation = m_activity.getResources().getConfiguration().orientation;
         int rotation = m_activity.getWindowManager().getDefaultDisplay().getRotation();
         boolean rot90 = (rotation == Surface.ROTATION_90 || rotation == Surface.ROTATION_270);
         boolean currentlyLandscape = (orientation == Configuration.ORIENTATION_LANDSCAPE);

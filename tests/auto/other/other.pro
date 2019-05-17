@@ -30,6 +30,8 @@ SUBDIRS=\
    gestures \
    lancelot \
    languagechange \
+   macgui \
+   macplist \
    qaccessibility \
    qfocusevent \
    qnetworkaccessmanager_and_qprogressdialog \
@@ -54,7 +56,7 @@ winrt|!qtHaveModule(gui)|!qtConfig(accessibility): SUBDIRS -= qaccessibility
 
 !qtConfig(process): SUBDIRS -= qprocess_and_guieventloop
 
-!mac: SUBDIRS -= \
+!macos|!qtHaveModule(gui): SUBDIRS -= \
            macgui \
            macnativeevents \
            macplist \

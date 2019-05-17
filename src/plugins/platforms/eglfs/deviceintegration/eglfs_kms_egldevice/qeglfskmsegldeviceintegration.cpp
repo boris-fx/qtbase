@@ -260,7 +260,7 @@ QKmsDevice *QEglFSKmsEglDeviceIntegration::createDevice()
     if (Q_UNLIKELY(!deviceName))
         qFatal("Failed to query device name from EGLDevice");
 
-    return new QEglFSKmsEglDevice(this, screenConfig(), deviceName);
+    return new QEglFSKmsEglDevice(this, screenConfig(), QLatin1String(deviceName));
 }
 
 bool QEglFSKmsEglDeviceIntegration::query_egl_device()
@@ -289,7 +289,9 @@ QPlatformCursor *QEglFSKmsEglDeviceIntegration::createCursor(QPlatformScreen *sc
 {
 #if QT_CONFIG(opengl)
     if (screenConfig()->separateScreens())
-        return  new QEglFSCursor(screen);
+        return new QEglFSCursor(screen);
+#else
+    Q_UNUSED(screen);
 #endif
     return nullptr;
 }

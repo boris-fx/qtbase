@@ -1910,9 +1910,6 @@ void QWindowPrivate::destroy()
     resizeEventPending = true;
     receivedExpose = false;
     exposed = false;
-
-    if (wasVisible)
-        maybeQuitOnLastWindowClosed();
 }
 
 /*!
@@ -2301,8 +2298,17 @@ bool QWindow::event(QEvent *ev)
 #endif
 
     case QEvent::Close:
-        if (ev->isAccepted())
+        if (ev->isAccepted()) {
+            Q_D(QWindow);
+            bool wasVisible = isVisible();
             destroy();
+            if (wasVisible) {
+                // FIXME: This check for visibility is a workaround for both QWidgetWindow
+                // and QWindow having logic to emit lastWindowClosed, and possibly quit the
+                // application. We should find a better way to handle this.
+                d->maybeQuitOnLastWindowClosed();
+            }
+        }
         break;
 
     case QEvent::Expose:
@@ -2587,6 +2593,8 @@ void QWindowPrivate::maybeQuitOnLastWindowClosed()
         return;
 
     Q_Q(QWindow);
+    if (!q->isTopLevel())
+        return;
     // Attempt to close the application only if this has WA_QuitOnClose set and a non-visible parent
     bool quitOnClose = QGuiApplication::quitOnLastWindowClosed() && !q->parent();
     QWindowList list = QGuiApplication::topLevelWindows();
@@ -2643,7 +2651,7 @@ QOpenGLContext *QWindowPrivate::shareContext() const
     native window, or to embed a native window inside a QWindow.
 
     If foreign windows are not supported or embedding the native window
-    failed in the platform plugin, this function returns 0.
+    failed in the platform plugin, this function returns \nullptr.
 
     \note The resulting QWindow should not be used to manipulate the underlying
     native window (besides re-parenting), or to observe state changes of the

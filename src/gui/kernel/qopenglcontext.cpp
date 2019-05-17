@@ -313,7 +313,7 @@ QOpenGLContext *qt_gl_global_share_context()
 
     \section1 Context Resource Sharing
 
-    Resources, such as framebuffer objects, textures, and vertex buffer objects
+    Resources such as textures and vertex buffer objects
     can be shared between contexts.  Use setShareContext() before calling
     create() to specify that the contexts should share these resources.
     QOpenGLContext internally keeps track of a QOpenGLContextGroup object which
@@ -1118,7 +1118,7 @@ void QOpenGLContext::swapBuffers(QSurface *surface)
 /*!
     Resolves the function pointer to an OpenGL extension function, identified by \a procName
 
-    Returns 0 if no such function can be found.
+    Returns \nullptr if no such function can be found.
 */
 QFunctionPointer QOpenGLContext::getProcAddress(const QByteArray &procName) const
 {

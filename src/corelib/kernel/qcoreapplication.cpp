@@ -2097,9 +2097,13 @@ static void replacePercentN(QString *result, int n)
         int len = 0;
         while ((percentPos = result->indexOf(QLatin1Char('%'), percentPos + len)) != -1) {
             len = 1;
+            if (percentPos + len == result->length())
+                break;
             QString fmt;
             if (result->at(percentPos + len) == QLatin1Char('L')) {
                 ++len;
+                if (percentPos + len == result->length())
+                    break;
                 fmt = QLatin1String("%L1");
             } else {
                 fmt = QLatin1String("%1");
@@ -2664,9 +2668,9 @@ QStringList QCoreApplication::libraryPaths()
         QStringList *app_libpaths = new QStringList;
         coreappdata()->app_libpaths.reset(app_libpaths);
 
-        const QByteArray libPathEnv = qgetenv("QT_PLUGIN_PATH");
+        QString libPathEnv = qEnvironmentVariable("QT_PLUGIN_PATH");
         if (!libPathEnv.isEmpty()) {
-            QStringList paths = QFile::decodeName(libPathEnv).split(QDir::listSeparator(), QString::SkipEmptyParts);
+            QStringList paths = libPathEnv.split(QDir::listSeparator(), QString::SkipEmptyParts);
             for (QStringList::const_iterator it = paths.constBegin(); it != paths.constEnd(); ++it) {
                 QString canonicalPath = QDir(*it).canonicalPath();
                 if (!canonicalPath.isEmpty()

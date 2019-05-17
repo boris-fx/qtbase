@@ -73,7 +73,7 @@ public:
     {
         Q_Q(QWidgetWindow);
         if (QWidget *widget = q->widget())
-            widget->setVisible(visible);
+            QWidgetPrivate::get(widget)->setVisible(visible);
         else
             QWindowPrivate::setVisible(visible);
     }
@@ -878,8 +878,6 @@ void QWidgetWindow::handleDragEnterEvent(QDragEnterEvent *event, QWidget *widget
     const QPoint mapped = widget->mapFromGlobal(m_widget->mapToGlobal(event->pos()));
     QDragEnterEvent translated(mapped, event->possibleActions(), event->mimeData(),
                                event->mouseButtons(), event->keyboardModifiers());
-    translated.setDropAction(event->dropAction());
-    translated.setAccepted(event->isAccepted());
     QGuiApplication::forwardEvent(m_dragTarget, &translated, event);
     event->setAccepted(translated.isAccepted());
     event->setDropAction(translated.dropAction());

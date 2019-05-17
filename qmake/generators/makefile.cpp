@@ -81,8 +81,8 @@ bool MakefileGenerator::canExecute(const QStringList &cmdline, int *a) const
 
 QString MakefileGenerator::mkdir_p_asstring(const QString &dir, bool escape) const
 {
-    QString edir = escape ? escapeFilePath(Option::fixPathToTargetOS(dir, false, false)) : dir;
-    return "@" + makedir.arg(edir);
+    return "@" + makedir.arg(
+        escape ? escapeFilePath(Option::fixPathToTargetOS(dir, false, false)) : dir);
 }
 
 bool MakefileGenerator::mkdir(const QString &in_path) const
@@ -532,7 +532,7 @@ MakefileGenerator::init()
                     QStack<int> state;
                     enum { IN_CONDITION, MET_CONDITION, PENDING_CONDITION };
                     for (int count = 1; !in.atEnd(); ++count) {
-                        QString line = QString::fromUtf8(in.readLine());
+                        QString line = QString::fromLatin1(in.readLine());
                         if (line.startsWith("!!IF ")) {
                             if (state.isEmpty() || state.top() == IN_CONDITION) {
                                 QString test = line.mid(5, line.length()-(5+1));
@@ -578,7 +578,7 @@ MakefileGenerator::init()
                             contents += project->expand(line, in.fileName(), count);
                         }
                     }
-                    contentBytes = contents.toUtf8();
+                    contentBytes = contents.toLatin1();
                 }
                 QFile out(outn);
                 QFileInfo outfi(out);
@@ -2593,6 +2593,9 @@ MakefileGenerator::writeSubTargets(QTextStream &t, QList<MakefileGenerator::SubT
 
         { //actually compile
             t << subtarget->target << ":";
+            auto extraDeps = extraSubTargetDependencies();
+            if (!extraDeps.isEmpty())
+                t << " " << valList(extraDeps);
             if(!subtarget->depends.isEmpty())
                 t << " " << valList(subtarget->depends);
             t << " FORCE";

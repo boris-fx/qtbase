@@ -2255,6 +2255,11 @@ void QGuiApplicationPrivate::processEnterEvent(QWindowSystemInterfacePrivate::En
     }
 
     currentMouseWindow = e->enter;
+    if (currentMouseWindow) {
+       QCoreApplicationPrivate * applicationPrivate = static_cast<QCoreApplicationPrivate*>(QObjectPrivate::get(qApp));
+       if (applicationPrivate && applicationPrivate->shouldQuit())
+          currentMouseWindow = 0;
+    }
 
     QEnterEvent event(e->localPos, e->localPos, e->globalPos);
     QCoreApplication::sendSpontaneousEvent(e->enter.data(), &event);

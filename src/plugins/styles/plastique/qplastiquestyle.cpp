@@ -452,13 +452,12 @@ static void qBrushSetAlphaF(QBrush *brush, qreal alpha)
     if (const QGradient *gradient = brush->gradient()) {
         // Use the gradient. Call QColor::setAlphaF() on all color stops.
         QGradientStops stops = gradient->stops();
-        QMutableVectorIterator<QGradientStop> it(stops);
+        QGradientStops::iterator it;
         QColor tmpColor;
-        while (it.hasNext()) {
-            it.next();
-            tmpColor = it.value().second;
+        for (it = stops.begin(); it != stops.end(); ++it) {
+            tmpColor = it->second;
             tmpColor.setAlphaF(alpha * tmpColor.alphaF());
-            it.setValue(QPair<qreal, QColor>(it.value().first, tmpColor));
+            *it = QPair<qreal, QColor>(it->first, tmpColor);
         }
 
         switch (gradient->type()) {
@@ -518,10 +517,9 @@ static QBrush qBrushLight(QBrush brush, int light)
     if (const QGradient *gradient = brush.gradient()) {
         // Use the gradient. Call QColor::lighter() on all color stops.
         QGradientStops stops = gradient->stops();
-        QMutableVectorIterator<QGradientStop> it(stops);
-        while (it.hasNext()) {
-            it.next();
-            it.setValue(QPair<qreal, QColor>(it.value().first, it.value().second.lighter(light)));
+        QGradientStops::iterator it;
+        for (it = stops.begin(); it != stops.end(); ++it) {
+            *it = QPair<qreal, QColor>(it->first, it->second.lighter(light));
         }
 
         switch (gradient->type()) {
@@ -580,10 +578,9 @@ static QBrush qBrushDark(QBrush brush, int dark)
     if (const QGradient *gradient = brush.gradient()) {
         // Use the gradient. Call QColor::darker() on all color stops.
         QGradientStops stops = gradient->stops();
-        QMutableVectorIterator<QGradientStop> it(stops);
-        while (it.hasNext()) {
-            it.next();
-            it.setValue(QPair<qreal, QColor>(it.value().first, it.value().second.darker(dark)));
+        QGradientStops::iterator it;
+        for (it = stops.begin(); it != stops.end(); ++it) {
+            *it = QPair<qreal, QColor>(it->first, it->second.darker(dark));
         }
 
         switch (gradient->type()) {

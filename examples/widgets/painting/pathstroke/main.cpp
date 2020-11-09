@@ -55,6 +55,9 @@
 int main(int argc, char **argv)
 {
     Q_INIT_RESOURCE(pathstroke);
+#ifdef Q_OS_ANDROID
+    qputenv("QT_SCALE_FACTOR", "2");
+#endif
 
     QApplication app(argc, argv);
 
@@ -63,8 +66,8 @@ int main(int argc, char **argv)
     PathStrokeWidget pathStrokeWidget(smallScreen);
     QStyle *arthurStyle = new ArthurStyle();
     pathStrokeWidget.setStyle(arthurStyle);
-    QList<QWidget *> widgets = pathStrokeWidget.findChildren<QWidget *>();
-    foreach (QWidget *w, widgets) {
+    const QList<QWidget *> widgets = pathStrokeWidget.findChildren<QWidget *>();
+    for (QWidget *w : widgets) {
         w->setStyle(arthurStyle);
         w->setAttribute(Qt::WA_AcceptTouchEvents);
     }

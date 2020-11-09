@@ -53,6 +53,9 @@
 
 #include "private/qglobal_p.h"
 
+#include <QtCore/qoperatingsystemversion.h>
+struct mach_header;
+
 #ifndef __IMAGECAPTURE__
 #  define __IMAGECAPTURE__
 #endif
@@ -67,10 +70,12 @@
 
 #ifdef __OBJC__
 #include <Foundation/Foundation.h>
+#include <functional>
 #endif
 
 #include "qstring.h"
 #include "qscopedpointer.h"
+#include "qpair.h"
 
 #if defined( __OBJC__) && defined(QT_NAMESPACE)
 #define QT_NAMESPACE_ALIAS_OBJC_CLASS(__KLASS__) @compatibility_alias __KLASS__ QT_MANGLE_NAMESPACE(__KLASS__)
@@ -85,16 +90,24 @@ template <typename T, typename U, U (*RetainFunction)(U), void (*ReleaseFunction
 class QAppleRefCounted
 {
 public:
-    QAppleRefCounted(const T &t = T()) : value(t) {}
-    QAppleRefCounted(QAppleRefCounted &&other) : value(other.value) { other.value = T(); }
+    QAppleRefCounted() : value() {}
+    QAppleRefCounted(const T &t) : value(t) {}
+    QAppleRefCounted(T &&t) noexcept(std::is_nothrow_move_constructible<T>::value)
+        : value(std::move(t)) {}
+    QAppleRefCounted(QAppleRefCounted &&other)
+            noexcept(std::is_nothrow_move_assignable<T>::value &&
+                     std::is_nothrow_move_constructible<T>::value)
+        : value(qExchange(other.value, T())) {}
     QAppleRefCounted(const QAppleRefCounted &other) : value(other.value) { if (value) RetainFunction(value); }
     ~QAppleRefCounted() { if (value) ReleaseFunction(value); }
     operator T() const { return value; }
-    void swap(QAppleRefCounted &other) Q_DECL_NOEXCEPT_EXPR(noexcept(qSwap(value, other.value)))
+    void swap(QAppleRefCounted &other) noexcept(noexcept(qSwap(value, other.value)))
     { qSwap(value, other.value); }
     QAppleRefCounted &operator=(const QAppleRefCounted &other)
     { QAppleRefCounted copy(other); swap(copy); return *this; }
     QAppleRefCounted &operator=(QAppleRefCounted &&other)
+        noexcept(std::is_nothrow_move_assignable<T>::value &&
+                 std::is_nothrow_move_constructible<T>::value)
     { QAppleRefCounted moved(std::move(other)); swap(moved); return *this; }
     T *operator&() { return &value; }
 protected:
@@ -128,8 +141,10 @@ private:
 template <typename T>
 class QCFType : public QAppleRefCounted<T, CFTypeRef, CFRetain, CFRelease>
 {
+    using Base = QAppleRefCounted<T, CFTypeRef, CFRetain, CFRelease>;
 public:
-    using QAppleRefCounted<T, CFTypeRef, CFRetain, CFRelease>::QAppleRefCounted;
+    using Base::Base;
+    explicit QCFType(CFTypeRef r) : Base(static_cast<T>(r)) {}
     template <typename X> X as() const { return reinterpret_cast<X>(this->value); }
     static QCFType constructFromGet(const T &t)
     {
@@ -142,6 +157,7 @@ public:
 class Q_CORE_EXPORT QCFString : public QCFType<CFStringRef>
 {
 public:
+    using QCFType<CFStringRef>::QCFType;
     inline QCFString(const QString &str) : QCFType<CFStringRef>(0), string(str) {}
     inline QCFString(const CFStringRef cfstr = 0) : QCFType<CFStringRef>(cfstr) {}
     inline QCFString(const QCFType<CFStringRef> &other) : QCFType<CFStringRef>(other) {}
@@ -159,7 +175,8 @@ Q_CORE_EXPORT bool qt_mac_applicationIsInDarkMode();
 #endif
 
 #ifndef QT_NO_DEBUG_STREAM
-QDebug operator<<(QDebug debug, const QMacAutoReleasePool *pool);
+Q_CORE_EXPORT QDebug operator<<(QDebug debug, const QMacAutoReleasePool *pool);
+Q_CORE_EXPORT QDebug operator<<(QDebug debug, const QCFString &string);
 #endif
 
 Q_CORE_EXPORT bool qt_apple_isApplicationExtension();
@@ -295,13 +312,13 @@ QT_MAC_WEAK_IMPORT(_os_activity_current);
 // -------------------------------------------------------------------------
 
 #if defined( __OBJC__)
-class QMacScopedObserver
+class QMacNotificationObserver
 {
 public:
-    QMacScopedObserver() {}
+    QMacNotificationObserver() {}
 
     template<typename Functor>
-    QMacScopedObserver(id object, NSNotificationName name, Functor callback) {
+    QMacNotificationObserver(id object, NSNotificationName name, Functor callback) {
         observer = [[NSNotificationCenter defaultCenter] addObserverForName:name
             object:object queue:nil usingBlock:^(NSNotification *) {
                 callback();
@@ -309,13 +326,13 @@ public:
         ];
     }
 
-    QMacScopedObserver(const QMacScopedObserver& other) = delete;
-    QMacScopedObserver(QMacScopedObserver&& other) : observer(other.observer) {
+    QMacNotificationObserver(const QMacNotificationObserver& other) = delete;
+    QMacNotificationObserver(QMacNotificationObserver&& other) : observer(other.observer) {
         other.observer = nil;
     }
 
-    QMacScopedObserver &operator=(const QMacScopedObserver& other) = delete;
-    QMacScopedObserver &operator=(QMacScopedObserver&& other) {
+    QMacNotificationObserver &operator=(const QMacNotificationObserver& other) = delete;
+    QMacNotificationObserver &operator=(QMacNotificationObserver&& other) {
         if (this != &other) {
             remove();
             observer = other.observer;
@@ -329,12 +346,92 @@ public:
             [[NSNotificationCenter defaultCenter] removeObserver:observer];
         observer = nil;
     }
-    ~QMacScopedObserver() { remove(); }
+    ~QMacNotificationObserver() { remove(); }
 
 private:
     id observer = nil;
 };
+
+QT_END_NAMESPACE
+@interface QT_MANGLE_NAMESPACE(KeyValueObserver) : NSObject
+@end
+QT_NAMESPACE_ALIAS_OBJC_CLASS(KeyValueObserver);
+QT_BEGIN_NAMESPACE
+
+class Q_CORE_EXPORT QMacKeyValueObserver
+{
+public:
+    using Callback = std::function<void()>;
+
+    QMacKeyValueObserver() {}
+
+    // Note: QMacKeyValueObserver must not outlive the object observed!
+    QMacKeyValueObserver(id object, NSString *keyPath, Callback callback,
+        NSKeyValueObservingOptions options = NSKeyValueObservingOptionNew)
+        : object(object), keyPath(keyPath), callback(new Callback(callback))
+    {
+        addObserver(options);
+    }
+
+    QMacKeyValueObserver(const QMacKeyValueObserver &other)
+         : QMacKeyValueObserver(other.object, other.keyPath, *other.callback.get()) {}
+
+    QMacKeyValueObserver(QMacKeyValueObserver &&other) { swap(other, *this); }
+
+    ~QMacKeyValueObserver() { removeObserver(); }
+
+    QMacKeyValueObserver &operator=(const QMacKeyValueObserver &other) {
+        QMacKeyValueObserver tmp(other);
+        swap(tmp, *this);
+        return *this;
+    }
+
+    QMacKeyValueObserver &operator=(QMacKeyValueObserver &&other) {
+        QMacKeyValueObserver tmp(std::move(other));
+        swap(tmp, *this);
+        return *this;
+    }
+
+    void removeObserver();
+
+private:
+    void swap(QMacKeyValueObserver &first, QMacKeyValueObserver &second) {
+        std::swap(first.object, second.object);
+        std::swap(first.keyPath, second.keyPath);
+        std::swap(first.callback, second.callback);
+    }
+
+    void addObserver(NSKeyValueObservingOptions options);
+
+    id object = nil;
+    NSString *keyPath = nullptr;
+    std::unique_ptr<Callback> callback;
+
+    static KeyValueObserver *observer;
+};
 #endif
+
+// -------------------------------------------------------------------------
+
+class Q_CORE_EXPORT QMacVersion
+{
+public:
+    enum VersionTarget {
+        ApplicationBinary,
+        QtLibraries
+    };
+
+    static QOperatingSystemVersion buildSDK(VersionTarget target = ApplicationBinary);
+    static QOperatingSystemVersion deploymentTarget(VersionTarget target = ApplicationBinary);
+    static QOperatingSystemVersion currentRuntime();
+
+private:
+    QMacVersion() = default;
+    using VersionTuple = QPair<QOperatingSystemVersion, QOperatingSystemVersion>;
+    static VersionTuple versionsForImage(const mach_header *machHeader);
+    static VersionTuple applicationVersion();
+    static VersionTuple libraryVersion();
+};
 
 // -------------------------------------------------------------------------
 

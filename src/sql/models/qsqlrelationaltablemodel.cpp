@@ -137,7 +137,7 @@ class QRelatedTableModel;
 struct QRelation
 {
     public:
-        QRelation(): model(0), m_parent(0), m_dictInitialized(false) {}
+        QRelation(): model(nullptr), m_parent(nullptr), m_dictInitialized(false) {}
         void init(QSqlRelationalTableModel *parent, const QSqlRelation &relation);
 
         void populateModel();
@@ -161,7 +161,7 @@ struct QRelation
 class QRelatedTableModel : public QSqlTableModel
 {
 public:
-    QRelatedTableModel(QRelation *rel, QObject *parent = 0, QSqlDatabase db = QSqlDatabase());
+    QRelatedTableModel(QRelation *rel, QObject *parent = nullptr, QSqlDatabase db = QSqlDatabase());
     bool select() override;
 private:
     bool firstSelect;
@@ -174,7 +174,7 @@ private:
 */
 void QRelation::init(QSqlRelationalTableModel *parent, const QSqlRelation &relation)
 {
-    Q_ASSERT(parent != NULL);
+    Q_ASSERT(parent != nullptr);
     m_parent = parent;
     rel = relation;
 }
@@ -183,7 +183,7 @@ void QRelation::populateModel()
 {
     if (!isValid())
         return;
-    Q_ASSERT(m_parent != NULL);
+    Q_ASSERT(m_parent != nullptr);
 
     if (!model) {
         model = new QRelatedTableModel(this, m_parent, m_parent->database());
@@ -202,7 +202,7 @@ void QRelation::populateDictionary()
     if (!isValid())
         return;
 
-    if (model ==  NULL)
+    if (model ==  nullptr)
         populateModel();
 
     QSqlRecord record;
@@ -234,13 +234,13 @@ void QRelation::clearDictionary()
 void QRelation::clear()
 {
     delete model;
-    model = 0;
+    model = nullptr;
     clearDictionary();
 }
 
 bool QRelation::isValid()
 {
-    return (rel.isValid() && m_parent != NULL);
+    return (rel.isValid() && m_parent != nullptr);
 }
 
 
@@ -626,8 +626,8 @@ QString QSqlRelationalTableModel::selectStatement() const
 
 /*!
     Returns a QSqlTableModel object for accessing the table for which
-    \a column is a foreign key, or 0 if there is no relation for the
-    given \a column.
+    \a column is a foreign key, or \nullptr if there is no relation for
+    the given \a column.
 
     The returned object is owned by the QSqlRelationalTableModel.
 
@@ -636,12 +636,12 @@ QString QSqlRelationalTableModel::selectStatement() const
 QSqlTableModel *QSqlRelationalTableModel::relationModel(int column) const
 {
     Q_D(const QSqlRelationalTableModel);
-    if ( column < 0 || column >= d->relations.count())
-        return 0;
+    if (column < 0 || column >= d->relations.count())
+        return nullptr;
 
     QRelation &relation = const_cast<QSqlRelationalTableModelPrivate *>(d)->relations[column];
     if (!relation.isValid())
-        return 0;
+        return nullptr;
 
     if (!relation.model)
         relation.populateModel();

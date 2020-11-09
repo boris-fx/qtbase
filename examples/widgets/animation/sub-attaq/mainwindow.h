@@ -48,11 +48,11 @@
 **
 ****************************************************************************/
 
-#ifndef __MAINWINDOW__H__
-#define __MAINWINDOW__H__
+#ifndef MAINWINDOW_H
+#define MAINWINDOW_H
 
 //Qt
-#include <QtWidgets/QMainWindow>
+#include <QMainWindow>
 class GraphicsScene;
 QT_BEGIN_NAMESPACE
 class QGraphicsView;
@@ -62,11 +62,11 @@ class MainWindow : public QMainWindow
 {
 Q_OBJECT
 public:
-    MainWindow();
+    MainWindow(QWidget *parent = nullptr);
 
 private:
     GraphicsScene *scene;
     QGraphicsView *view;
 };
 
-#endif //__MAINWINDOW__H__
+#endif // MAINWINDOW_H

@@ -59,42 +59,44 @@ class QDebug;
 
 struct QWindowsGeometryHint
 {
-    QWindowsGeometryHint() = default;
-    explicit QWindowsGeometryHint(const QWindow *w, const QMargins &customMargins);
-    static QMargins frame(DWORD style, DWORD exStyle);
+    static QMargins frameOnPrimaryScreen(DWORD style, DWORD exStyle);
+    static QMargins frameOnPrimaryScreen(HWND hwnd);
+    static QMargins frame(DWORD style, DWORD exStyle, qreal dpi);
+    static QMargins frame(HWND hwnd, DWORD style, DWORD exStyle);
+    static QMargins frame(const QWindow *w, const QRect &geometry,
+                          DWORD style, DWORD exStyle);
     static bool handleCalculateSize(const QMargins &customMargins, const MSG &msg, LRESULT *result);
-    void applyToMinMaxInfo(DWORD style, DWORD exStyle, MINMAXINFO *mmi) const;
-    void applyToMinMaxInfo(HWND hwnd, MINMAXINFO *mmi) const;
-    bool validSize(const QSize &s) const;
-
+    static void applyToMinMaxInfo(const QWindow *w, const QScreen *screen,
+                                  const QMargins &margins, MINMAXINFO *mmi);
+    static void applyToMinMaxInfo(const QWindow *w, const QMargins &margins,
+                                  MINMAXINFO *mmi);
+    static void frameSizeConstraints(const QWindow *w, const QScreen *screen,
+                                     const QMargins &margins,
+                                     QSize *minimumSize, QSize *maximumSize);
     static inline QPoint mapToGlobal(HWND hwnd, const QPoint &);
     static inline QPoint mapToGlobal(const QWindow *w, const QPoint &);
     static inline QPoint mapFromGlobal(const HWND hwnd, const QPoint &);
     static inline QPoint mapFromGlobal(const QWindow *w, const QPoint &);
 
     static bool positionIncludesFrame(const QWindow *w);
-
-    QSize minimumSize;
-    QSize maximumSize;
-    QMargins customMargins;
 };
 
 struct QWindowCreationContext
 {
-    explicit QWindowCreationContext(const QWindow *w,
+    explicit QWindowCreationContext(const QWindow *w, const QScreen *s,
                                     const QRect &geometryIn, const QRect &geometry,
                                     const QMargins &customMargins,
                                     DWORD style, DWORD exStyle);
-    void applyToMinMaxInfo(MINMAXINFO *mmi) const
-        { geometryHint.applyToMinMaxInfo(style, exStyle, mmi); }
+    void applyToMinMaxInfo(MINMAXINFO *mmi) const;
 
-    QWindowsGeometryHint geometryHint;
     const QWindow *window;
-    DWORD style;
-    DWORD exStyle;
+    // The screen to use to scale size constraints, etc. Might differ from the
+    // screen of the window after QPlatformWindow::initialGeometry() (QTBUG-77307).
+    const QScreen *screen;
     QRect requestedGeometryIn; // QWindow scaled
     QRect requestedGeometry; // after QPlatformWindow::initialGeometry()
-    QRect obtainedGeometry;
+    QPoint obtainedPos;
+    QSize obtainedSize;
     QMargins margins;
     QMargins customMargins;  // User-defined, additional frame for WM_NCCALCSIZE
     int frameX = CW_USEDEFAULT; // Passed on to CreateWindowEx(), including frame.
@@ -110,7 +112,7 @@ struct QWindowsWindowData
     QRect geometry;
     QMargins fullFrameMargins; // Do not use directly for windows, see FrameDirty.
     QMargins customMargins;    // User-defined, additional frame for NCCALCSIZE
-    HWND hwnd = 0;
+    HWND hwnd = nullptr;
     bool embedded = false;
     bool hasFrame = false;
 
@@ -121,7 +123,7 @@ struct QWindowsWindowData
 
 class QWindowsBaseWindow : public QPlatformWindow
 {
-    Q_DISABLE_COPY(QWindowsBaseWindow)
+    Q_DISABLE_COPY_MOVE(QWindowsBaseWindow)
 public:
     explicit QWindowsBaseWindow(QWindow *window) : QPlatformWindow(window) {}
 
@@ -139,6 +141,7 @@ public:
 
     unsigned style() const   { return GetWindowLongPtr(handle(), GWL_STYLE); }
     unsigned exStyle() const { return GetWindowLongPtr(handle(), GWL_EXSTYLE); }
+    static bool isRtlLayout(HWND hwnd);
 
     static QWindowsBaseWindow *baseWindowOf(const QWindow *w);
     static HWND handleOf(const QWindow *w);
@@ -221,7 +224,8 @@ public:
         HasBorderInFullScreen = 0x200000,
         WithinDpiChanged = 0x400000,
         VulkanSurface = 0x800000,
-        ResizeMoveActive = 0x1000000
+        ResizeMoveActive = 0x1000000,
+        DisableNonClientScaling = 0x2000000
     };
 
     QWindowsWindow(QWindow *window, const QWindowsWindowData &data);
@@ -262,6 +266,7 @@ public:
     QMargins frameMargins() const override;
     QMargins fullFrameMargins() const override;
     void setFullFrameMargins(const QMargins &newMargins);
+    void updateFullFrameMargins();
 
     void setOpacity(qreal level) override;
     void setMask(const QRegion &region) override;
@@ -272,8 +277,8 @@ public:
     bool setMouseGrabEnabled(bool grab) override;
     inline bool hasMouseCapture() const { return GetCapture() == m_data.hwnd; }
 
-    bool startSystemResize(const QPoint &pos, Qt::Corner corner) override;
-    bool startSystemMove(const QPoint &pos) override;
+    bool startSystemResize(Qt::Edges edges) override;
+    bool startSystemMove() override;
 
     void setFrameStrutEventsEnabled(bool enabled) override;
     bool frameStrutEventsEnabled() const override { return testFlag(FrameStrutEventsEnabled); }
@@ -281,6 +286,9 @@ public:
     // QWindowsBaseWindow overrides
     HWND handle() const override { return m_data.hwnd; }
     bool isTopLevel() const override;
+
+    static bool setDarkBorderToWindow(HWND hwnd, bool d);
+    void setDarkBorder(bool d);
 
     QWindowsMenuBar *menuBar() const;
     void setMenuBar(QWindowsMenuBar *mb);
@@ -337,11 +345,13 @@ public:
     void alertWindow(int durationMs = 0);
     void stopAlertWindow();
 
-    void checkForScreenChanged();
+    enum ScreenChangeMode { FromGeometryChange, FromDpiChange };
+    void checkForScreenChanged(ScreenChangeMode mode = FromGeometryChange);
 
     static void setTouchWindowTouchTypeStatic(QWindow *window, QWindowsWindowFunctions::TouchWindowTouchTypes touchTypes);
     void registerTouchWindow(QWindowsWindowFunctions::TouchWindowTouchTypes touchTypes = QWindowsWindowFunctions::NormalTouch);
     static void setHasBorderInFullScreenStatic(QWindow *window, bool border);
+    static void setHasBorderInFullScreenDefault(bool border);
     void setHasBorderInFullScreen(bool border);
     static QString formatWindowTitle(const QString &title);
 
@@ -356,18 +366,20 @@ private:
     inline void setParent_sys(const QPlatformWindow *parent);
     inline void updateTransientParent() const;
     void destroyWindow();
-    inline bool isDropSiteEnabled() const { return m_dropTarget != 0; }
+    inline bool isDropSiteEnabled() const { return m_dropTarget != nullptr; }
     void setDropSiteEnabled(bool enabled);
     void updateDropSite(bool topLevel);
     void handleGeometryChange();
     void handleWindowStateChange(Qt::WindowStates state);
     inline void destroyIcon();
     void fireExpose(const QRegion &region, bool force=false);
+    void fireFullExpose(bool force=false);
+    void calculateFullFrameMargins();
 
     mutable QWindowsWindowData m_data;
     QPointer<QWindowsMenuBar> m_menuBar;
     mutable unsigned m_flags = WithinCreate;
-    HDC m_hdc = 0;
+    HDC m_hdc = nullptr;
     Qt::WindowStates m_windowState = Qt::WindowNoState;
     qreal m_opacity = 1;
 #ifndef QT_NO_CURSOR
@@ -377,16 +389,17 @@ private:
     unsigned m_savedStyle = 0;
     QRect m_savedFrameGeometry;
     const QSurfaceFormat m_format;
-    HICON m_iconSmall = 0;
-    HICON m_iconBig = 0;
+    HICON m_iconSmall = nullptr;
+    HICON m_iconBig = nullptr;
     void *m_surface = nullptr;
 
     static bool m_screenForGLInitialized;
 
 #if QT_CONFIG(vulkan)
     // note: intentionally not using void * in order to avoid breaking x86
-    VkSurfaceKHR m_vkSurface = 0;
+    VkSurfaceKHR m_vkSurface = VK_NULL_HANDLE;
 #endif
+    static bool m_borderInFullScreenDefault;
 };
 
 #ifndef QT_NO_DEBUG_STREAM
@@ -399,18 +412,38 @@ QDebug operator<<(QDebug d, const WINDOWPOS &);
 QDebug operator<<(QDebug d, const GUID &guid);
 #endif // !QT_NO_DEBUG_STREAM
 
+static inline void clientToScreen(HWND hwnd, POINT *wP)
+{
+    if (QWindowsBaseWindow::isRtlLayout(hwnd)) {
+        RECT clientArea;
+        GetClientRect(hwnd, &clientArea);
+        wP->x = clientArea.right - wP->x;
+    }
+    ClientToScreen(hwnd, wP);
+}
+
+static inline void screenToClient(HWND hwnd, POINT *wP)
+{
+    ScreenToClient(hwnd, wP);
+    if (QWindowsBaseWindow::isRtlLayout(hwnd)) {
+        RECT clientArea;
+        GetClientRect(hwnd, &clientArea);
+        wP->x = clientArea.right - wP->x;
+    }
+}
+
 // ---------- QWindowsGeometryHint inline functions.
 QPoint QWindowsGeometryHint::mapToGlobal(HWND hwnd, const QPoint &qp)
 {
     POINT p = { qp.x(), qp.y() };
-    ClientToScreen(hwnd, &p);
+    clientToScreen(hwnd, &p);
     return QPoint(p.x, p.y);
 }
 
 QPoint QWindowsGeometryHint::mapFromGlobal(const HWND hwnd, const QPoint &qp)
 {
     POINT p = { qp.x(), qp.y() };
-    ScreenToClient(hwnd, &p);
+    screenToClient(hwnd, &p);
     return QPoint(p.x, p.y);
 }
 
@@ -449,11 +482,11 @@ inline void QWindowsWindow::destroyIcon()
 {
     if (m_iconBig) {
         DestroyIcon(m_iconBig);
-        m_iconBig = 0;
+        m_iconBig = nullptr;
     }
     if (m_iconSmall) {
         DestroyIcon(m_iconSmall);
-        m_iconSmall = 0;
+        m_iconSmall = nullptr;
     }
 }
 

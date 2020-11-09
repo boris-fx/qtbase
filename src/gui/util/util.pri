@@ -8,7 +8,6 @@ HEADERS += \
         util/qabstractlayoutstyleinfo_p.h \
         util/qlayoutpolicy_p.h \
         util/qshaderformat_p.h \
-        util/qshadergenerator_p.h \
         util/qshadergraph_p.h \
         util/qshadergraphloader_p.h \
         util/qshaderlanguage_p.h \
@@ -19,7 +18,8 @@ HEADERS += \
         util/qtexturefilereader_p.h \
         util/qtexturefilehandler_p.h \
         util/qpkmhandler_p.h \
-        util/qktxhandler_p.h
+        util/qktxhandler_p.h \
+        util/qastchandler_p.h
 
 SOURCES += \
         util/qdesktopservices.cpp \
@@ -28,7 +28,6 @@ SOURCES += \
         util/qabstractlayoutstyleinfo.cpp \
         util/qlayoutpolicy.cpp \
         util/qshaderformat.cpp \
-        util/qshadergenerator.cpp \
         util/qshadergraph.cpp \
         util/qshadergraphloader.cpp \
         util/qshaderlanguage.cpp \
@@ -38,4 +37,12 @@ SOURCES += \
         util/qtexturefiledata.cpp \
         util/qtexturefilereader.cpp \
         util/qpkmhandler.cpp \
-        util/qktxhandler.cpp
+        util/qktxhandler.cpp \
+        util/qastchandler.cpp
+
+qtConfig(regularexpression) {
+    HEADERS += \
+        util/qshadergenerator_p.h
+    SOURCES += \
+        util/qshadergenerator.cpp
+}

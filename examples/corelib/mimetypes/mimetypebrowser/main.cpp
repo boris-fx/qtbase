@@ -51,13 +51,10 @@
 #include "mainwindow.h"
 
 #include <QApplication>
-#include <QDesktopWidget>
+#include <QScreen>
 
 #include <QCommandLineParser>
 #include <QCommandLineOption>
-#include <QDebug>
-#include <QMimeDatabase>
-#include <QMimeType>
 
 int main(int argc, char *argv[])
 {
@@ -71,7 +68,7 @@ int main(int argc, char *argv[])
     parser.process(app);
 
     MainWindow mainWindow;
-    const QRect availableGeometry = QApplication::desktop()->availableGeometry(&mainWindow);
+    const QRect availableGeometry = mainWindow.screen()->availableGeometry();
     mainWindow.resize(availableGeometry.width() / 3, availableGeometry.height() / 2);
     mainWindow.show();
 

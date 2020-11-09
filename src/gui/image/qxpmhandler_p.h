@@ -68,8 +68,6 @@ public:
 
     static bool canRead(QIODevice *device);
 
-    QByteArray name() const override;
-
     QVariant option(ImageOption option) const override;
     void setOption(ImageOption option, const QVariant &value) override;
     bool supportsOption(ImageOption option) const override;

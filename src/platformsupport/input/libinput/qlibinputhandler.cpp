@@ -115,7 +115,7 @@ QLibInputHandler::QLibInputHandler(const QString &key, const QString &spec)
     m_touch.reset(new QLibInputTouch);
 
     QInputDeviceManager *manager = QGuiApplicationPrivate::inputDeviceManager();
-    connect(manager, &QInputDeviceManager::cursorPositionChangeRequested, [=](const QPoint &pos) {
+    connect(manager, &QInputDeviceManager::cursorPositionChangeRequested, [this](const QPoint &pos) {
         m_pointer->setPos(pos);
     });
 
@@ -204,6 +204,9 @@ void QLibInputHandler::processEvent(libinput_event *ev)
         break;
     case LIBINPUT_EVENT_POINTER_MOTION:
         m_pointer->processMotion(libinput_event_get_pointer_event(ev));
+        break;
+    case LIBINPUT_EVENT_POINTER_MOTION_ABSOLUTE:
+        m_pointer->processAbsMotion(libinput_event_get_pointer_event(ev));
         break;
     case LIBINPUT_EVENT_POINTER_AXIS:
         m_pointer->processAxis(libinput_event_get_pointer_event(ev));

@@ -48,9 +48,11 @@
 **
 ****************************************************************************/
 
-#include <QtWidgets>
-
 #include "previewwindow.h"
+
+#include <QPushButton>
+#include <QTextEdit>
+#include <QVBoxLayout>
 
 //! [0]
 PreviewWindow::PreviewWindow(QWidget *parent)
@@ -61,7 +63,8 @@ PreviewWindow::PreviewWindow(QWidget *parent)
     textEdit->setLineWrapMode(QTextEdit::NoWrap);
 
     closeButton = new QPushButton(tr("&Close"));
-    connect(closeButton, SIGNAL(clicked()), this, SLOT(close()));
+    connect(closeButton, &QPushButton::clicked,
+            this, &PreviewWindow::close);
 
     QVBoxLayout *layout = new QVBoxLayout;
     layout->addWidget(textEdit);
@@ -80,23 +83,22 @@ void PreviewWindow::setWindowFlags(Qt::WindowFlags flags)
     QString text;
 
     Qt::WindowFlags type = (flags & Qt::WindowType_Mask);
-    if (type == Qt::Window) {
+    if (type == Qt::Window)
         text = "Qt::Window";
-    } else if (type == Qt::Dialog) {
+    else if (type == Qt::Dialog)
         text = "Qt::Dialog";
-    } else if (type == Qt::Sheet) {
+    else if (type == Qt::Sheet)
         text = "Qt::Sheet";
-    } else if (type == Qt::Drawer) {
+    else if (type == Qt::Drawer)
         text = "Qt::Drawer";
-    } else if (type == Qt::Popup) {
+    else if (type == Qt::Popup)
         text = "Qt::Popup";
-    } else if (type == Qt::Tool) {
+    else if (type == Qt::Tool)
         text = "Qt::Tool";
-    } else if (type == Qt::ToolTip) {
+    else if (type == Qt::ToolTip)
         text = "Qt::ToolTip";
-    } else if (type == Qt::SplashScreen) {
+    else if (type == Qt::SplashScreen)
         text = "Qt::SplashScreen";
-    }
 
     if (flags & Qt::MSWindowsFixedSizeDialogHint)
         text += "\n| Qt::MSWindowsFixedSizeDialogHint";

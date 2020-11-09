@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2020 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the examples of the Qt Toolkit.
@@ -52,6 +52,7 @@
 #define WINDOW_H
 
 #include <QWidget>
+#include <QDateTime>
 
 QT_BEGIN_NAMESPACE
 class QCalendarWidget;
@@ -70,7 +71,7 @@ class Window : public QWidget
     Q_OBJECT
 
 public:
-    Window();
+    Window(QWidget *parent = nullptr);
 
 private slots:
     void localeChanged(int index);
@@ -79,8 +80,8 @@ private slots:
     void horizontalHeaderChanged(int index);
     void verticalHeaderChanged(int index);
     void selectedDateChanged();
-    void minimumDateChanged(const QDate &date);
-    void maximumDateChanged(const QDate &date);
+    void minimumDateChanged(QDate date);
+    void maximumDateChanged(QDate date);
     void weekdayFormatChanged();
     void weekendFormatChanged();
     void reformatHeaders();

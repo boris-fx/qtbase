@@ -54,7 +54,7 @@
 #include "arthurwidgets.h"
 
 #include <QBasicTimer>
-#include <QDateTime>
+#include <QElapsedTimer>
 #include <QPainterPath>
 
 class PathDeformRenderer : public ArthurFrame
@@ -103,7 +103,7 @@ private:
     QBasicTimer m_repaintTimer;
 //     QBasicTimer m_fpsTimer;
 //     int m_fpsCounter;
-    QTime m_repaintTracker;
+    QElapsedTimer m_repaintTracker;
 
     QVector<QPainterPath> m_paths;
     QVector<QPointF> m_advances;
@@ -135,7 +135,7 @@ signals:
     void okPressed();
     void quitPressed();
 private:
-    PathDeformRenderer* m_renderer;
+    PathDeformRenderer *m_renderer;
     void layoutForDesktop();
     void layoutForSmallScreen();
 };
@@ -145,7 +145,7 @@ class PathDeformWidget : public QWidget
     Q_OBJECT
 public:
     PathDeformWidget(QWidget *parent, bool smallScreen);
-    void setStyle (QStyle * style );
+    void setStyle(QStyle *style);
 
 private:
     PathDeformRenderer *m_renderer;

@@ -153,7 +153,7 @@ bool XbelTree::write(QIODevice *device) const
 
 void XbelTree::updateDomElement(const QTreeWidgetItem *item, int column)
 {
-    QDomElement element = item->data(0, DomElementRole).value<QDomElement>();
+    QDomElement element = qvariant_cast<QDomElement>(item->data(0, DomElementRole));
     if (!element.isNull()) {
         if (column == 0) {
             QDomElement oldTitleElement = element.firstChildElement(titleElement());
@@ -184,7 +184,7 @@ void XbelTree::parseFolderElement(const QDomElement &element,
     item->setText(0, title);
 
     bool folded = (element.attribute(foldedAttribute()) != QLatin1String("no"));
-    setItemExpanded(item, !folded);
+    item->setExpanded(!folded);
 
     QDomElement child = element.firstChildElement();
     while (!child.isNull()) {

@@ -60,10 +60,11 @@
 #include <QLayout>
 
 #ifndef QT_NO_OPENGL
-# include <QtOpenGL/QtOpenGL>
+# include <QtOpenGL>
 #endif
 
-MainWindow::MainWindow() : QMainWindow(0)
+MainWindow::MainWindow(QWidget *parent)
+    : QMainWindow(parent)
 {
     QMenu *file = menuBar()->addMenu(tr("&File"));
 
@@ -73,10 +74,10 @@ MainWindow::MainWindow() : QMainWindow(0)
     quitAction->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Q));
 
     if (QApplication::arguments().contains("-fullscreen")) {
-        scene = new GraphicsScene(0, 0, 750, 400, GraphicsScene::Small);
+        scene = new GraphicsScene(0, 0, 750, 400, GraphicsScene::Small, this);
         setWindowState(Qt::WindowFullScreen);
     } else {
-        scene = new GraphicsScene(0, 0, 880, 630);
+        scene = new GraphicsScene(0, 0, 880, 630, GraphicsScene::Big, this);
         layout()->setSizeConstraint(QLayout::SetFixedSize);
     }
 

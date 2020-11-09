@@ -66,7 +66,8 @@ class NorwegianWoodStyle : public QProxyStyle
 public:
     NorwegianWoodStyle();
 
-    void polish(QPalette &palette) override;
+    QPalette standardPalette() const override;
+
     void polish(QWidget *widget) override;
     void unpolish(QWidget *widget) override;
     int pixelMetric(PixelMetric metric, const QStyleOption *option,
@@ -80,8 +81,9 @@ public:
 
 private:
     static void setTexture(QPalette &palette, QPalette::ColorRole role,
-                           const QPixmap &pixmap);
+                           const QImage &image);
     static QPainterPath roundRectPath(const QRect &rect);
+    mutable QPalette m_standardPalette;
 };
 //! [0]
 

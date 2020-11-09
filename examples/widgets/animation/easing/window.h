@@ -66,10 +66,10 @@ public:
 class Window : public QWidget {
     Q_OBJECT
 public:
-    Window(QWidget *parent = 0);
+    Window(QWidget *parent = nullptr);
 private slots:
     void curveChanged(int row);
-    void pathChanged(int index);
+    void pathChanged(QAbstractButton *button);
     void periodChanged(double);
     void amplitudeChanged(double);
     void overshootChanged(double);

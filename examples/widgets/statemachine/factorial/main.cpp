@@ -49,7 +49,6 @@
 ****************************************************************************/
 
 #include <QtCore>
-#include <stdio.h>
 
 //! [0]
 class Factorial : public QObject
@@ -58,10 +57,7 @@ class Factorial : public QObject
     Q_PROPERTY(int x READ x WRITE setX)
     Q_PROPERTY(int fac READ fac WRITE setFac)
 public:
-    Factorial(QObject *parent = 0)
-        : QObject(parent), m_x(-1), m_fac(1)
-    {
-    }
+    using QObject::QObject;
 
     int x() const
     {
@@ -90,8 +86,8 @@ Q_SIGNALS:
     void xChanged(int value);
 
 private:
-    int m_x;
-    int m_fac;
+    int m_x = -1;
+    int m_fac = 1;
 };
 //! [0]
 
@@ -100,7 +96,7 @@ class FactorialLoopTransition : public QSignalTransition
 {
 public:
     FactorialLoopTransition(Factorial *fact)
-        : QSignalTransition(fact, SIGNAL(xChanged(int))), m_fact(fact)
+        : QSignalTransition(fact, &Factorial::xChanged), m_fact(fact)
     {}
 
     bool eventTest(QEvent *e) override
@@ -130,7 +126,7 @@ class FactorialDoneTransition : public QSignalTransition
 {
 public:
     FactorialDoneTransition(Factorial *fact)
-        : QSignalTransition(fact, SIGNAL(xChanged(int))), m_fact(fact)
+        : QSignalTransition(fact, &Factorial::xChanged), m_fact(fact)
     {}
 
     bool eventTest(QEvent *e) override
@@ -143,7 +139,7 @@ public:
 
     void onTransition(QEvent *) override
     {
-        fprintf(stdout, "%d\n", m_fact->property("fac").toInt());
+        qInfo() << m_fact->property("fac").toInt();
     }
 
 private:

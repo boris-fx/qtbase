@@ -55,7 +55,7 @@
     interact with the responder chain by e.g. calling super if Qt does not
     accept the mouse event
 */
-@implementation QT_MANGLE_NAMESPACE(QNSViewMouseMoveHelper) {
+@implementation QNSViewMouseMoveHelper {
     QNSView *view;
 }
 
@@ -89,7 +89,7 @@
 
 @end
 
-@implementation QT_MANGLE_NAMESPACE(QNSView) (MouseAPI)
+@implementation QNSView (MouseAPI)
 
 - (void)resetMouseButtons
 {
@@ -147,13 +147,38 @@
 
     ulong timestamp = [theEvent timestamp] * 1000;
 
-    auto eventType = cocoaEvent2QtMouseEvent(theEvent);
-    qCInfo(lcQpaMouse) << "Frame-strut" << eventType << "at" << qtWindowPoint << "with" << m_frameStrutButtons << "in" << self.window;
-    QWindowSystemInterface::handleFrameStrutMouseEvent(m_platformWindow->window(), timestamp, qtWindowPoint, qtScreenPoint, m_frameStrutButtons);
+    const auto button = cocoaButton2QtButton(theEvent);
+    auto eventType = [&]() {
+        switch (theEvent.type) {
+        case NSEventTypeLeftMouseDown:
+        case NSEventTypeRightMouseDown:
+        case NSEventTypeOtherMouseDown:
+            return QEvent::NonClientAreaMouseButtonPress;
+
+        case NSEventTypeLeftMouseUp:
+        case NSEventTypeRightMouseUp:
+        case NSEventTypeOtherMouseUp:
+            return QEvent::NonClientAreaMouseButtonRelease;
+
+        case NSEventTypeLeftMouseDragged:
+        case NSEventTypeRightMouseDragged:
+        case NSEventTypeOtherMouseDragged:
+            return QEvent::NonClientAreaMouseMove;
+
+        default:
+            break;
+        }
+
+        return QEvent::None;
+    }();
+
+    qCInfo(lcQpaMouse) << eventType << "at" << qtWindowPoint << "with" << m_frameStrutButtons << "in" << self.window;
+    QWindowSystemInterface::handleFrameStrutMouseEvent(m_platformWindow->window(),
+        timestamp, qtWindowPoint, qtScreenPoint, m_frameStrutButtons, button, eventType);
 }
 @end
 
-@implementation QT_MANGLE_NAMESPACE(QNSView) (Mouse)
+@implementation QNSView (Mouse)
 
 - (void)initMouse
 {
@@ -168,7 +193,7 @@
     m_dontOverrideCtrlLMB = qt_mac_resolveOption(false, m_platformWindow->window(),
             "_q_platform_MacDontOverrideCtrlLMB", "QT_MAC_DONT_OVERRIDE_CTRL_LMB");
 
-    m_mouseMoveHelper = [[QT_MANGLE_NAMESPACE(QNSViewMouseMoveHelper) alloc] initWithView:self];
+    m_mouseMoveHelper = [[QNSViewMouseMoveHelper alloc] initWithView:self];
 
     NSUInteger trackingOptions = NSTrackingActiveInActiveApp
         | NSTrackingMouseEnteredAndExited | NSTrackingCursorUpdate;
@@ -196,6 +221,11 @@
     if (!m_platformWindow)
         return NO;
     if ([self isTransparentForUserInput])
+        return NO;
+    QPointF windowPoint;
+    QPointF screenPoint;
+    [self convertFromScreen:[NSEvent mouseLocation] toWindowPoint: &windowPoint andScreenPoint: &screenPoint];
+    if (!qt_window_private(m_platformWindow->window())->allowClickThrough(screenPoint.toPoint()))
         return NO;
     return YES;
 }
@@ -252,20 +282,19 @@
     nativeDrag->setLastMouseEvent(theEvent, self);
 
     const auto modifiers = [QNSView convertKeyModifiers:theEvent.modifierFlags];
-    const auto buttons = currentlyPressedMouseButtons();
     auto button = cocoaButton2QtButton(theEvent);
     if (button == Qt::LeftButton && m_sendUpAsRightButton)
         button = Qt::RightButton;
     const auto eventType = cocoaEvent2QtMouseEvent(theEvent);
 
     if (eventType == QEvent::MouseMove)
-        qCDebug(lcQpaMouse) << eventType << "at" << qtWindowPoint << "with" << buttons;
+        qCDebug(lcQpaMouse) << eventType << "at" << qtWindowPoint << "with" << m_buttons;
     else
-        qCInfo(lcQpaMouse) << eventType << "of" << button << "at" << qtWindowPoint << "with" << buttons;
+        qCInfo(lcQpaMouse) << eventType << "of" << button << "at" << qtWindowPoint << "with" << m_buttons;
 
     QWindowSystemInterface::handleMouseEvent(targetView->m_platformWindow->window(),
                                              timestamp, qtWindowPoint, qtScreenPoint,
-                                             buttons, button, eventType, modifiers);
+                                             m_buttons, button, eventType, modifiers);
 }
 
 - (bool)handleMouseDownEvent:(NSEvent *)theEvent
@@ -365,14 +394,18 @@
         }
         // Close the popups if the click was outside.
         if (!inside) {
+            bool selfClosed = false;
             Qt::WindowType type = QCocoaIntegration::instance()->activePopupWindow()->window()->type();
             while (QCocoaWindow *popup = QCocoaIntegration::instance()->popPopupWindow()) {
+                selfClosed = self == popup->view();
                 QWindowSystemInterface::handleCloseEvent(popup->window());
                 QWindowSystemInterface::flushWindowSystemEvents();
+                if (!m_platformWindow)
+                    return; // Bail out if window was destroyed
             }
             // Consume the mouse event when closing the popup, except for tool tips
             // were it's expected that the event is processed normally.
-            if (type != Qt::ToolTip)
+            if (type != Qt::ToolTip || selfClosed)
                  return;
         }
     }
@@ -472,12 +505,15 @@
     // uses the legacy cursorRect API, so the cursor is reset to the arrow
     // cursor. See rdar://34183708
 
-    if (self.cursor && self.cursor != NSCursor.currentCursor) {
-        qCInfo(lcQpaMouse) << "Updating cursor for" << self << "to" << self.cursor;
+    auto previousCursor = NSCursor.currentCursor;
+
+    if (self.cursor)
         [self.cursor set];
-    } else {
+    else
         [super cursorUpdate:theEvent];
-    }
+
+    if (NSCursor.currentCursor != previousCursor)
+        qCInfo(lcQpaMouse) << "Cursor update for" << self << "resulted in new cursor" << NSCursor.currentCursor;
 }
 
 - (void)mouseMovedImpl:(NSEvent *)theEvent

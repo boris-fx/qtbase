@@ -68,9 +68,9 @@ void tst_BenchlibCallgrind::twoHundredMillionInstructions()
     QBENCHMARK {
         __asm__ __volatile__(
             "mov $100000000,%%eax   \n"
-            "LOOPTOP:               \n"
+            "1:               \n"
             "dec %%eax              \n"
-            "jnz LOOPTOP            \n"
+            "jnz 1b            \n"
             : /* no output */
             : /* no input */
             : /* clobber */ "eax"
@@ -79,6 +79,14 @@ void tst_BenchlibCallgrind::twoHundredMillionInstructions()
 #endif
 }
 
-QTEST_MAIN(tst_BenchlibCallgrind)
+int main(int argc, char *argv[])
+{
+    std::vector<const char*> args(argv, argv + argc);
+    args.push_back("-callgrind");
+    argc = args.size();
+    argv = const_cast<char**>(&args[0]);
+
+    QTEST_MAIN_IMPL(tst_BenchlibCallgrind)
+}
 
 #include "tst_benchlibcallgrind.moc"

@@ -72,7 +72,7 @@ int Q_GUI_EXPORT QT_DISTANCEFIELD_HIGHGLYPHCOUNT();
 class Q_GUI_EXPORT QDistanceFieldData : public QSharedData
 {
 public:
-    QDistanceFieldData() : glyph(0), width(0), height(0), nbytes(0), data(0) {}
+    QDistanceFieldData() : glyph(0), width(0), height(0), nbytes(0), data(nullptr) {}
     QDistanceFieldData(const QDistanceFieldData &other);
     ~QDistanceFieldData();
 
@@ -94,7 +94,6 @@ public:
     QDistanceField(const QRawFont &font, glyph_t glyph, bool doubleResolution = false);
     QDistanceField(QFontEngine *fontEngine, glyph_t glyph, bool doubleResolution = false);
     QDistanceField(const QPainterPath &path, glyph_t glyph, bool doubleResolution = false);
-    QDistanceField(const QDistanceField &other);
 
     bool isNull() const;
 

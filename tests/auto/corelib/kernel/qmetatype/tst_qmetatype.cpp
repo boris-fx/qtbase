@@ -73,6 +73,7 @@ private slots:
     void defined();
     void threadSafety();
     void namespaces();
+    void id();
     void qMetaTypeId();
     void properties();
     void normalizedTypes();
@@ -124,6 +125,7 @@ private slots:
     void compareCustomEqualOnlyType();
     void customDebugStream();
     void unknownType();
+    void fromType();
 };
 
 struct BaseGenericType
@@ -342,6 +344,7 @@ struct Bar
             ++failureCount;
         }
     }
+    ~Bar() {}
 
 public:
     static int failureCount;
@@ -458,7 +461,7 @@ void tst_QMetaType::threadSafety()
 
 namespace TestSpace
 {
-    struct Foo { double d; };
+    struct Foo { double d; public: ~Foo() {} };
     struct QungTfu {};
 }
 Q_DECLARE_METATYPE(TestSpace::Foo)
@@ -474,6 +477,13 @@ void tst_QMetaType::namespaces()
 
     int qungTfuId = qRegisterMetaType<ADD_TESTSPACE(QungTfu)>();
     QCOMPARE(QMetaType::typeName(qungTfuId), "TestSpace::QungTfu");
+}
+
+void tst_QMetaType::id()
+{
+    QCOMPARE(QMetaType(QMetaType::QString).id(), QMetaType::QString);
+    QCOMPARE(QMetaType(::qMetaTypeId<TestSpace::Foo>()).id(), ::qMetaTypeId<TestSpace::Foo>());
+    QCOMPARE(QMetaType::fromType<TestSpace::Foo>().id(), ::qMetaTypeId<TestSpace::Foo>());
 }
 
 void tst_QMetaType::qMetaTypeId()
@@ -509,10 +519,16 @@ void tst_QMetaType::properties()
 }
 
 template <typename T>
-struct Whity { T t; };
+struct Whity { T t; Whity() {} };
 
 Q_DECLARE_METATYPE( Whity < int > )
 Q_DECLARE_METATYPE(Whity<double>)
+
+#if !defined(Q_CC_CLANG) && defined(Q_CC_GNU) && Q_CC_GNU < 501
+QT_BEGIN_NAMESPACE
+Q_DECLARE_TYPEINFO(Whity<double>, Q_MOVABLE_TYPE);
+QT_END_NAMESPACE
+#endif
 
 void tst_QMetaType::normalizedTypes()
 {
@@ -586,6 +602,12 @@ void tst_QMetaType::typeName()
     QCOMPARE(name, aTypeName);
     QCOMPARE(name.toLatin1(), QMetaObject::normalizedType(name.toLatin1().constData()));
     QCOMPARE(rawname == nullptr, aTypeName.isNull());
+
+    QMetaType mt(aType);
+    if (mt.isValid()) { // Gui type are not valid
+        QCOMPARE(QString::fromLatin1(QMetaType(aType).name()), aTypeName);
+    }
+
 }
 
 void tst_QMetaType::type_data()
@@ -812,10 +834,13 @@ void tst_QMetaType::sizeOfStaticLess()
     QCOMPARE(size_t(QMetaType(type).sizeOf()), size);
 }
 
-struct CustomMovable {};
+struct CustomMovable { CustomMovable() {} };
+#if !defined(Q_CC_CLANG) && defined(Q_CC_GNU) && Q_CC_GNU < 501
 QT_BEGIN_NAMESPACE
 Q_DECLARE_TYPEINFO(CustomMovable, Q_MOVABLE_TYPE);
 QT_END_NAMESPACE
+#endif
+
 Q_DECLARE_METATYPE(CustomMovable);
 
 class CustomObject : public QObject
@@ -844,13 +869,15 @@ public:
 };
 Q_DECLARE_METATYPE(CustomMultiInheritanceObject*);
 
-class C { char _[4]; };
-class M { char _[4]; };
+class C { char _[4]; public: C() = default; C(const C&) {} };
+class M { char _[4]; public: M() {} };
 class P { char _[4]; };
 
 QT_BEGIN_NAMESPACE
+#if defined(Q_CC_GNU) && Q_CC_GNU < 501
 Q_DECLARE_TYPEINFO(M, Q_MOVABLE_TYPE);
 Q_DECLARE_TYPEINFO(P, Q_PRIMITIVE_TYPE);
+#endif
 QT_END_NAMESPACE
 
 // avoid the comma:
@@ -896,7 +923,7 @@ QT_FOR_EACH_STATIC_PRIMITIVE_POINTER(ADD_METATYPE_TEST_ROW)
 QT_FOR_EACH_STATIC_CORE_POINTER(ADD_METATYPE_TEST_ROW)
 #undef ADD_METATYPE_TEST_ROW
     QTest::newRow("TestSpace::Foo") << ::qMetaTypeId<TestSpace::Foo>() << false << true << false << false;
-    QTest::newRow("Whity<double>") << ::qMetaTypeId<Whity<double> >() << false << true << false << false;
+    QTest::newRow("Whity<double>") << ::qMetaTypeId<Whity<double> >() << true << true << false << false;
     QTest::newRow("CustomMovable") << ::qMetaTypeId<CustomMovable>() << true << true << false << false;
     QTest::newRow("CustomObject*") << ::qMetaTypeId<CustomObject*>() << true << false << true << false;
     QTest::newRow("CustomMultiInheritanceObject*") << ::qMetaTypeId<CustomMultiInheritanceObject*>() << true << false << true << false;
@@ -1480,7 +1507,7 @@ public:
 typedef MyObject* MyObjectPtr;
 Q_DECLARE_METATYPE(MyObjectPtr)
 
-#if defined(Q_COMPILER_VARIADIC_MACROS) && !defined(TST_QMETATYPE_BROKEN_COMPILER)
+#if !defined(TST_QMETATYPE_BROKEN_COMPILER)
 static QByteArray createTypeName(const char *begin, const char *va)
 {
     QByteArray tn(begin);
@@ -1678,7 +1705,7 @@ void tst_QMetaType::automaticTemplateRegistration()
     QVERIFY(qRegisterMetaType<UnregisteredTypeList>("UnregisteredTypeList") > 0);
   }
 
-#if defined(Q_COMPILER_VARIADIC_MACROS) && !defined(TST_QMETATYPE_BROKEN_COMPILER)
+#if !defined(TST_QMETATYPE_BROKEN_COMPILER)
 
     #define FOR_EACH_STATIC_PRIMITIVE_TYPE(F) \
         F(bool) \
@@ -1709,6 +1736,7 @@ void tst_QMetaType::automaticTemplateRegistration()
             const int type = QMetaType::type(tn); \
             const int expectedType = ::qMetaTypeId<CONTAINER< __VA_ARGS__ > >(); \
             QCOMPARE(type, expectedType); \
+            QCOMPARE((QMetaType::fromType<CONTAINER< __VA_ARGS__ >>().id()), expectedType); \
         }
 
     #define FOR_EACH_1ARG_TEMPLATE_TYPE(F, TYPE) \
@@ -1757,7 +1785,7 @@ void tst_QMetaType::automaticTemplateRegistration()
     CREATE_AND_VERIFY_CONTAINER(QHash, void*, void*)
     CREATE_AND_VERIFY_CONTAINER(QHash, const void*, const void*)
 
-#endif // Q_COMPILER_VARIADIC_MACROS
+#endif // !defined(TST_QMETATYPE_BROKEN_COMPILER)
 
 #define TEST_OWNING_SMARTPOINTER(SMARTPOINTER, ELEMENT_TYPE, FLAG_TEST, FROMVARIANTFUNCTION) \
     { \
@@ -1788,16 +1816,36 @@ void tst_QMetaType::automaticTemplateRegistration()
         QCOMPARE(extractedPtr.data()->objectName(), sp.data()->objectName()); \
     }
 
+#if QT_DEPRECATED_SINCE(5, 0)
     TEST_NONOWNING_SMARTPOINTER(QWeakPointer, QObject, WeakPointerToQObject, qWeakPointerFromVariant)
     TEST_NONOWNING_SMARTPOINTER(QWeakPointer, QFile, WeakPointerToQObject, qWeakPointerFromVariant)
     TEST_NONOWNING_SMARTPOINTER(QWeakPointer, QTemporaryFile, WeakPointerToQObject, qWeakPointerFromVariant)
     TEST_NONOWNING_SMARTPOINTER(QWeakPointer, MyObject, WeakPointerToQObject, qWeakPointerFromVariant)
+#endif
 
     TEST_NONOWNING_SMARTPOINTER(QPointer, QObject, TrackingPointerToQObject, qPointerFromVariant)
     TEST_NONOWNING_SMARTPOINTER(QPointer, QFile, TrackingPointerToQObject, qPointerFromVariant)
     TEST_NONOWNING_SMARTPOINTER(QPointer, QTemporaryFile, TrackingPointerToQObject, qPointerFromVariant)
     TEST_NONOWNING_SMARTPOINTER(QPointer, MyObject, TrackingPointerToQObject, qPointerFromVariant)
 #undef TEST_NONOWNING_SMARTPOINTER
+
+
+#define TEST_WEAK_SMARTPOINTER(ELEMENT_TYPE, FLAG_TEST) \
+    { \
+        ELEMENT_TYPE elem; \
+        QSharedPointer < ELEMENT_TYPE > shared(new ELEMENT_TYPE); \
+        QWeakPointer < ELEMENT_TYPE > sp(shared); \
+        sp.toStrongRef()->setObjectName("Test name"); \
+        QVariant v = QVariant::fromValue(sp); \
+        QCOMPARE(v.typeName(), "QWeakPointer<" #ELEMENT_TYPE ">"); \
+        QVERIFY(QMetaType::typeFlags(::qMetaTypeId<QWeakPointer < ELEMENT_TYPE > >()) & QMetaType::FLAG_TEST); \
+    }
+
+    TEST_WEAK_SMARTPOINTER(QObject, WeakPointerToQObject)
+    TEST_WEAK_SMARTPOINTER(QFile, WeakPointerToQObject)
+    TEST_WEAK_SMARTPOINTER(QTemporaryFile, WeakPointerToQObject)
+    TEST_WEAK_SMARTPOINTER(MyObject, WeakPointerToQObject)
+#undef TEST_WEAK_SMARTPOINTER
 }
 
 template <typename T>
@@ -1815,13 +1863,6 @@ DECLARE_NONSTREAMABLE(void)
 DECLARE_NONSTREAMABLE(void*)
 DECLARE_NONSTREAMABLE(QModelIndex)
 DECLARE_NONSTREAMABLE(QPersistentModelIndex)
-DECLARE_NONSTREAMABLE(QJsonValue)
-DECLARE_NONSTREAMABLE(QJsonObject)
-DECLARE_NONSTREAMABLE(QJsonArray)
-DECLARE_NONSTREAMABLE(QJsonDocument)
-DECLARE_NONSTREAMABLE(QCborValue)
-DECLARE_NONSTREAMABLE(QCborArray)
-DECLARE_NONSTREAMABLE(QCborMap)
 DECLARE_NONSTREAMABLE(QObject*)
 DECLARE_NONSTREAMABLE(QWidget*)
 
@@ -2540,6 +2581,26 @@ void tst_QMetaType::unknownType()
     invalid.construct(&buffer);
     QCOMPARE(buffer, 0xBAD);
 }
+
+void tst_QMetaType::fromType()
+{
+    #define FROMTYPE_CHECK(MetaTypeName, MetaTypeId, RealType) \
+        QCOMPARE(QMetaType::fromType<RealType>(), QMetaType(MetaTypeId)); \
+        QVERIFY(QMetaType::fromType<RealType>() == QMetaType(MetaTypeId)); \
+        QVERIFY(!(QMetaType::fromType<RealType>() != QMetaType(MetaTypeId))); \
+        QCOMPARE(QMetaType::fromType<RealType>().id(), MetaTypeId);
+
+    FOR_EACH_CORE_METATYPE(FROMTYPE_CHECK)
+
+    QVERIFY(QMetaType::fromType<QString>() != QMetaType());
+    QCOMPARE(QMetaType(), QMetaType());
+    QCOMPARE(QMetaType(QMetaType::UnknownType), QMetaType());
+
+    FROMTYPE_CHECK(_, ::qMetaTypeId<Whity<int>>(), Whity<int>)
+    #undef FROMTYPE_CHECK
+}
+
+
 // Compile-time test, it should be possible to register function pointer types
 class Undefined;
 
@@ -2553,9 +2614,7 @@ Q_DECLARE_METATYPE(UndefinedFunction0);
 Q_DECLARE_METATYPE(UndefinedFunction1);
 Q_DECLARE_METATYPE(UndefinedFunction2);
 Q_DECLARE_METATYPE(UndefinedFunction3);
-#ifdef Q_COMPILER_VARIADIC_TEMPLATES
 Q_DECLARE_METATYPE(UndefinedFunction4);
-#endif
 
 QTEST_MAIN(tst_QMetaType)
 #include "tst_qmetatype.moc"

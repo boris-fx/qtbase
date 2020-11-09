@@ -242,7 +242,7 @@ void MainWindow::about()
 
 void MainWindow::updateMenus()
 {
-    bool hasMdiChild = (activeMdiChild() != 0);
+    bool hasMdiChild = (activeMdiChild() != nullptr);
     saveAct->setEnabled(hasMdiChild);
     saveAsAct->setEnabled(hasMdiChild);
 #ifndef QT_NO_CLIPBOARD
@@ -464,7 +464,7 @@ void MainWindow::readSettings()
     QSettings settings(QCoreApplication::organizationName(), QCoreApplication::applicationName());
     const QByteArray geometry = settings.value("geometry", QByteArray()).toByteArray();
     if (geometry.isEmpty()) {
-        const QRect availableGeometry = QApplication::desktop()->availableGeometry(this);
+        const QRect availableGeometry = screen()->availableGeometry();
         resize(availableGeometry.width() / 3, availableGeometry.height() / 2);
         move((availableGeometry.width() - width()) / 2,
              (availableGeometry.height() - height()) / 2);
@@ -483,19 +483,20 @@ MdiChild *MainWindow::activeMdiChild() const
 {
     if (QMdiSubWindow *activeSubWindow = mdiArea->activeSubWindow())
         return qobject_cast<MdiChild *>(activeSubWindow->widget());
-    return 0;
+    return nullptr;
 }
 
 QMdiSubWindow *MainWindow::findMdiChild(const QString &fileName) const
 {
     QString canonicalFilePath = QFileInfo(fileName).canonicalFilePath();
 
-    foreach (QMdiSubWindow *window, mdiArea->subWindowList()) {
+    const QList<QMdiSubWindow *> subWindows = mdiArea->subWindowList();
+    for (QMdiSubWindow *window : subWindows) {
         MdiChild *mdiChild = qobject_cast<MdiChild *>(window->widget());
         if (mdiChild->currentFile() == canonicalFilePath)
             return window;
     }
-    return 0;
+    return nullptr;
 }
 
 void MainWindow::switchLayoutDirection()

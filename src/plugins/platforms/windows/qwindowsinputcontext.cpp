@@ -47,6 +47,7 @@
 #include <QtCore/qobject.h>
 #include <QtCore/qrect.h>
 #include <QtCore/qtextboundaryfinder.h>
+#include <QtCore/qoperatingsystemversion.h>
 
 #include <QtGui/qevent.h>
 #include <QtGui/qtextformat.h>
@@ -159,7 +160,6 @@ Q_CORE_EXPORT QLocale qt_localeFromLCID(LCID id); // from qlocale_win.cpp
     needs to be checked (mouse grab might interfere with candidate window).
 
     \internal
-    \ingroup qt-lighthouse-win
 */
 
 
@@ -279,7 +279,19 @@ void QWindowsInputContext::showInputPanel()
     // with Windows 10 if the Windows IME is (re)enabled _after_ the caret is shown.
     if (m_caretCreated) {
         cursorRectChanged();
-        ShowCaret(platformWindow->handle());
+        // We only call ShowCaret() on Windows 10 after 1703 as in earlier versions
+        // the caret would actually be visible (QTBUG-74492) and the workaround for
+        // the Surface seems unnecessary there anyway. But leave it hidden for IME.
+        // Only trigger the native OSK if the Qt OSK is not in use.
+        static bool imModuleEmpty = qEnvironmentVariableIsEmpty("QT_IM_MODULE");
+        bool nativeVKDisabled = QCoreApplication::testAttribute(Qt::AA_DisableNativeVirtualKeyboard);
+        if ((imModuleEmpty && !nativeVKDisabled)
+                && QOperatingSystemVersion::current()
+                    >= QOperatingSystemVersion(QOperatingSystemVersion::Windows, 10, 0, 16299)) {
+            ShowCaret(platformWindow->handle());
+        } else {
+            HideCaret(platformWindow->handle());
+        }
         setWindowsImeEnabled(platformWindow, false);
         setWindowsImeEnabled(platformWindow, true);
     }
@@ -445,7 +457,7 @@ static inline QTextFormat standardFormat(StandardFormat format)
         const QPalette palette = QGuiApplication::palette();
         const QColor background = palette.text().color();
         result.setBackground(QBrush(background));
-        result.setForeground(palette.background());
+        result.setForeground(palette.window());
         break;
     }
     }
@@ -657,9 +669,9 @@ void QWindowsInputContext::handleInputLanguageChanged(WPARAM wparam, LPARAM lpar
     m_locale = qt_localeFromLCID(m_languageId);
     emitLocaleChanged();
 
-    qCDebug(lcQpaInputMethods) << __FUNCTION__ << hex << showbase
+    qCDebug(lcQpaInputMethods) << __FUNCTION__ << Qt::hex << Qt::showbase
         << oldLanguageId  << "->" << newLanguageId << "Character set:"
-        << DWORD(wparam) << dec << noshowbase << m_locale;
+        << DWORD(wparam) << Qt::dec << Qt::noshowbase << m_locale;
 }
 
 /*!
@@ -717,7 +729,7 @@ int QWindowsInputContext::reconvertString(RECONVERTSTRING *reconv)
     reconv->dwCompStrOffset = DWORD(startPos) * sizeof(ushort); // byte count.
     reconv->dwTargetStrLen = reconv->dwCompStrLen;
     reconv->dwTargetStrOffset = reconv->dwCompStrOffset;
-    ushort *pastReconv = reinterpret_cast<ushort *>(reconv + 1);
+    auto *pastReconv = reinterpret_cast<ushort *>(reconv + 1);
     std::copy(surroundingText.utf16(), surroundingText.utf16() + surroundingText.size(),
               QT_MAKE_UNCHECKED_ARRAY_ITERATOR(pastReconv));
     return memSize;

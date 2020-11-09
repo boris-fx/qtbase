@@ -48,6 +48,10 @@
 **
 ****************************************************************************/
 
+#include "mainwindow.h"
+#include "document.h"
+#include "commands.h"
+
 #include <QUndoGroup>
 #include <QUndoStack>
 #include <QFileDialog>
@@ -55,9 +59,6 @@
 #include <QRandomGenerator>
 #include <QTextStream>
 #include <QToolButton>
-#include "document.h"
-#include "mainwindow.h"
-#include "commands.h"
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -68,25 +69,25 @@ MainWindow::MainWindow(QWidget *parent)
     documentTabs->removeTab(0);
     delete w;
 
-    connect(actionOpen, SIGNAL(triggered()), this, SLOT(openDocument()));
-    connect(actionClose, SIGNAL(triggered()), this, SLOT(closeDocument()));
-    connect(actionNew, SIGNAL(triggered()), this, SLOT(newDocument()));
-    connect(actionSave, SIGNAL(triggered()), this, SLOT(saveDocument()));
-    connect(actionExit, SIGNAL(triggered()), this, SLOT(close()));
-    connect(actionRed, SIGNAL(triggered()), this, SLOT(setShapeColor()));
-    connect(actionGreen, SIGNAL(triggered()), this, SLOT(setShapeColor()));
-    connect(actionBlue, SIGNAL(triggered()), this, SLOT(setShapeColor()));
-    connect(actionAddCircle, SIGNAL(triggered()), this, SLOT(addShape()));
-    connect(actionAddRectangle, SIGNAL(triggered()), this, SLOT(addShape()));
-    connect(actionAddTriangle, SIGNAL(triggered()), this, SLOT(addShape()));
-    connect(actionRemoveShape, SIGNAL(triggered()), this, SLOT(removeShape()));
-    connect(actionAddRobot, SIGNAL(triggered()), this, SLOT(addRobot()));
-    connect(actionAddSnowman, SIGNAL(triggered()), this, SLOT(addSnowman()));
-    connect(actionAbout, SIGNAL(triggered()), this, SLOT(about()));
-    connect(actionAboutQt, SIGNAL(triggered()), this, SLOT(aboutQt()));
+    connect(actionOpen, &QAction::triggered, this, &MainWindow::openDocument);
+    connect(actionClose, &QAction::triggered, this, &MainWindow::closeDocument);
+    connect(actionNew, &QAction::triggered, this, &MainWindow::newDocument);
+    connect(actionSave, &QAction::triggered, this, &MainWindow::saveDocument);
+    connect(actionExit, &QAction::triggered, this, &QWidget::close);
+    connect(actionRed, &QAction::triggered, this, &MainWindow::setShapeColor);
+    connect(actionGreen, &QAction::triggered, this, &MainWindow::setShapeColor);
+    connect(actionBlue, &QAction::triggered, this, &MainWindow::setShapeColor);
+    connect(actionAddCircle, &QAction::triggered, this, &MainWindow::addShape);
+    connect(actionAddRectangle, &QAction::triggered, this, &MainWindow::addShape);
+    connect(actionAddTriangle, &QAction::triggered, this, &MainWindow::addShape);
+    connect(actionRemoveShape, &QAction::triggered, this, &MainWindow::removeShape);
+    connect(actionAddRobot, &QAction::triggered, this, &MainWindow::addRobot);
+    connect(actionAddSnowman, &QAction::triggered, this, &MainWindow::addSnowman);
+    connect(actionAbout, &QAction::triggered, this, &MainWindow::about);
+    connect(actionAboutQt, &QAction::triggered, this, &MainWindow::aboutQt);
 
-    connect(undoLimit, SIGNAL(valueChanged(int)), this, SLOT(updateActions()));
-    connect(documentTabs, SIGNAL(currentChanged(int)), this, SLOT(updateActions()));
+    connect(undoLimit, QOverload<int>::of(&QSpinBox::valueChanged), this, &MainWindow::updateActions);
+    connect(documentTabs, &QTabWidget::currentChanged, this, &MainWindow::updateActions);
 
     actionOpen->setShortcut(QString("Ctrl+O"));
     actionClose->setShortcut(QString("Ctrl+W"));
@@ -122,17 +123,17 @@ MainWindow::MainWindow(QWidget *parent)
 void MainWindow::updateActions()
 {
     Document *doc = currentDocument();
-    m_undoGroup->setActiveStack(doc == 0 ? 0 : doc->undoStack());
-    QString shapeName = doc == 0 ? QString() : doc->currentShapeName();
+    m_undoGroup->setActiveStack(doc == nullptr ? nullptr : doc->undoStack());
+    QString shapeName = doc == nullptr ? QString() : doc->currentShapeName();
 
-    actionAddRobot->setEnabled(doc != 0);
-    actionAddSnowman->setEnabled(doc != 0);
-    actionAddCircle->setEnabled(doc != 0);
-    actionAddRectangle->setEnabled(doc != 0);
-    actionAddTriangle->setEnabled(doc != 0);
-    actionClose->setEnabled(doc != 0);
-    actionSave->setEnabled(doc != 0 && !doc->undoStack()->isClean());
-    undoLimit->setEnabled(doc != 0 && doc->undoStack()->count() == 0);
+    actionAddRobot->setEnabled(doc != nullptr);
+    actionAddSnowman->setEnabled(doc != nullptr);
+    actionAddCircle->setEnabled(doc != nullptr);
+    actionAddRectangle->setEnabled(doc != nullptr);
+    actionAddTriangle->setEnabled(doc != nullptr);
+    actionClose->setEnabled(doc != nullptr);
+    actionSave->setEnabled(doc != nullptr && !doc->undoStack()->isClean());
+    undoLimit->setEnabled(doc != nullptr && doc->undoStack()->count() == 0);
 
     if (shapeName.isEmpty()) {
         actionRed->setEnabled(false);
@@ -147,7 +148,7 @@ void MainWindow::updateActions()
         actionRemoveShape->setEnabled(true);
     }
 
-    if (doc != 0) {
+    if (doc != nullptr) {
         int index = documentTabs->indexOf(doc);
         Q_ASSERT(index != -1);
         static const QIcon unsavedIcon(":/icons/filesave.png");
@@ -226,9 +227,9 @@ void MainWindow::addDocument(Document *doc)
         return;
     m_undoGroup->addStack(doc->undoStack());
     documentTabs->addTab(doc, fixedWindowTitle(doc));
-    connect(doc, SIGNAL(currentShapeChanged(QString)), this, SLOT(updateActions()));
-    connect(doc->undoStack(), SIGNAL(indexChanged(int)), this, SLOT(updateActions()));
-    connect(doc->undoStack(), SIGNAL(cleanChanged(bool)), this, SLOT(updateActions()));
+    connect(doc, &Document::currentShapeChanged, this, &MainWindow::updateActions);
+    connect(doc->undoStack(), &QUndoStack::indexChanged, this, &MainWindow::updateActions);
+    connect(doc->undoStack(), &QUndoStack::cleanChanged, this, &MainWindow::updateActions);
 
     setCurrentDocument(doc);
 }
@@ -251,9 +252,9 @@ void MainWindow::removeDocument(Document *doc)
 
     documentTabs->removeTab(index);
     m_undoGroup->removeStack(doc->undoStack());
-    disconnect(doc, SIGNAL(currentShapeChanged(QString)), this, SLOT(updateActions()));
-    disconnect(doc->undoStack(), SIGNAL(indexChanged(int)), this, SLOT(updateActions()));
-    disconnect(doc->undoStack(), SIGNAL(cleanChanged(bool)), this, SLOT(updateActions()));
+    disconnect(doc, &Document::currentShapeChanged, this, &MainWindow::updateActions);
+    disconnect(doc->undoStack(), &QUndoStack::indexChanged, this, &MainWindow::updateActions);
+    disconnect(doc->undoStack(), &QUndoStack::cleanChanged, this, &MainWindow::updateActions);
 
     if (documentTabs->count() == 0) {
         newDocument();
@@ -264,7 +265,7 @@ void MainWindow::removeDocument(Document *doc)
 void MainWindow::saveDocument()
 {
     Document *doc = currentDocument();
-    if (doc == 0)
+    if (doc == nullptr)
         return;
 
     for (;;) {
@@ -298,7 +299,7 @@ void MainWindow::saveDocument()
 void MainWindow::closeDocument()
 {
     Document *doc = currentDocument();
-    if (doc == 0)
+    if (doc == nullptr)
         return;
 
     if (!doc->undoStack()->isClean()) {
@@ -338,10 +339,10 @@ static QRect randomRect(const QSize &s)
 {
     QSize min = Shape::minSize;
 
-    int left = (int) ((0.0 + s.width() - min.width())*(QRandomGenerator::global()->bounded(1.0)));
-    int top = (int) ((0.0 + s.height() - min.height())*(QRandomGenerator::global()->bounded(1.0)));
-    int width = (int) ((0.0 + s.width() - left - min.width())*(QRandomGenerator::global()->bounded(1.0))) + min.width();
-    int height = (int) ((0.0 + s.height() - top - min.height())*(QRandomGenerator::global()->bounded(1.0))) + min.height();
+    int left = qRound((s.width() - min.width()) * (QRandomGenerator::global()->bounded(1.0)));
+    int top = qRound((s.height() - min.height()) * (QRandomGenerator::global()->bounded(1.0)));
+    int width = qRound((s.width() - left - min.width()) * (QRandomGenerator::global()->bounded(1.0))) + min.width();
+    int height = qRound((s.height() - top - min.height()) * (QRandomGenerator::global()->bounded(1.0))) + min.height();
 
     return QRect(left, top, width, height);
 }
@@ -349,7 +350,7 @@ static QRect randomRect(const QSize &s)
 void MainWindow::addShape()
 {
     Document *doc = currentDocument();
-    if (doc == 0)
+    if (doc == nullptr)
         return;
 
     Shape::Type type;
@@ -369,7 +370,7 @@ void MainWindow::addShape()
 void MainWindow::removeShape()
 {
     Document *doc = currentDocument();
-    if (doc == 0)
+    if (doc == nullptr)
         return;
 
     QString shapeName = doc->currentShapeName();
@@ -382,7 +383,7 @@ void MainWindow::removeShape()
 void MainWindow::setShapeColor()
 {
     Document *doc = currentDocument();
-    if (doc == 0)
+    if (doc == nullptr)
         return;
 
     QString shapeName = doc->currentShapeName();
@@ -409,7 +410,7 @@ void MainWindow::setShapeColor()
 void MainWindow::addSnowman()
 {
     Document *doc = currentDocument();
-    if (doc == 0)
+    if (doc == nullptr)
         return;
 
     // Create a macro command using beginMacro() and endMacro()
@@ -427,7 +428,7 @@ void MainWindow::addSnowman()
 void MainWindow::addRobot()
 {
     Document *doc = currentDocument();
-    if (doc == 0)
+    if (doc == nullptr)
         return;
 
     // Compose a macro command by explicitly adding children to a parent command

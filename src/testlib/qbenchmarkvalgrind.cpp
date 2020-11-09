@@ -39,13 +39,12 @@
 
 #include <QtTest/private/qbenchmark_p.h>
 
-#ifdef QTESTLIB_USE_VALGRIND
-
 #include <QtTest/private/qbenchmarkvalgrind_p.h>
 #include <QtCore/qstringlist.h>
 #include <QtCore/qcoreapplication.h>
 #include <QtCore/qprocess.h>
 #include <QtCore/qdir.h>
+#include <QtCore/qregularexpression.h>
 #include <QtCore/qset.h>
 #include <QtTest/private/callgrind_p.h>
 
@@ -90,13 +89,13 @@ qint64 QBenchmarkValgrindUtils::extractResult(const QString &fileName)
 
     qint64 val = -1;
     bool valSeen = false;
-    QRegExp rxValue(QLatin1String("^summary: (\\d+)"));
+    QRegularExpression rxValue(QLatin1String("^summary: (\\d+)"));
     while (!file.atEnd()) {
         const QString line(QLatin1String(file.readLine()));
-        if (rxValue.indexIn(line) != -1) {
-            Q_ASSERT(rxValue.captureCount() == 1);
+        QRegularExpressionMatch match = rxValue.match(line);
+        if (match.hasMatch()) {
             bool ok;
-            val = rxValue.cap(1).toLongLong(&ok);
+            val = match.captured(1).toLongLong(&ok);
             Q_ASSERT(ok);
             valSeen = true;
             break;
@@ -120,13 +119,12 @@ QString QBenchmarkValgrindUtils::getNewestFileName()
     int hiSuffix = -1;
     QFileInfo lastFileInfo;
     const QString pattern = QString::fromLatin1("%1.(\\d+)").arg(base);
-    QRegExp rx(pattern);
+    QRegularExpression rx(pattern);
     for (const QFileInfo &fileInfo : fiList) {
-        const int index = rx.indexIn(fileInfo.fileName());
-        Q_ASSERT(index == 0);
-        Q_UNUSED(index);
+        QRegularExpressionMatch match = rx.match(fileInfo.fileName());
+        Q_ASSERT(match.hasMatch());
         bool ok;
-        const int suffix = rx.cap(1).toInt(&ok);
+        const int suffix = match.captured(1).toInt(&ok);
         Q_ASSERT(ok);
         Q_ASSERT(suffix >= 0);
         if (suffix > hiSuffix) {
@@ -170,7 +168,7 @@ QString QBenchmarkValgrindUtils::outFileBase(qint64 pid)
 // Returns \c true upon success, otherwise false.
 bool QBenchmarkValgrindUtils::runCallgrindSubProcess(const QStringList &origAppArgs, int &exitCode)
 {
-    const QString execFile(origAppArgs.at(0));
+    const QString &execFile = origAppArgs.at(0);
     QStringList args;
     args << QLatin1String("--tool=callgrind") << QLatin1String("--instr-atstart=yes")
          << QLatin1String("--quiet")
@@ -179,7 +177,7 @@ bool QBenchmarkValgrindUtils::runCallgrindSubProcess(const QStringList &origAppA
     // pass on original arguments that make sense (e.g. avoid wasting time producing output
     // that will be ignored anyway) ...
     for (int i = 1; i < origAppArgs.size(); ++i) {
-        const QString arg(origAppArgs.at(i));
+        const QString &arg = origAppArgs.at(i);
         if (arg == QLatin1String("-callgrind"))
             continue;
         args << arg; // ok to pass on
@@ -243,5 +241,3 @@ QTest::QBenchmarkMetric QBenchmarkCallgrindMeasurer::metricType()
 }
 
 QT_END_NAMESPACE
-
-#endif // QTESTLIB_USE_VALGRIND

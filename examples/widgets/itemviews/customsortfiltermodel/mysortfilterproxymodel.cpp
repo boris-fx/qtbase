@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2020 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the examples of the Qt Toolkit.
@@ -48,9 +48,9 @@
 **
 ****************************************************************************/
 
-#include <QtWidgets>
-
 #include "mysortfilterproxymodel.h"
+
+#include <QtWidgets>
 
 //! [0]
 MySortFilterProxyModel::MySortFilterProxyModel(QObject *parent)
@@ -60,7 +60,7 @@ MySortFilterProxyModel::MySortFilterProxyModel(QObject *parent)
 //! [0]
 
 //! [1]
-void MySortFilterProxyModel::setFilterMinimumDate(const QDate &date)
+void MySortFilterProxyModel::setFilterMinimumDate(QDate date)
 {
     minDate = date;
     invalidateFilter();
@@ -68,7 +68,7 @@ void MySortFilterProxyModel::setFilterMinimumDate(const QDate &date)
 //! [1]
 
 //! [2]
-void MySortFilterProxyModel::setFilterMaximumDate(const QDate &date)
+void MySortFilterProxyModel::setFilterMaximumDate(QDate date)
 {
     maxDate = date;
     invalidateFilter();
@@ -77,7 +77,7 @@ void MySortFilterProxyModel::setFilterMaximumDate(const QDate &date)
 
 //! [3]
 bool MySortFilterProxyModel::filterAcceptsRow(int sourceRow,
-        const QModelIndex &sourceParent) const
+                                              const QModelIndex &sourceParent) const
 {
     QModelIndex index0 = sourceModel()->index(sourceRow, 0, sourceParent);
     QModelIndex index1 = sourceModel()->index(sourceRow, 1, sourceParent);
@@ -98,7 +98,7 @@ bool MySortFilterProxyModel::lessThan(const QModelIndex &left,
 //! [4]
 
 //! [6]
-    if (leftData.type() == QVariant::DateTime) {
+    if (leftData.userType() == QMetaType::QDateTime) {
         return leftData.toDateTime() < rightData.toDateTime();
     } else {
         static const QRegularExpression emailPattern("[\\w\\.]*@[\\w\\.]*");
@@ -122,7 +122,7 @@ bool MySortFilterProxyModel::lessThan(const QModelIndex &left,
 //! [5] //! [6]
 
 //! [7]
-bool MySortFilterProxyModel::dateInRange(const QDate &date) const
+bool MySortFilterProxyModel::dateInRange(QDate date) const
 {
     return (!minDate.isValid() || date > minDate)
             && (!maxDate.isValid() || date < maxDate);

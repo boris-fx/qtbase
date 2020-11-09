@@ -44,7 +44,7 @@
 #include <QtCore/QFile>
 #include <QtCore/QDir>
 #include <QtCore/QMutex>
-#include <QtCore/QMutexLocker>
+#include <QtCore/private/qlocking_p.h>
 #include <QtCore/QUrl>
 #include <QtCore/QFileInfo>
 #include <QtCore/QLocale>
@@ -228,7 +228,18 @@ QUrl QFileSelector::select(const QUrl &filePath) const
         QString selectedPath = d->select(equivalentPath);
         ret.setPath(selectedPath.remove(0, scheme.size()));
     } else {
+        // we need to store the original query and fragment, since toLocalFile() will strip it off
+        QString frag;
+        if (ret.hasFragment())
+            frag = ret.fragment();
+        QString query;
+        if (ret.hasQuery())
+            query= ret.query();
         ret = QUrl::fromLocalFile(d->select(ret.toLocalFile()));
+        if (!frag.isNull())
+            ret.setFragment(frag);
+        if (!query.isNull())
+            ret.setQuery(query);
     }
     return ret;
 }
@@ -301,7 +312,7 @@ void QFileSelector::setExtraSelectors(const QStringList &list)
 QStringList QFileSelector::allSelectors() const
 {
     Q_D(const QFileSelector);
-    QMutexLocker locker(&sharedDataMutex);
+    const auto locker = qt_scoped_lock(sharedDataMutex);
     QFileSelectorPrivate::updateSelectors();
     return d->extras + sharedData->staticSelectors;
 }
@@ -313,7 +324,7 @@ void QFileSelectorPrivate::updateSelectors()
 
     QLatin1Char pathSep(',');
     QStringList envSelectors = QString::fromLatin1(qgetenv("QT_FILE_SELECTORS"))
-                                .split(pathSep, QString::SkipEmptyParts);
+                                .split(pathSep, Qt::SkipEmptyParts);
     if (envSelectors.count())
         sharedData->staticSelectors << envSelectors;
 
@@ -360,7 +371,7 @@ QStringList QFileSelectorPrivate::platformSelectors()
 
 void QFileSelectorPrivate::addStatics(const QStringList &statics)
 {
-    QMutexLocker locker(&sharedDataMutex);
+    const auto locker = qt_scoped_lock(sharedDataMutex);
     sharedData->preloadedStatics << statics;
     sharedData->staticSelectors.clear();
 }

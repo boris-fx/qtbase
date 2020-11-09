@@ -48,21 +48,38 @@
 **
 ****************************************************************************/
 
-#include <QtWidgets>
-#if defined(QT_PRINTSUPPORT_LIB)
-#include <QtPrintSupport/qtprintsupportglobal.h>
-#if QT_CONFIG(printdialog)
-#include <QPrintDialog>
-#endif
-#endif
-
 #include "imageviewer.h"
 
+#include <QApplication>
+#include <QClipboard>
+#include <QColorSpace>
+#include <QDir>
+#include <QFileDialog>
+#include <QImageReader>
+#include <QImageWriter>
+#include <QLabel>
+#include <QMenuBar>
+#include <QMessageBox>
+#include <QMimeData>
+#include <QPainter>
+#include <QScreen>
+#include <QScrollArea>
+#include <QScrollBar>
+#include <QStandardPaths>
+#include <QStatusBar>
+
+#if defined(QT_PRINTSUPPORT_LIB)
+#  include <QtPrintSupport/qtprintsupportglobal.h>
+
+#  if QT_CONFIG(printdialog)
+#    include <QPrintDialog>
+#  endif
+#endif
+
 //! [0]
-ImageViewer::ImageViewer()
-   : imageLabel(new QLabel)
+ImageViewer::ImageViewer(QWidget *parent)
+   : QMainWindow(parent), imageLabel(new QLabel)
    , scrollArea(new QScrollArea)
-   , scaleFactor(1)
 {
     imageLabel->setBackgroundRole(QPalette::Base);
     imageLabel->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Ignored);
@@ -107,6 +124,8 @@ bool ImageViewer::loadFile(const QString &fileName)
 void ImageViewer::setImage(const QImage &newImage)
 {
     image = newImage;
+    if (image.colorSpace().isValid())
+        image.convertToColorSpace(QColorSpace::SRgb);
     imageLabel->setPixmap(QPixmap::fromImage(image));
 //! [4]
     scaleFactor = 1.0;
@@ -152,7 +171,7 @@ static void initializeImageFileDialog(QFileDialog &dialog, QFileDialog::AcceptMo
     QStringList mimeTypeFilters;
     const QByteArrayList supportedMimeTypes = acceptMode == QFileDialog::AcceptOpen
         ? QImageReader::supportedMimeTypes() : QImageWriter::supportedMimeTypes();
-    foreach (const QByteArray &mimeTypeName, supportedMimeTypes)
+    for (const QByteArray &mimeTypeName : supportedMimeTypes)
         mimeTypeFilters.append(mimeTypeName);
     mimeTypeFilters.sort();
     dialog.setMimeTypeFilters(mimeTypeFilters);
@@ -182,19 +201,20 @@ void ImageViewer::saveAs()
 void ImageViewer::print()
 //! [5] //! [6]
 {
-    Q_ASSERT(imageLabel->pixmap());
-#if QT_CONFIG(printdialog)
+    Q_ASSERT(!imageLabel->pixmap(Qt::ReturnByValue).isNull());
+#if defined(QT_PRINTSUPPORT_LIB) && QT_CONFIG(printdialog)
 //! [6] //! [7]
     QPrintDialog dialog(&printer, this);
 //! [7] //! [8]
     if (dialog.exec()) {
         QPainter painter(&printer);
+        QPixmap pixmap = imageLabel->pixmap(Qt::ReturnByValue);
         QRect rect = painter.viewport();
-        QSize size = imageLabel->pixmap()->size();
+        QSize size = pixmap.size();
         size.scale(rect.size(), Qt::KeepAspectRatio);
         painter.setViewport(rect.x(), rect.y(), size.width(), size.height());
-        painter.setWindow(imageLabel->pixmap()->rect());
-        painter.drawPixmap(0, 0, *imageLabel->pixmap());
+        painter.setWindow(pixmap.rect());
+        painter.drawPixmap(0, 0, pixmap);
     }
 #endif
 }
@@ -365,9 +385,8 @@ void ImageViewer::updateActions()
 void ImageViewer::scaleImage(double factor)
 //! [23] //! [24]
 {
-    Q_ASSERT(imageLabel->pixmap());
     scaleFactor *= factor;
-    imageLabel->resize(scaleFactor * imageLabel->pixmap()->size());
+    imageLabel->resize(scaleFactor * imageLabel->pixmap(Qt::ReturnByValue).size());
 
     adjustScrollBar(scrollArea->horizontalScrollBar(), factor);
     adjustScrollBar(scrollArea->verticalScrollBar(), factor);

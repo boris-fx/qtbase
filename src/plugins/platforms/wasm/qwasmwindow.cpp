@@ -65,6 +65,12 @@ QWasmWindow::~QWasmWindow()
     m_compositor->removeWindow(this);
 }
 
+void QWasmWindow::destroy()
+{
+    if (m_backingStore)
+        m_backingStore->destroy();
+}
+
 void QWasmWindow::initialize()
 {
     QRect rect = windowGeometry();
@@ -198,8 +204,10 @@ void QWasmWindow::injectMouseReleased(const QPoint &local, const QPoint &global,
     if (!hasTitleBar() || button != Qt::LeftButton)
         return;
 
-    if (closeButtonRect().contains(global) && m_activeControl == QWasmCompositor::SC_TitleBarCloseButton)
+    if (closeButtonRect().contains(global) && m_activeControl == QWasmCompositor::SC_TitleBarCloseButton) {
         window()->close();
+        return;
+    }
 
     if (maxButtonRect().contains(global) && m_activeControl == QWasmCompositor::SC_TitleBarMaxButton) {
         window()->setWindowState(Qt::WindowMaximized);
@@ -257,6 +265,8 @@ bool QWasmWindow::isPointOnTitle(QPoint point) const
 
 bool QWasmWindow::isPointOnResizeRegion(QPoint point) const
 {
+    if (window()->flags().testFlag(Qt::Popup))
+        return false;
     return resizeRegion().contains(point);
 }
 
@@ -394,7 +404,8 @@ void QWasmWindow::requestUpdate()
 
 bool QWasmWindow::hasTitleBar() const
 {
-    return !(m_windowState & Qt::WindowFullScreen) && (window()->flags().testFlag(Qt::WindowTitleHint) && m_needsCompositor);
+    return !(m_windowState & Qt::WindowFullScreen) && (window()->flags().testFlag(Qt::WindowTitleHint) && m_needsCompositor)
+            && !window()->flags().testFlag(Qt::Popup);
 }
 
 QT_END_NAMESPACE

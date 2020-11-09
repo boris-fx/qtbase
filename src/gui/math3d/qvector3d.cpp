@@ -514,7 +514,7 @@ float QVector3D::distanceToPlane
 /*!
     \overload
 
-    Returns the distance from this vertex a plane defined by
+    Returns the distance from this vertex to a plane defined by
     the vertices \a plane1, \a plane2 and \a plane3.
 
     The return value will be negative if the vertex is below the plane,
@@ -706,7 +706,7 @@ QVector4D QVector3D::toVector4D() const
 */
 QVector3D::operator QVariant() const
 {
-    return QVariant(QVariant::Vector3D, this);
+    return QVariant(QMetaType::QVector3D, this);
 }
 
 /*!

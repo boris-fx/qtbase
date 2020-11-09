@@ -17,15 +17,16 @@ DEFINES *= QT_NO_NARROWING_CONVERSIONS_IN_CONNECT
 qtConfig(c++11): CONFIG += c++11 strict_c++
 qtConfig(c++14): CONFIG += c++14
 qtConfig(c++1z): CONFIG += c++1z
+qtConfig(c++2a): CONFIG += c++2a
 qtConfig(c99): CONFIG += c99
 qtConfig(c11): CONFIG += c11
+qtConfig(separate_debug_info): CONFIG += separate_debug_info
 qtConfig(stack-protector-strong): CONFIG += stack_protector_strong
 contains(TEMPLATE, .*lib) {
     # module and plugins
-    if(!host_build|!cross_compile):qtConfig(reduce_exports): CONFIG += hide_symbols
     unix:qtConfig(reduce_relocations): CONFIG += bsymbolic_functions
-    qtConfig(separate_debug_info): CONFIG += separate_debug_info
-
+}
+contains(TEMPLATE, .*lib)|contains(TEMPLATE, aux) {
     !isEmpty(_QMAKE_SUPER_CACHE_): \
         rplbase = $$dirname(_QMAKE_SUPER_CACHE_)/[^/][^/]*
     else: \
@@ -38,6 +39,10 @@ contains(TEMPLATE, .*lib) {
         qt_libdir = $$[QT_INSTALL_LIBS]
     }
     contains(QMAKE_DEFAULT_LIBDIRS, $$qt_libdir) {
+        lib_replace0.match = $$rplbase/lib/
+        lib_replace0.replace = $$qqt_libdir/
+        lib_replace0.CONFIG = path
+        QMAKE_PRL_INSTALL_REPLACE += lib_replace0
         lib_replace.match = "[^ ']*$$rplbase/lib"
         lib_replace.replace =
     } else {
@@ -46,7 +51,23 @@ contains(TEMPLATE, .*lib) {
     }
     lib_replace.CONFIG = path
     QMAKE_PRL_INSTALL_REPLACE += lib_replace
+    !equals(qt_libdir, $$rplbase/lib) {
+        qtlibdir_replace.match = $$qt_libdir
+        qtlibdir_replace.replace = $$qqt_libdir
+        qtlibdir_replace.CONFIG = path
+        QMAKE_PRL_INSTALL_REPLACE += qtlibdir_replace
+    }
 }
+contains(TEMPLATE, .*lib)|darwin {
+    if(!host_build|!cross_compile):qtConfig(reduce_exports): CONFIG += hide_symbols
+}
+
+# Apple deprecated the entire OpenGL API in favor of Metal, which
+# we are aware of, so silence the deprecation warnings in code.
+# This does not apply to user-code, which will need to silence
+# their own warnings if they use the deprecated APIs explicitly.
+macos: DEFINES += GL_SILENCE_DEPRECATION
+uikit: DEFINES += GLES_SILENCE_DEPRECATION
 
 # The remainder of this file must not apply to host tools/libraries,
 # as the host compiler's version and capabilities are not checked.
@@ -89,14 +110,8 @@ clang {
     greaterThan(QT_GCC_MAJOR_VERSION, 5): QMAKE_CXXFLAGS_WARN_ON += -Wshift-overflow=2 -Wduplicated-cond
     # GCC 7 has a lot of false positives relating to this, so disable completely
     greaterThan(QT_GCC_MAJOR_VERSION, 6): QMAKE_CXXFLAGS_WARN_ON += -Wno-stringop-overflow
-    # GCC 9 has a lot of false positives relating to this, so disable completely
-    greaterThan(QT_GCC_MAJOR_VERSION, 8): QMAKE_CXXFLAGS_WARN_ON += -Wno-deprecated-copy
-    # GCC 9 introduced this
-    greaterThan(QT_GCC_MAJOR_VERSION, 8): QMAKE_CXXFLAGS_WARN_ON += -Wno-redundant-move
-    # GCC 9 introduced this
+    # GCC 9 introduced -Wformat-overflow in -Wall, but it is buggy:
     greaterThan(QT_GCC_MAJOR_VERSION, 8): QMAKE_CXXFLAGS_WARN_ON += -Wno-format-overflow
-    # GCC 9 introduced this
-    greaterThan(QT_GCC_MAJOR_VERSION, 8): QMAKE_CXXFLAGS_WARN_ON += -Wno-init-list-lifetime
 }
 
 warnings_are_errors:warning_clean {
@@ -105,10 +120,10 @@ warnings_are_errors:warning_clean {
     # compiler.
     clang {
         # Apple clang 4.0-4.2,5.0-5.1,6.0-6.4,7.0-7.3,8.0-8.3,9.0-9.2
-        # Regular clang 3.x-6.0
+        # Regular clang 3.x-7.0
         apple_ver = $${QT_APPLE_CLANG_MAJOR_VERSION}.$${QT_APPLE_CLANG_MINOR_VERSION}
         reg_ver = $${QT_CLANG_MAJOR_VERSION}.$${QT_CLANG_MINOR_VERSION}
-        contains(apple_ver, "4\\.[012]|5\\.[01]|6\\.[01234]|7\\.[0123]|8\\.[0123]|9\\.[012]")|contains(reg_ver, "[345]\\.|6\\.0") {
+        contains(apple_ver, "4\\.[012]|5\\.[01]|6\\.[01234]|7\\.[0123]|8\\.[0123]|9\\.[012]")|contains(reg_ver, "[345]\\.|[67]\\.0") {
             QMAKE_CXXFLAGS_WARN_ON += -Werror -Wno-error=\\$${LITERAL_HASH}warnings -Wno-error=deprecated-declarations $$WERROR
         }
     } else:intel_icc:linux {
@@ -134,22 +149,12 @@ warnings_are_errors:warning_clean {
             # error: assuming signed overflow does not occur when assuming that (X + c) < X is always false
             QMAKE_CXXFLAGS_WARN_ON += -Wno-error=strict-overflow
 
-            # GCC 7 includes -Wimplicit-fallthrough in -Wextra, but Qt is not yet free of implicit fallthroughs.
-            greaterThan(QT_GCC_MAJOR_VERSION, 6): QMAKE_CXXFLAGS_WARN_ON += -Wno-error=implicit-fallthrough
-            # GCC 9 has a lot of false positives relating to this, so disable completely
-            greaterThan(QT_GCC_MAJOR_VERSION, 8): QMAKE_CXXFLAGS_WARN_ON += -Wno-deprecated-copy
-            # GCC 9 introduced this
-            greaterThan(QT_GCC_MAJOR_VERSION, 8): QMAKE_CXXFLAGS_WARN_ON += -Wno-redundant-move
-            # GCC 9 introduced this
-            greaterThan(QT_GCC_MAJOR_VERSION, 8): QMAKE_CXXFLAGS_WARN_ON += -Wno-format-overflow
-            # GCC 9 introduced this
-            greaterThan(QT_GCC_MAJOR_VERSION, 8): QMAKE_CXXFLAGS_WARN_ON += -Wno-init-list-lifetime
             # Work-around for bug https://code.google.com/p/android/issues/detail?id=58135
             android: QMAKE_CXXFLAGS_WARN_ON += -Wno-error=literal-suffix
         }
     } else:msvc:!intel_icl {
-        # enable for MSVC 2012, MSVC 2013, MSVC 2015
-        contains(MSVC_VER, "1[124].0"): QMAKE_CXXFLAGS_WARN_ON += -WX
+        # enable for MSVC 2015, MSVC 2017
+        contains(MSVC_VER, "1[45].0"): QMAKE_CXXFLAGS_WARN_ON += -WX
     }
     unset(ver)
 }

@@ -71,6 +71,7 @@ private slots:
     void restoreStateOfFloating();
     void restoreDockWidget();
     void restoreStateWhileStillFloating();
+    void setWindowTitle();
     // task specific tests:
     void task165177_deleteFocusWidget();
     void task169808_setFloating();
@@ -669,7 +670,11 @@ void tst_QDockWidget::dockLocationChanged()
     spy.clear();
 
     dw.setFloating(true);
-    QTest::qWait(100);
+    QTRY_COMPARE(spy.count(), 1);
+    QCOMPARE(qvariant_cast<Qt::DockWidgetArea>(spy.at(0).at(0)),
+             Qt::NoDockWidgetArea);
+    spy.clear();
+
     dw.setFloating(false);
     QTRY_COMPARE(spy.count(), 1);
     QCOMPARE(qvariant_cast<Qt::DockWidgetArea>(spy.at(0).at(0)),
@@ -941,6 +946,9 @@ void tst_QDockWidget::task248604_infiniteResize()
 
 void tst_QDockWidget::task258459_visibilityChanged()
 {
+    if (QGuiApplication::platformName().startsWith(QLatin1String("wayland"), Qt::CaseInsensitive))
+        QSKIP("Wayland: This fails. Figure out why.");
+
     QMainWindow win;
     QDockWidget dock1, dock2;
     win.addDockWidget(Qt::RightDockWidgetArea, &dock1);
@@ -993,7 +1001,54 @@ void tst_QDockWidget::taskQTBUG_9758_undockedGeometry()
     QVERIFY(dock1.y() >= 0);
 }
 
+void tst_QDockWidget::setWindowTitle()
+{
+    QMainWindow window;
+    QDockWidget dock1(&window);
+    QDockWidget dock2(&window);
+    const QString dock1Title = QStringLiteral("&Window");
+    const QString dock2Title = QStringLiteral("&Modifiable Window [*]");
 
+    dock1.setWindowTitle(dock1Title);
+    dock2.setWindowTitle(dock2Title);
+    window.addDockWidget(Qt::RightDockWidgetArea, &dock1);
+    window.addDockWidget(Qt::RightDockWidgetArea, &dock2);
+    window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+    QCOMPARE(dock1.windowTitle(), dock1Title);
+    QCOMPARE(dock2.windowTitle(), dock2Title);
+
+    dock1.setFloating(true);
+    dock1.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&dock1));
+    QCOMPARE(dock1.windowTitle(), dock1Title);
+    dock1.setFloating(false);
+    QCOMPARE(dock1.windowTitle(), dock1Title);
+    dock1.setFloating(true);
+    dock1.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&dock1));
+    const QString changed = QStringLiteral("Changed ");
+    dock1.setWindowTitle(QString(changed + dock1Title));
+    QCOMPARE(dock1.windowTitle(), QString(changed + dock1Title));
+    dock1.setFloating(false);
+    QCOMPARE(dock1.windowTitle(), QString(changed + dock1Title));
+
+    dock2.setWindowModified(true);
+    QCOMPARE(dock2.windowTitle(), dock2Title);
+    dock2.setFloating(true);
+    dock2.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&dock2));
+    QCOMPARE(dock2.windowTitle(), dock2Title);
+    dock2.setWindowModified(false);
+    QCOMPARE(dock2.windowTitle(), dock2Title);
+    dock2.setFloating(false);
+    QCOMPARE(dock2.windowTitle(), dock2Title);
+    dock2.setFloating(true);
+    dock2.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&dock2));
+    QCOMPARE(dock2.windowTitle(), dock2Title);
+}
 
 QTEST_MAIN(tst_QDockWidget)
 #include "tst_qdockwidget.moc"

@@ -61,6 +61,7 @@ struct Type
 };
 Q_DECLARE_TYPEINFO(Type, Q_MOVABLE_TYPE);
 
+struct ClassDef;
 struct EnumDef
 {
     QByteArray name;
@@ -68,6 +69,7 @@ struct EnumDef
     QVector<QByteArray> values;
     bool isEnumClass; // c++11 enum class
     EnumDef() : isEnumClass(false) {}
+    QJsonObject toJson(const ClassDef &cdef) const;
 };
 Q_DECLARE_TYPEINFO(EnumDef, Q_MOVABLE_TYPE);
 
@@ -78,62 +80,66 @@ struct ArgumentDef
     QByteArray rightType, normalizedType, name;
     QByteArray typeNameForCast; // type name to be used in cast from void * in metacall
     bool isDefault;
+
+    QJsonObject toJson() const;
 };
 Q_DECLARE_TYPEINFO(ArgumentDef, Q_MOVABLE_TYPE);
 
 struct FunctionDef
 {
-    FunctionDef(): returnTypeIsVolatile(false), access(Private), isConst(false), isVirtual(false), isStatic(false),
-                   inlineCode(false), wasCloned(false), isCompat(false), isInvokable(false),
-                   isScriptable(false), isSlot(false), isSignal(false), isPrivateSignal(false),
-                   isConstructor(false), isDestructor(false), isAbstract(false), revision(0) {}
     Type type;
+    QVector<ArgumentDef> arguments;
     QByteArray normalizedType;
     QByteArray tag;
     QByteArray name;
-    bool returnTypeIsVolatile;
-
-    QVector<ArgumentDef> arguments;
+    QByteArray inPrivateClass;
 
     enum Access { Private, Protected, Public };
-    Access access;
-    bool isConst;
-    bool isVirtual;
-    bool isStatic;
-    bool inlineCode;
-    bool wasCloned;
+    Access access = Private;
+    int revision = 0;
 
-    QByteArray inPrivateClass;
-    bool isCompat;
-    bool isInvokable;
-    bool isScriptable;
-    bool isSlot;
-    bool isSignal;
-    bool isPrivateSignal;
-    bool isConstructor;
-    bool isDestructor;
-    bool isAbstract;
+    bool isConst = false;
+    bool isVirtual = false;
+    bool isStatic = false;
+    bool inlineCode = false;
+    bool wasCloned = false;
 
-    int revision;
+    bool returnTypeIsVolatile = false;
+
+    bool isCompat = false;
+    bool isInvokable = false;
+    bool isScriptable = false;
+    bool isSlot = false;
+    bool isSignal = false;
+    bool isPrivateSignal = false;
+    bool isConstructor = false;
+    bool isDestructor = false;
+    bool isAbstract = false;
+
+    QJsonObject toJson() const;
+    static void accessToJson(QJsonObject *obj, Access acs);
 };
 Q_DECLARE_TYPEINFO(FunctionDef, Q_MOVABLE_TYPE);
 
 struct PropertyDef
 {
-    PropertyDef():notifyId(-1), constant(false), final(false), gspec(ValueSpec), revision(0){}
-    QByteArray name, type, member, read, write, reset, designable, scriptable, editable, stored, user, notify, inPrivateClass;
-    int notifyId; // -1 means no notifyId, >= 0 means signal defined in this class, < -1 means signal not defined in this class
-    bool constant;
-    bool final;
-    enum Specification  { ValueSpec, ReferenceSpec, PointerSpec };
-    Specification gspec;
     bool stdCppSet() const {
         QByteArray s("set");
         s += toupper(name[0]);
         s += name.mid(1);
         return (s == write);
     }
-    int revision;
+
+    QByteArray name, type, member, read, write, reset, designable, scriptable, editable, stored, user, notify, inPrivateClass;
+    int notifyId = -1; // -1 means no notifyId, >= 0 means signal defined in this class, < -1 means signal not defined in this class
+    enum Specification  { ValueSpec, ReferenceSpec, PointerSpec };
+    Specification gspec = ValueSpec;
+    int revision = 0;
+    bool constant = false;
+    bool final = false;
+    bool required = false;
+
+    QJsonObject toJson() const;
 };
 Q_DECLARE_TYPEINFO(PropertyDef, Q_MOVABLE_TYPE);
 
@@ -169,11 +175,9 @@ struct ClassDef : BaseDef {
     };
     QVector<QVector<Interface> >interfaceList;
 
-    bool hasQObject = false;
-    bool hasQGadget = false;
-
     struct PluginData {
         QByteArray iid;
+        QByteArray uri;
         QMap<QString, QJsonArray> metaArgs;
         QJsonDocument metaData;
     } pluginData;
@@ -181,17 +185,23 @@ struct ClassDef : BaseDef {
     QVector<FunctionDef> constructorList;
     QVector<FunctionDef> signalList, slotList, methodList, publicList;
     QVector<QByteArray> nonClassSignalList;
-    int notifyableProperties = 0;
     QVector<PropertyDef> propertyList;
+    int notifyableProperties = 0;
     int revisionedMethods = 0;
     int revisionedProperties = 0;
 
+    bool hasQObject = false;
+    bool hasQGadget = false;
+    bool hasQNamespace = false;
+
+    QJsonObject toJson() const;
 };
 Q_DECLARE_TYPEINFO(ClassDef, Q_MOVABLE_TYPE);
 Q_DECLARE_TYPEINFO(ClassDef::Interface, Q_MOVABLE_TYPE);
 
 struct NamespaceDef : BaseDef {
     bool hasQNamespace = false;
+    bool doGenerate = false;
 };
 Q_DECLARE_TYPEINFO(NamespaceDef, Q_MOVABLE_TYPE);
 
@@ -215,9 +225,10 @@ public:
     QHash<QByteArray, QByteArray> knownQObjectClasses;
     QHash<QByteArray, QByteArray> knownGadgets;
     QMap<QString, QJsonArray> metaArgs;
+    QVector<QString> parsedPluginMetadataFiles;
 
     void parse();
-    void generate(FILE *out);
+    void generate(FILE *out, FILE *jsonOutput);
 
     bool parseClassHead(ClassDef *def);
     inline bool inClass(const ClassDef *def) const {
@@ -259,6 +270,8 @@ public:
     bool testFunctionAttribute(FunctionDef *def);
     bool testFunctionAttribute(Token tok, FunctionDef *def);
     bool testFunctionRevision(FunctionDef *def);
+
+    bool skipCxxAttributes();
 
     void checkSuperClasses(ClassDef *def);
     void checkProperties(ClassDef* cdef);

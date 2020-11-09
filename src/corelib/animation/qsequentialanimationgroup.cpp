@@ -282,7 +282,7 @@ QPauseAnimation *QSequentialAnimationGroup::insertPause(int index, int msecs)
 
     if (index < 0 || index > d->animations.size()) {
         qWarning("QSequentialAnimationGroup::insertPause: index is out of bounds");
-        return 0;
+        return nullptr;
     }
 
     QPauseAnimation *pause = new QPauseAnimation(msecs);
@@ -430,7 +430,7 @@ void QSequentialAnimationGroupPrivate::setCurrentAnimation(int index, bool inter
     if (index == -1) {
         Q_ASSERT(animations.isEmpty());
         currentAnimationIndex = -1;
-        currentAnimation = 0;
+        currentAnimation = nullptr;
         return;
     }
 
@@ -503,7 +503,7 @@ void QSequentialAnimationGroupPrivate::_q_uncontrolledAnimationFinished()
 */
 void QSequentialAnimationGroupPrivate::animationInsertedAt(int index)
 {
-    if (currentAnimation == 0)
+    if (currentAnimation == nullptr)
         setCurrentAnimation(0); // initialize the current animation
 
     if (currentAnimationIndex == index
@@ -532,7 +532,8 @@ void QSequentialAnimationGroupPrivate::animationRemoved(int index, QAbstractAnim
     Q_Q(QSequentialAnimationGroup);
     QAnimationGroupPrivate::animationRemoved(index, anim);
 
-    Q_ASSERT(currentAnimation); // currentAnimation should always be set
+    if (!currentAnimation)
+        return;
 
     if (actualDuration.size() > index)
         actualDuration.removeAt(index);

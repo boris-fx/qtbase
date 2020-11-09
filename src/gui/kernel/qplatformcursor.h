@@ -78,6 +78,8 @@ private:
 
 class Q_GUI_EXPORT QPlatformCursor : public QObject {
 public:
+    Q_DISABLE_COPY_MOVE(QPlatformCursor)
+
     enum Capability {
         OverrideCursor = 0x1
     };
@@ -94,6 +96,7 @@ public:
 #endif // QT_NO_CURSOR
     virtual QPoint pos() const;
     virtual void setPos(const QPoint &pos);
+    virtual QSize size() const;
 
     static Capabilities capabilities() { return m_capabilities; }
     static void setCapabilities(Capabilities c) { m_capabilities = c; }

@@ -186,11 +186,13 @@ public:
     QAtomicInt serialNumber;
     int lastSerial;
     bool interrupt;
+    bool propagateInterrupt = false;
 
     static void postedEventsSourceCallback(void *info);
     static void waitingObserverCallback(CFRunLoopObserverRef observer,
                                         CFRunLoopActivity activity, void *info);
     static void firstLoopEntry(CFRunLoopObserverRef ref, CFRunLoopActivity activity, void *info);
+    bool sendQueuedUserInputEvents();
     void processPostedEvents();
 };
 

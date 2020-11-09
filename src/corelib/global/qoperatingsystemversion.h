@@ -71,6 +71,8 @@ public:
     static const QOperatingSystemVersion MacOSSierra;
     static const QOperatingSystemVersion MacOSHighSierra;
     static const QOperatingSystemVersion MacOSMojave;
+    static const QOperatingSystemVersion MacOSCatalina;
+    static const QOperatingSystemVersion MacOSBigSur;
 
     static const QOperatingSystemVersion AndroidJellyBean;
     static const QOperatingSystemVersion AndroidJellyBean_MR1;
@@ -119,9 +121,7 @@ public:
     Q_DECL_CONSTEXPR int segmentCount() const
     { return m_micro >= 0 ? 3 : m_minor >= 0 ? 2 : m_major >= 0 ? 1 : 0; }
 
-#ifdef Q_COMPILER_INITIALIZER_LISTS
     bool isAnyOfType(std::initializer_list<OSType> types) const;
-#endif
     Q_DECL_CONSTEXPR OSType type() const { return m_os; }
     QString name() const;
 

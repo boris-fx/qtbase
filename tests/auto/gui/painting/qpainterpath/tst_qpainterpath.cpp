@@ -43,6 +43,8 @@ public slots:
     void cleanupTestCase();
 private slots:
     void getSetCheck();
+    void clear();
+    void reserveAndCapacity();
     void swap();
 
     void contains_QPointF_data();
@@ -86,7 +88,9 @@ private slots:
 
     void testToFillPolygons();
 
+#if QT_CONFIG(signaling_nan)
     void testNaNandInfinites();
+#endif
 
     void closing();
 
@@ -146,6 +150,59 @@ void tst_QPainterPath::swap()
     p1.swap(p2);
     QCOMPARE(p1.boundingRect().toRect(), QRect(10,10,10,10));
     QCOMPARE(p2.boundingRect().toRect(), QRect( 0, 0,10,10));
+}
+
+void tst_QPainterPath::clear()
+{
+    QPainterPath p1;
+    QPainterPath p2;
+    p1.clear();
+    QCOMPARE(p1, p2);
+
+    p1.addRect(0, 0, 10, 10);
+    p1.clear();
+    QCOMPARE(p1, p2);
+
+    p1.lineTo(50, 50);
+    QPainterPath p3;
+    QCOMPARE(p1.elementCount(), 2);
+    p3.lineTo(50, 50);
+    QCOMPARE(p1, p3);
+
+    QCOMPARE(p1.fillRule(), Qt::OddEvenFill);
+    p1.setFillRule(Qt::WindingFill);
+    QVERIFY(p1 != p3);
+    p1.clear();
+    QCOMPARE(p1.fillRule(), Qt::OddEvenFill);
+    QCOMPARE(p1, p2);
+}
+
+void tst_QPainterPath::reserveAndCapacity()
+{
+    QPainterPath p;
+    QVERIFY(p.capacity() == 0);
+
+    p.addRect(0, 0, 10, 10);
+    QVERIFY(p.capacity() > 0);
+
+    p.clear();
+    QVERIFY(p.capacity() > 0);
+
+    p = QPainterPath{};
+    QVERIFY(p.capacity() == 0);
+
+    p.moveTo(100, 100);
+    QVERIFY(p.capacity() > 1);
+
+    p.reserve(1000);
+    QVERIFY(p.capacity() >= 1000);
+
+    p.reserve(0);
+    QVERIFY(p.capacity() >= 1000);
+
+    QPainterPath p2;
+    p2.reserve(10);
+    QVERIFY(p.capacity() >= 10);
 }
 
 Q_DECLARE_METATYPE(QPainterPath)
@@ -1173,6 +1230,7 @@ void tst_QPainterPath::testToFillPolygons()
     QCOMPARE(polygons.first().count(QPointF(70, 50)), 0);
 }
 
+#if QT_CONFIG(signaling_nan)
 void tst_QPainterPath::testNaNandInfinites()
 {
     QPainterPath path1;
@@ -1216,6 +1274,7 @@ void tst_QPainterPath::testNaNandInfinites()
     path1.lineTo(QPointF(1, 1));
     QVERIFY(path1 != path2);
 }
+#endif // signaling_nan
 
 void tst_QPainterPath::connectPathDuplicatePoint()
 {

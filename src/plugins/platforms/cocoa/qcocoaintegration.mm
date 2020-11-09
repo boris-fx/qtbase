@@ -52,6 +52,9 @@
 #include "qcocoamimetypes.h"
 #include "qcocoaaccessibility.h"
 #include "qcocoascreen.h"
+#if QT_CONFIG(sessionmanager)
+#  include "qcocoasessionmanager.h"
+#endif
 
 #include <qpa/qplatforminputcontextfactory_p.h>
 #include <qpa/qplatformaccessibility.h>
@@ -113,7 +116,7 @@ class QFontEngineFT;
 static QCocoaIntegration::Options parseOptions(const QStringList &paramList)
 {
     QCocoaIntegration::Options options;
-    foreach (const QString &param, paramList) {
+    for (const QString &param : paramList) {
 #ifndef QT_NO_FREETYPE
         if (param == QLatin1String("fontengine=freetype"))
             options |= QCocoaIntegration::UseFreeTypeFontEngine;
@@ -197,19 +200,7 @@ QCocoaIntegration::QCocoaIntegration(const QStringList &paramList)
         [cocoaApplication setMenu:[qtMenuLoader menu]];
     }
 
-    // The presentation options such as whether or not the dock and/or menu bar is
-    // hidden (automatically by the system) affects the main screen's available
-    // geometry. Since we're initializing the screens synchronously at application
-    // startup we need to ensure that the presentation options have been propagated
-    // to the screen before we read out its properties. Normally OS X does this in
-    // an asynchronous callback, but that's too late for us. We force the propagation
-    // by explicitly setting the presentation option to the magic 'default value',
-    // which will resolve to an actual value and result in screen invalidation.
-    cocoaApplication.presentationOptions = NSApplicationPresentationDefault;
-
-    m_screensObserver = QMacScopedObserver([NSApplication sharedApplication],
-        NSApplicationDidChangeScreenParametersNotification, [&]() { updateScreens(); });
-    updateScreens();
+    QCocoaScreen::initializeScreens();
 
     QMacInternalPasteboardMime::initializeMimeTypes();
     QCocoaMimeTypes::initializeMimeTypes();
@@ -242,10 +233,7 @@ QCocoaIntegration::~QCocoaIntegration()
     QMacInternalPasteboardMime::destroyMimeTypes();
 #endif
 
-    // Delete screens in reverse order to avoid crash in case of multiple screens
-    while (!mScreens.isEmpty()) {
-        QWindowSystemInterface::handleScreenRemoved(mScreens.takeLast());
-    }
+    QCocoaScreen::cleanupScreens();
 
     clearToolbars();
 }
@@ -260,87 +248,12 @@ QCocoaIntegration::Options QCocoaIntegration::options() const
     return mOptions;
 }
 
-/*!
-    \brief Synchronizes the screen list, adds new screens, removes deleted ones
-*/
-void QCocoaIntegration::updateScreens()
+#if QT_CONFIG(sessionmanager)
+QPlatformSessionManager *QCocoaIntegration::createPlatformSessionManager(const QString &id, const QString &key) const
 {
-    NSArray<NSScreen *> *scrs = [NSScreen screens];
-    NSMutableArray<NSScreen *> *screens = [NSMutableArray<NSScreen *> arrayWithArray:scrs];
-    if ([screens count] == 0)
-        if ([NSScreen mainScreen])
-           [screens addObject:[NSScreen mainScreen]];
-    if ([screens count] == 0)
-        return;
-    QSet<QCocoaScreen*> remainingScreens = QSet<QCocoaScreen*>::fromList(mScreens);
-    QList<QPlatformScreen *> siblings;
-    uint screenCount = [screens count];
-    for (uint i = 0; i < screenCount; i++) {
-        NSScreen* scr = [screens objectAtIndex:i];
-        CGDirectDisplayID dpy = scr.qt_displayId;
-        // If this screen is a mirror and is not the primary one of the mirror set, ignore it.
-        // Exception: The NSScreen API has been observed to a return a screen list with one
-        // mirrored, non-primary screen when Qt is running as a startup item. Always use the
-        // screen if there's only one screen in the list.
-        if (screenCount > 1 && CGDisplayIsInMirrorSet(dpy)) {
-            CGDirectDisplayID primary = CGDisplayMirrorsDisplay(dpy);
-            if (primary != kCGNullDirectDisplay && primary != dpy)
-                continue;
-        }
-        QCocoaScreen* screen = nullptr;
-        foreach (QCocoaScreen* existingScr, mScreens) {
-            // NSScreen documentation says do not cache the array returned from [NSScreen screens].
-            // However in practice, we can identify a screen by its pointer: if resolution changes,
-            // the NSScreen object will be the same instance, just with different values.
-            if (existingScr->nativeScreen() == scr) {
-                screen = existingScr;
-                break;
-            }
-        }
-        if (screen) {
-            remainingScreens.remove(screen);
-            screen->updateProperties();
-        } else {
-            screen = new QCocoaScreen(i);
-            mScreens.append(screen);
-            qCDebug(lcQpaScreen) << "Adding" << screen;
-            QWindowSystemInterface::handleScreenAdded(screen);
-        }
-        siblings << screen;
-    }
-
-    // Set virtual siblings list. All screens in mScreens are siblings, because we ignored the
-    // mirrors. Note that some of the screens we update the siblings list for here may be deleted
-    // below, but update anyway to keep the to-be-deleted screens out of the siblings list.
-    foreach (QCocoaScreen* screen, mScreens)
-        screen->setVirtualSiblings(siblings);
-
-    // Now the leftovers in remainingScreens are no longer current, so we can delete them.
-    foreach (QCocoaScreen* screen, remainingScreens) {
-        mScreens.removeOne(screen);
-        // Prevent stale references to NSScreen during destroy
-        screen->m_screenIndex = -1;
-        qCDebug(lcQpaScreen) << "Removing" << screen;
-        QWindowSystemInterface::handleScreenRemoved(screen);
-    }
+    return new QCocoaSessionManager(id, key);
 }
-
-QCocoaScreen *QCocoaIntegration::screenForNSScreen(NSScreen *nsScreen)
-{
-    NSUInteger index = [[NSScreen screens] indexOfObject:nsScreen];
-    if (index == NSNotFound)
-        return nullptr;
-
-    if (index >= unsigned(mScreens.count()))
-        updateScreens();
-
-    for (QCocoaScreen *screen : mScreens) {
-        if (screen->nativeScreen() == nsScreen)
-            return screen;
-    }
-
-    return nullptr;
-}
+#endif
 
 bool QCocoaIntegration::hasCapability(QPlatformIntegration::Capability cap) const
 {
@@ -399,9 +312,7 @@ QPlatformOffscreenSurface *QCocoaIntegration::createPlatformOffscreenSurface(QOf
 #ifndef QT_NO_OPENGL
 QPlatformOpenGLContext *QCocoaIntegration::createPlatformOpenGLContext(QOpenGLContext *context) const
 {
-    QCocoaGLContext *glContext = new QCocoaGLContext(context);
-    context->setNativeHandle(QVariant::fromValue<QCocoaNativeContext>(glContext->nativeContext()));
-    return glContext;
+    return new QCocoaGLContext(context);
 }
 #endif
 
@@ -490,8 +401,13 @@ QCocoaServices *QCocoaIntegration::services() const
 
 QVariant QCocoaIntegration::styleHint(StyleHint hint) const
 {
-    if (hint == QPlatformIntegration::FontSmoothingGamma)
+    switch (hint) {
+    case FontSmoothingGamma:
         return QCoreTextFontEngine::fontSmoothingGamma();
+    case ShowShortcutsInContextMenus:
+        return QVariant(false);
+    default: break;
+    }
 
     return QPlatformIntegration::styleHint(hint);
 }
@@ -556,14 +472,9 @@ QList<QCocoaWindow *> *QCocoaIntegration::popupWindowStack()
 
 void QCocoaIntegration::setApplicationIcon(const QIcon &icon) const
 {
-    NSImage *image = nil;
-    if (!icon.isNull()) {
-        NSSize size = [[[NSApplication sharedApplication] dockTile] size];
-        QPixmap pixmap = icon.pixmap(size.width, size.height);
-        image = static_cast<NSImage *>(qt_mac_create_nsimage(pixmap));
-    }
-    [[NSApplication sharedApplication] setApplicationIconImage:image];
-    [image release];
+    // Fall back to a size that looks good on the highest resolution screen available
+    auto fallbackSize = NSApp.dockTile.size.width * qGuiApp->devicePixelRatio();
+    NSApp.applicationIconImage = [NSImage imageFromQIcon:icon withSize:fallbackSize];
 }
 
 void QCocoaIntegration::beep() const

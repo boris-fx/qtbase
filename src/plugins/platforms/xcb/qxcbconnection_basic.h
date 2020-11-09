@@ -74,6 +74,8 @@ public:
     }
     const xcb_setup_t *setup() const { return m_setup; }
 
+    size_t maxRequestDataBytes(size_t requestSize) const;
+
     inline xcb_atom_t atom(QXcbAtom::Atom qatom) const { return m_xcbAtom.atom(qatom); }
     QXcbAtom::Atom qatom(xcb_atom_t atom) const { return m_xcbAtom.qatom(atom); }
     xcb_atom_t internAtom(const char *name);
@@ -95,13 +97,12 @@ public:
     bool hasShmFd() const { return m_hasShmFd; }
     bool hasXSync() const { return m_hasXSync; }
     bool hasXinerama() const { return m_hasXinerama; }
+    bool hasBigRequest() const;
 
-#if QT_CONFIG(xcb_xinput)
     bool isAtLeastXI21() const { return m_xi2Enabled && m_xi2Minor >= 1; }
     bool isAtLeastXI22() const { return m_xi2Enabled && m_xi2Minor >= 2; }
     bool isXIEvent(xcb_generic_event_t *event) const;
     bool isXIType(xcb_generic_event_t *event, uint16_t type) const;
-#endif
 
     bool isXFixesType(uint responseType, int eventType) const;
     bool isXRandrType(uint responseType, int eventType) const;
@@ -116,9 +117,7 @@ protected:
     void initializeXShape();
     void initializeXKB();
     void initializeXSync();
-#if QT_CONFIG(xcb_xinput)
     void initializeXInput2();
-#endif
 
 private:
 #if QT_CONFIG(xcb_xlib)
@@ -144,21 +143,21 @@ private:
     QPair<int, int> m_xrenderVersion;
 
     bool m_xi2Enabled = false;
-#if QT_CONFIG(xcb_xinput)
     int m_xi2Minor = -1;
     int m_xiOpCode = -1;
     uint32_t m_xinputFirstEvent = 0;
-#endif
 
     uint32_t m_xfixesFirstEvent = 0;
     uint32_t m_xrandrFirstEvent = 0;
     uint32_t m_xkbFirstEvent = 0;
+
+    uint32_t m_maximumRequestLength = 0;
 };
 
 #define Q_XCB_REPLY_CONNECTION_ARG(connection, ...) connection
 
 struct QStdFreeDeleter {
-    void operator()(void *p) const Q_DECL_NOTHROW { return std::free(p); }
+    void operator()(void *p) const noexcept { return std::free(p); }
 };
 
 #define Q_XCB_REPLY(call, ...) \

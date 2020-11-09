@@ -53,7 +53,7 @@ struct Option;
 
 class Uic
 {
-    Q_DISABLE_COPY(Uic)
+    Q_DISABLE_COPY_MOVE(Uic)
 public:
     Uic(Driver *driver);
     ~Uic();
@@ -85,18 +85,14 @@ public:
 
     bool write(DomUI *ui);
 
-    bool isMainWindow(const QString &className) const;
-    bool isToolBar(const QString &className) const;
-    bool isStatusBar(const QString &className) const;
     bool isButton(const QString &className) const;
     bool isContainer(const QString &className) const;
-    bool isCustomWidgetContainer(const QString &className) const;
-    bool isMenuBar(const QString &className) const;
     bool isMenu(const QString &className) const;
 
 private:
     // copyright header
-    void writeCopyrightHeader(DomUI *ui);
+    void writeCopyrightHeaderCpp(const DomUI *ui) const;
+    void writeCopyrightHeaderPython(const DomUI *ui) const;
     DomUI *parseUiFile(QXmlStreamReader &reader);
 
     // header protection

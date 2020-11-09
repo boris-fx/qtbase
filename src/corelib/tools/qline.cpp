@@ -347,7 +347,7 @@ QDataStream &operator>>(QDataStream &stream, QLine &line)
     function to determine whether the QLineF represents a valid line
     or a null line.
 
-    The intersect() function determines the IntersectType for this
+    The intersects() function determines the IntersectionType for this
     line and a given line, while the angleTo() function returns the
     angle between the lines. In addition, the unitVector() function
     returns a line that has the same starting point as this line, but
@@ -370,6 +370,18 @@ QDataStream &operator>>(QDataStream &stream, QLine &line)
 
 /*!
     \enum QLineF::IntersectType
+    \obsolete Use QLineF::IntersectionType instead.
+
+    \value NoIntersection
+           Lines do not intersect.
+    \value UnboundedIntersection
+           Lines intersect, but not within the range defined by their lengths.
+    \value BoundedIntersection
+           Lnes intersect within the range defined by their lengths.
+*/
+
+/*!
+    \typealias QLineF::IntersectionType
 
     Describes the intersection between two lines.
 
@@ -657,8 +669,10 @@ QLineF QLineF::unitVector() const
     return f;
 }
 
+#if QT_DEPRECATED_SINCE(5, 14)
 /*!
     \fn QLineF::IntersectType QLineF::intersect(const QLineF &line, QPointF *intersectionPoint) const
+    \obsolete Use intersects() instead
 
     Returns a value indicating whether or not \e this line intersects
     with the given \a line.
@@ -669,6 +683,23 @@ QLineF QLineF::unitVector() const
 */
 
 QLineF::IntersectType QLineF::intersect(const QLineF &l, QPointF *intersectionPoint) const
+{
+    return intersects(l, intersectionPoint);
+}
+#endif
+
+/*!
+    \fn QLineF::IntersectionType QLineF::intersects(const QLineF &line, QPointF *intersectionPoint) const
+    \since 5.14
+
+    Returns a value indicating whether or not \e this line intersects
+    with the given \a line.
+
+    The actual intersection point is extracted to \a intersectionPoint
+    (if the pointer is valid). If the lines are parallel, the
+    intersection point is undefined.
+*/
+QLineF::IntersectionType QLineF::intersects(const QLineF &l, QPointF *intersectionPoint) const
 {
     // ipmlementation is based on Graphics Gems III's "Faster Line Segment Intersection"
     const QPointF a = pt2 - pt1;
@@ -805,6 +836,7 @@ qreal QLineF::angleTo(const QLineF &l) const
         return delta_normalized;
 }
 
+#if QT_DEPRECATED_SINCE(5, 14)
 /*!
   \fn qreal QLineF::angle(const QLineF &line) const
 
@@ -837,6 +869,7 @@ qreal QLineF::angle(const QLineF &l) const
     if (cos_line >= -1.0 && cos_line <= 1.0) rad = qAcos( cos_line );
     return rad * 360 / M_2PI;
 }
+#endif
 
 
 #ifndef QT_NO_DEBUG_STREAM

@@ -1,5 +1,4 @@
 SUBPROGRAMS = \
-     #alive \
      assert \
      badxml \
      benchlibcallgrind \
@@ -21,6 +20,8 @@ SUBPROGRAMS = \
      exceptionthrow \
      expectfail \
      failcleanup \
+     faildatatype \
+     failfetchtype \
      failinit \
      failinitdata \
      fetchbogus \
@@ -30,11 +31,13 @@ SUBPROGRAMS = \
      longstring \
      maxwarnings \
      multiexec \
+     pass \
      pairdiagnostics \
      printdatatags \
      printdatatagswithglobaltags \
      qexecstringlist \
      silent \
+     signaldumper \
      singleskip \
      skip \
      skipcleanup \
@@ -43,11 +46,13 @@ SUBPROGRAMS = \
      sleep \
      strcmp \
      subtest \
+     testlib \
      tuplediagnostics \
      verbose1 \
      verbose2 \
      verifyexceptionthrown \
      warnings \
+     watchdog \
      xunit
 
 qtHaveModule(gui): SUBPROGRAMS += \

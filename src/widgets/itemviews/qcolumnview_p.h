@@ -74,7 +74,7 @@ QT_BEGIN_NAMESPACE
 class QColumnViewPreviewColumn : public QAbstractItemView {
 
 public:
-    explicit QColumnViewPreviewColumn(QWidget *parent) : QAbstractItemView(parent), previewWidget(0) {
+    explicit QColumnViewPreviewColumn(QWidget *parent) : QAbstractItemView(parent), previewWidget(nullptr) {
     }
 
     void setPreviewWidget(QWidget *widget) {
@@ -181,11 +181,12 @@ public:
 /*!
  * This is a delegate that will paint the triangle
  */
+// ### Qt6: QStyledItemDelegate
 class QColumnViewDelegate : public QItemDelegate
 {
 
 public:
-    explicit QColumnViewDelegate(QObject *parent = 0) : QItemDelegate(parent) {}
+    explicit QColumnViewDelegate(QObject *parent = nullptr) : QItemDelegate(parent) {}
     ~QColumnViewDelegate() {}
 
     void paint(QPainter *painter,

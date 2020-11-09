@@ -54,8 +54,6 @@ public:
     bool read(QImage *image) override;
     bool write(const QImage &image) override;
 
-    QByteArray name() const override;
-
     int imageCount() const override;
     bool jumpToImage(int imageNumber) override;
     bool jumpToNextImage() override;

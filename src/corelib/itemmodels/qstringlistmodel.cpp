@@ -136,6 +136,42 @@ QModelIndex QStringListModel::sibling(int row, int column, const QModelIndex &id
 }
 
 /*!
+  \reimp
+  \since 5.13
+*/
+QMap<int, QVariant> QStringListModel::itemData(const QModelIndex &index) const
+{
+    if (!checkIndex(index, CheckIndexOption::IndexIsValid | CheckIndexOption::ParentIsInvalid))
+        return QMap<int, QVariant>{};
+    const QVariant displayData = lst.at(index.row());
+    return QMap<int, QVariant>{{
+        std::make_pair<int>(Qt::DisplayRole, displayData),
+        std::make_pair<int>(Qt::EditRole, displayData)
+    }};
+}
+
+/*!
+  \reimp
+  \since 5.13
+  If \a roles contains both Qt::DisplayRole and Qt::EditRole, the latter will take precedence
+*/
+bool QStringListModel::setItemData(const QModelIndex &index, const QMap<int, QVariant> &roles)
+{
+    if (roles.isEmpty())
+        return false;
+    if (std::any_of(roles.keyBegin(), roles.keyEnd(), [](int role) -> bool {
+        return role != Qt::DisplayRole && role != Qt::EditRole;
+    })) {
+        return false;
+    }
+    auto roleIter = roles.constFind(Qt::EditRole);
+    if (roleIter == roles.constEnd())
+        roleIter = roles.constFind(Qt::DisplayRole);
+    Q_ASSERT(roleIter != roles.constEnd());
+    return setData(index, roleIter.value(), roleIter.key());
+}
+
+/*!
     Returns data for the specified \a role, from the item with the
     given \a index.
 
@@ -176,6 +212,7 @@ Qt::ItemFlags QStringListModel::flags(const QModelIndex &index) const
     \a index in the model, to the provided \a value.
 
     The dataChanged() signal is emitted if the item is changed.
+    Returns \c true after emitting the dataChanged() signal.
 
     \sa Qt::ItemDataRole, data()
 */
@@ -188,17 +225,22 @@ bool QStringListModel::setData(const QModelIndex &index, const QVariant &value, 
         if (lst.at(index.row()) == valueString)
             return true;
         lst.replace(index.row(), valueString);
-        QVector<int> roles;
-        roles.reserve(2);
-        roles.append(Qt::DisplayRole);
-        roles.append(Qt::EditRole);
-        emit dataChanged(index, index, roles);
-        // once Q_COMPILER_UNIFORM_INIT can be used, change to:
-        // emit dataChanged(index, index, {Qt::DisplayRole, Qt::EditRole});
+        emit dataChanged(index, index, {Qt::DisplayRole, Qt::EditRole});
         return true;
     }
     return false;
 }
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+/*!
+    \reimp
+    \since 6.0
+ */
+bool QStringListModel::clearItemData(const QModelIndex &index)
+{
+    return setData(index, QVariant(), Qt::EditRole);
+}
+#endif
 
 /*!
     Inserts \a count rows into the model, beginning at the given \a row.
@@ -207,6 +249,8 @@ bool QStringListModel::setData(const QModelIndex &index, const QVariant &value, 
     consistency with QAbstractItemModel. By default, a null index is
     specified, indicating that the rows are inserted in the top level of
     the model.
+
+    Returns \c true if the insertion was successful.
 
     \sa QAbstractItemModel::insertRows()
 */
@@ -234,6 +278,8 @@ bool QStringListModel::insertRows(int row, int count, const QModelIndex &parent)
     specified, indicating that the rows are removed in the top level of
     the model.
 
+    Returns \c true if the row removal was successful.
+
     \sa QAbstractItemModel::removeRows()
 */
 
@@ -249,6 +295,37 @@ bool QStringListModel::removeRows(int row, int count, const QModelIndex &parent)
 
     endRemoveRows();
 
+    return true;
+}
+
+/*!
+    \since 5.13
+    \reimp
+*/
+bool QStringListModel::moveRows(const QModelIndex &sourceParent, int sourceRow, int count, const QModelIndex &destinationParent, int destinationChild)
+{
+    if (sourceRow < 0
+        || sourceRow + count - 1 >= rowCount(sourceParent)
+        || destinationChild < 0
+        || destinationChild > rowCount(destinationParent)
+        || sourceRow == destinationChild
+        || sourceRow == destinationChild - 1
+        || count <= 0
+        || sourceParent.isValid()
+        || destinationParent.isValid()) {
+        return false;
+    }
+    if (!beginMoveRows(QModelIndex(), sourceRow, sourceRow + count - 1, QModelIndex(), destinationChild))
+        return false;
+
+    int fromRow = sourceRow;
+    if (destinationChild < sourceRow)
+        fromRow += count - 1;
+    else
+        destinationChild--;
+    while (count--)
+        lst.move(fromRow, destinationChild);
+    endMoveRows();
     return true;
 }
 

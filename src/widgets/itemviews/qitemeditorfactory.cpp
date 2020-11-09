@@ -91,7 +91,7 @@ class QUIntSpinBox : public QSpinBox
     Q_OBJECT
     Q_PROPERTY(uint value READ uintValue WRITE setUIntValue NOTIFY uintValueChanged USER true)
 public:
-    explicit QUIntSpinBox(QWidget *parent = 0)
+    explicit QUIntSpinBox(QWidget *parent = nullptr)
       : QSpinBox(parent)
     {
         connect(this, SIGNAL(valueChanged(int)), SIGNAL(uintValueChanged()));
@@ -122,7 +122,7 @@ Q_SIGNALS:
     \inmodule QtWidgets
 
     When editing data in an item view, editors are created and
-    displayed by a delegate. QItemDelegate, which is the delegate by
+    displayed by a delegate. QStyledItemDelegate, which is the delegate by
     default installed on Qt's item views, uses a QItemEditorFactory to
     create editors for it. A default unique instance provided by
     QItemEditorFactory is used by all item delegates.  If you set a
@@ -156,7 +156,7 @@ Q_SIGNALS:
 
     Additional editors can be registered with the registerEditor() function.
 
-    \sa QItemDelegate, {Model/View Programming}, {Color Editor Factory Example}
+    \sa QStyledItemDelegate, {Model/View Programming}, {Color Editor Factory Example}
 */
 
 /*!
@@ -176,7 +176,7 @@ QWidget *QItemEditorFactory::createEditor(int userType, QWidget *parent) const
     QItemEditorCreatorBase *creator = creatorMap.value(userType, 0);
     if (!creator) {
         const QItemEditorFactory *dfactory = defaultFactory();
-        return dfactory == this ? 0 : dfactory->createEditor(userType, parent);
+        return dfactory == this ? nullptr : dfactory->createEditor(userType, parent);
     }
     return creator->createWidget(parent);
 }
@@ -241,21 +241,21 @@ QWidget *QDefaultItemEditorFactory::createEditor(int userType, QWidget *parent) 
 {
     switch (userType) {
 #if QT_CONFIG(combobox)
-    case QVariant::Bool: {
+    case QMetaType::Bool: {
         QBooleanComboBox *cb = new QBooleanComboBox(parent);
         cb->setFrame(false);
         cb->setSizePolicy(QSizePolicy::Ignored, cb->sizePolicy().verticalPolicy());
         return cb; }
 #endif
 #if QT_CONFIG(spinbox)
-    case QVariant::UInt: {
+    case QMetaType::UInt: {
         QSpinBox *sb = new QUIntSpinBox(parent);
         sb->setFrame(false);
         sb->setMinimum(0);
         sb->setMaximum(INT_MAX);
         sb->setSizePolicy(QSizePolicy::Ignored, sb->sizePolicy().verticalPolicy());
         return sb; }
-    case QVariant::Int: {
+    case QMetaType::Int: {
         QSpinBox *sb = new QSpinBox(parent);
         sb->setFrame(false);
         sb->setMinimum(INT_MIN);
@@ -264,25 +264,25 @@ QWidget *QDefaultItemEditorFactory::createEditor(int userType, QWidget *parent) 
         return sb; }
 #endif
 #if QT_CONFIG(datetimeedit)
-    case QVariant::Date: {
+    case QMetaType::QDate: {
         QDateTimeEdit *ed = new QDateEdit(parent);
         ed->setFrame(false);
         return ed; }
-    case QVariant::Time: {
+    case QMetaType::QTime: {
         QDateTimeEdit *ed = new QTimeEdit(parent);
         ed->setFrame(false);
         return ed; }
-    case QVariant::DateTime: {
+    case QMetaType::QDateTime: {
         QDateTimeEdit *ed = new QDateTimeEdit(parent);
         ed->setFrame(false);
         return ed; }
 #endif
 #if QT_CONFIG(label)
-    case QVariant::Pixmap:
+    case QMetaType::QPixmap:
         return new QLabel(parent);
 #endif
 #if QT_CONFIG(spinbox)
-    case QVariant::Double: {
+    case QMetaType::Double: {
         QDoubleSpinBox *sb = new QDoubleSpinBox(parent);
         sb->setFrame(false);
         sb->setMinimum(-DBL_MAX);
@@ -291,12 +291,12 @@ QWidget *QDefaultItemEditorFactory::createEditor(int userType, QWidget *parent) 
         return sb; }
 #endif
 #if QT_CONFIG(lineedit)
-    case QVariant::String:
+    case QMetaType::QString:
     default: {
         // the default editor is a lineedit
         QExpandingLineEdit *le = new QExpandingLineEdit(parent);
-        le->setFrame(le->style()->styleHint(QStyle::SH_ItemView_DrawDelegateFrame, 0, le));
-        if (!le->style()->styleHint(QStyle::SH_ItemView_ShowDecorationSelected, 0, le))
+        le->setFrame(le->style()->styleHint(QStyle::SH_ItemView_DrawDelegateFrame, nullptr, le));
+        if (!le->style()->styleHint(QStyle::SH_ItemView_ShowDecorationSelected, nullptr, le))
             le->setWidgetOwnsGeometry(true);
         return le; }
 #else
@@ -304,42 +304,42 @@ QWidget *QDefaultItemEditorFactory::createEditor(int userType, QWidget *parent) 
         break;
 #endif
     }
-    return 0;
+    return nullptr;
 }
 
 QByteArray QDefaultItemEditorFactory::valuePropertyName(int userType) const
 {
     switch (userType) {
 #if QT_CONFIG(combobox)
-    case QVariant::Bool:
+    case QMetaType::Bool:
         return "currentIndex";
 #endif
 #if QT_CONFIG(spinbox)
-    case QVariant::UInt:
-    case QVariant::Int:
-    case QVariant::Double:
+    case QMetaType::UInt:
+    case QMetaType::Int:
+    case QMetaType::Double:
         return "value";
 #endif
 #if QT_CONFIG(datetimeedit)
-    case QVariant::Date:
+    case QMetaType::QDate:
         return "date";
-    case QVariant::Time:
+    case QMetaType::QTime:
         return "time";
-    case QVariant::DateTime:
+    case QMetaType::QDateTime:
         return "dateTime";
 #endif
-    case QVariant::String:
+    case QMetaType::QString:
     default:
         // the default editor is a lineedit
         return "text";
     }
 }
 
-static QItemEditorFactory *q_default_factory = 0;
+static QItemEditorFactory *q_default_factory = nullptr;
 struct QDefaultFactoryCleaner
 {
     inline QDefaultFactoryCleaner() {}
-    ~QDefaultFactoryCleaner() { delete q_default_factory; q_default_factory = 0; }
+    ~QDefaultFactoryCleaner() { delete q_default_factory; q_default_factory = nullptr; }
 };
 
 /*!
@@ -379,7 +379,7 @@ void QItemEditorFactory::setDefaultFactory(QItemEditorFactory *factory)
     QItemEditorCreatorBase objects are specialized widget factories that
     provide editor widgets for one particular QVariant data type. They
     are used by QItemEditorFactory to create editors for
-    \l{QItemDelegate}s. Creator bases must be registered with
+    \l{QStyledItemDelegate}s. Creator bases must be registered with
     QItemEditorFactory::registerEditor().
 
     An editor should provide a user property for the data it edits.
@@ -461,7 +461,7 @@ QItemEditorCreatorBase::~QItemEditorCreatorBase()
     \snippet code/src_gui_itemviews_qitemeditorfactory.cpp 1
 
     The constructor takes the name of the property that contains the
-    editing data. QItemDelegate can then access the property by name
+    editing data. QStyledItemDelegate can then access the property by name
     when it sets and retrieves editing data. Only use this class if
     your editor does not define a user property (using the USER
     keyword in the Q_PROPERTY macro).  If the widget has a user
@@ -476,7 +476,7 @@ QItemEditorCreatorBase::~QItemEditorCreatorBase()
 
     Constructs an editor creator object using \a valuePropertyName
     as the name of the property to be used for editing. The
-    property name is used by QItemDelegate when setting and
+    property name is used by QStyledItemDelegate when setting and
     getting editor data.
 
     Note that the \a valuePropertyName is only used if the editor
@@ -512,11 +512,11 @@ QItemEditorCreatorBase::~QItemEditorCreatorBase()
     \snippet code/src_gui_itemviews_qitemeditorfactory.cpp 2
 
     Setting the \c editorFactory created above in an item delegate via
-    QItemDelegate::setItemEditorFactory() makes sure that all values of type
+    QStyledItemDelegate::setItemEditorFactory() makes sure that all values of type
     QVariant::DateTime will be edited in \c{MyFancyDateTimeEdit}.
 
     The editor must provide a user property that will contain the
-    editing data. The property is used by \l{QItemDelegate}s to set
+    editing data. The property is used by \l{QStyledItemDelegate}s to set
     and retrieve the data (using Qt's \l{Meta-Object
     System}{meta-object system}). You set the user property with
     the USER keyword:
@@ -524,7 +524,7 @@ QItemEditorCreatorBase::~QItemEditorCreatorBase()
     \snippet code/src_gui_itemviews_qitemeditorfactory.cpp 3
 
     \sa QItemEditorCreatorBase, QItemEditorCreator,
-        QItemEditorFactory, QItemDelegate, {Color Editor Factory Example}
+        QItemEditorFactory, QStyledItemDelegate, {Color Editor Factory Example}
 */
 
 /*!
@@ -570,11 +570,9 @@ void QExpandingLineEdit::changeEvent(QEvent *e)
 
 void QExpandingLineEdit::updateMinimumWidth()
 {
-    int left, right;
-    getTextMargins(&left, 0, &right, 0);
-    int width = left + right + 4 /*horizontalMargin in qlineedit.cpp*/;
-    getContentsMargins(&left, 0, &right, 0);
-    width += left + right;
+    const QMargins tm = textMargins();
+    const QMargins cm = contentsMargins();
+    const int width = tm.left() + tm.right() + cm.left() + cm.right() + 4 /*horizontalMargin in qlineedit.cpp*/;
 
     QStyleOptionFrame opt;
     initStyleOption(&opt);

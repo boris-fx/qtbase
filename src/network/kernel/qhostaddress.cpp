@@ -144,7 +144,7 @@ static bool parseIp6(const QString &address, QIPAddressUtils::IPv6Address &addr,
     } else {
         scopeId->clear();
     }
-    return QIPAddressUtils::parseIp6(addr, tmp.constBegin(), tmp.constEnd()) == 0;
+    return QIPAddressUtils::parseIp6(addr, tmp.constBegin(), tmp.constEnd()) == nullptr;
 }
 
 bool QHostAddressPrivate::parse(const QString &ipString)
@@ -385,8 +385,8 @@ QHostAddress QNetmask::address(QAbstractSocket::NetworkLayerProtocol protocol) c
     \value LocalHost The IPv4 localhost address. Equivalent to QHostAddress("127.0.0.1").
     \value LocalHostIPv6 The IPv6 localhost address. Equivalent to QHostAddress("::1").
     \value Broadcast The IPv4 broadcast address. Equivalent to QHostAddress("255.255.255.255").
-    \value AnyIPv4 The IPv4 any-address. Equivalent to QHostAddress("0.0.0.0"). A socket bound with this address will listen only on IPv4 interaces.
-    \value AnyIPv6 The IPv6 any-address. Equivalent to QHostAddress("::"). A socket bound with this address will listen only on IPv6 interaces.
+    \value AnyIPv4 The IPv4 any-address. Equivalent to QHostAddress("0.0.0.0"). A socket bound with this address will listen only on IPv4 interfaces.
+    \value AnyIPv6 The IPv6 any-address. Equivalent to QHostAddress("::"). A socket bound with this address will listen only on IPv6 interfaces.
     \value Any The dual stack any-address. A socket bound with this address will listen on both IPv4 and IPv6 interfaces.
 */
 
@@ -1333,7 +1333,7 @@ QDebug operator<<(QDebug d, const QHostAddress &address)
     \relates QHostAddress
     Returns a hash of the host address \a key, using \a seed to seed the calculation.
 */
-uint qHash(const QHostAddress &key, uint seed) Q_DECL_NOTHROW
+uint qHash(const QHostAddress &key, uint seed) noexcept
 {
     return qHashBits(key.d->a6.c, 16, seed);
 }

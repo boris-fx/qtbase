@@ -48,13 +48,17 @@
 **
 ****************************************************************************/
 
-#include <QtWidgets>
-
 #include "robot.h"
+
+#include <QGraphicsSceneDragDropEvent>
+#include <QMimeData>
+#include <QPainter>
+#include <QParallelAnimationGroup>
+#include <QPropertyAnimation>
 
 //! [0]
 RobotPart::RobotPart(QGraphicsItem *parent)
-    : QGraphicsObject(parent), color(Qt::lightGray), dragOver(false)
+    : QGraphicsObject(parent), color(Qt::lightGray) 
 {
     setAcceptDrops(true);
 }
@@ -113,7 +117,7 @@ void RobotHead::paint(QPainter *painter,
     Q_UNUSED(option);
     Q_UNUSED(widget);
     if (pixmap.isNull()) {
-        painter->setBrush(dragOver ? color.light(130) : color);
+        painter->setBrush(dragOver ? color.lighter(130) : color);
         painter->drawRoundedRect(-10, -30, 20, 30, 25, 25, Qt::RelativeSize);
         painter->setBrush(Qt::white);
         painter->drawEllipse(-7, -3 - 20, 7, 7);
@@ -157,11 +161,6 @@ void RobotHead::dropEvent(QGraphicsSceneDragDropEvent *event)
 }
 //! [8]
 
-RobotTorso::RobotTorso(QGraphicsItem *parent)
-    : RobotPart(parent)
-{
-}
-
 QRectF RobotTorso::boundingRect() const
 {
     return QRectF(-30, -20, 60, 60);
@@ -173,7 +172,7 @@ void RobotTorso::paint(QPainter *painter,
     Q_UNUSED(option);
     Q_UNUSED(widget);
 
-    painter->setBrush(dragOver ? color.light(130) : color);
+    painter->setBrush(dragOver ? color.lighter(130) : color);
     painter->drawRoundedRect(-20, -20, 40, 60, 25, 25, Qt::RelativeSize);
     painter->drawEllipse(-25, -20, 20, 20);
     painter->drawEllipse(5, -20, 20, 20);
@@ -197,7 +196,7 @@ void RobotLimb::paint(QPainter *painter,
     Q_UNUSED(option);
     Q_UNUSED(widget);
 
-    painter->setBrush(dragOver ? color.light(130) : color);
+    painter->setBrush(dragOver ? color.lighter(130) : color);
     painter->drawRoundedRect(boundingRect(), 50, 50, Qt::RelativeSize);
     painter->drawEllipse(-5, -5, 10, 10);
 }

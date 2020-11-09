@@ -84,7 +84,7 @@ Q_GLOBAL_STATIC(QConnectionDict, dbDict)
 class QSqlDatabasePrivate
 {
 public:
-    QSqlDatabasePrivate(QSqlDatabase *d, QSqlDriver *dr = 0):
+    QSqlDatabasePrivate(QSqlDatabase *d, QSqlDriver *dr = nullptr):
         ref(1),
         q(d),
         driver(dr),
@@ -178,13 +178,13 @@ DriverDict &QSqlDatabasePrivate::driverDict()
 QSqlDatabasePrivate *QSqlDatabasePrivate::shared_null()
 {
     static QSqlNullDriver dr;
-    static QSqlDatabasePrivate n(NULL, &dr);
+    static QSqlDatabasePrivate n(nullptr, &dr);
     return &n;
 }
 
 void QSqlDatabasePrivate::invalidateDb(const QSqlDatabase &db, const QString &name, bool doWarn)
 {
-    if (db.d->ref.load() != 1 && doWarn) {
+    if (db.d->ref.loadRelaxed() != 1 && doWarn) {
         qWarning("QSqlDatabasePrivate::removeDatabase: connection '%s' is still in use, "
                  "all queries will cease to work.", name.toLocal8Bit().constData());
         db.d->disable();
@@ -561,7 +561,7 @@ QStringList QSqlDatabase::drivers()
     and don't want to compile it as a plugin.
 
     Example:
-    \snippet code/src_sql_kernel_qsqldatabase.cpp 2
+    \snippet code/src_sql_kernel_qsqldatabase_snippet.cpp 2
 
     QSqlDatabase takes ownership of the \a creator pointer, so you
     mustn't delete it yourself.
@@ -702,7 +702,7 @@ void QSqlDatabasePrivate::init(const QString &type)
         qWarning("QSqlDatabase: %s driver not loaded", type.toLatin1().data());
         qWarning("QSqlDatabase: available drivers: %s",
                         QSqlDatabase::drivers().join(QLatin1Char(' ')).toLatin1().data());
-        if (QCoreApplication::instance() == 0)
+        if (QCoreApplication::instance() == nullptr)
             qWarning("QSqlDatabase: an instance of QCoreApplication is required for loading driver plugins");
         driver = shared_null()->driver;
     }
@@ -880,6 +880,14 @@ bool QSqlDatabase::rollback()
     The \e{database name} is not the \e{connection name}. The
     connection name must be passed to addDatabase() at connection
     object create time.
+
+    For the QSQLITE driver, if the database name specified does not
+    exist, then it will create the file for you unless the
+    QSQLITE_OPEN_READONLY option is set.
+
+    Additionally, \a name can be set to \c ":memory:" which will
+    create a temporary database which is only available for the
+    lifetime of the application.
 
     For the QOCI (Oracle) driver, the database name is the TNS
     Service Name.
@@ -1088,6 +1096,11 @@ QStringList QSqlDatabase::tables(QSql::TableType type) const
     Returns the primary index for table \a tablename. If no primary
     index exists, an empty QSqlIndex is returned.
 
+    \note Some drivers, such as the \l {QPSQL Case Sensitivity}{QPSQL}
+    driver, may may require you to pass \a tablename in lower case if
+    the table was not quoted when created. See the
+    \l{sql-driver.html}{Qt SQL driver} documentation for more information.
+
     \sa tables(), record()
 */
 
@@ -1102,6 +1115,11 @@ QSqlIndex QSqlDatabase::primaryIndex(const QString& tablename) const
     the table (or view) called \a tablename. The order in which the
     fields appear in the record is undefined. If no such table (or
     view) exists, an empty record is returned.
+
+    \note Some drivers, such as the \l {QPSQL Case Sensitivity}{QPSQL}
+    driver, may may require you to pass \a tablename in lower case if
+    the table was not quoted when created. See the
+    \l{sql-driver.html}{Qt SQL driver} documentation for more information.
 */
 
 QSqlRecord QSqlDatabase::record(const QString& tablename) const
@@ -1253,9 +1271,7 @@ bool QSqlDatabase::isDriverAvailable(const QString& name)
     application. For example, you can create a PostgreSQL connection
     with your own QPSQL driver like this:
 
-    \snippet code/src_sql_kernel_qsqldatabase.cpp 5
-    \codeline
-    \snippet code/src_sql_kernel_qsqldatabase.cpp 6
+    \snippet code/src_sql_kernel_qsqldatabase_snippet.cpp 6
 
     The above code sets up a PostgreSQL connection and instantiates a
     QPSQLDriver object. Next, addDatabase() is called to add the
@@ -1274,7 +1290,7 @@ bool QSqlDatabase::isDriverAvailable(const QString& name)
     client library. Make sure the client library is in your linker's
     search path, and add lines like these to your \c{.pro} file:
 
-    \snippet code/src_sql_kernel_qsqldatabase.cpp 7
+    \snippet code/src_sql_kernel_qsqldatabase_snippet.cpp 7
 
     The method described works for all the supplied drivers.  The only
     difference will be in the driver constructor arguments.  Here is a
@@ -1375,6 +1391,40 @@ QSqlDatabase QSqlDatabase::cloneDatabase(const QSqlDatabase &other, const QStrin
 
     QSqlDatabase db(other.driverName());
     db.d->copy(other.d);
+    QSqlDatabasePrivate::addDatabase(db, connectionName);
+    return db;
+}
+
+/*!
+    \since 5.13
+    \overload
+
+    Clones the database connection \a other and stores it as \a
+    connectionName. All the settings from the original database, e.g.
+    databaseName(), hostName(), etc., are copied across. Does nothing
+    if \a other is an invalid database. Returns the newly created
+    database connection.
+
+    \note The new connection has not been opened. Before using the new
+    connection, you must call open().
+
+    This overload is useful when cloning the database in another thread to the
+    one that is used by the database represented by \a other.
+*/
+
+QSqlDatabase QSqlDatabase::cloneDatabase(const QString &other, const QString &connectionName)
+{
+    const QConnectionDict *dict = dbDict();
+    Q_ASSERT(dict);
+
+    dict->lock.lockForRead();
+    QSqlDatabase otherDb = dict->value(other);
+    dict->lock.unlock();
+    if (!otherDb.isValid())
+        return QSqlDatabase();
+
+    QSqlDatabase db(otherDb.driverName());
+    db.d->copy(otherDb.d);
     QSqlDatabasePrivate::addDatabase(db, connectionName);
     return db;
 }

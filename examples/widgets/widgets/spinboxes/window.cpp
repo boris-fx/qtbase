@@ -48,12 +48,19 @@
 **
 ****************************************************************************/
 
-#include <QtWidgets>
-
 #include "window.h"
 
+#include <QCheckBox>
+#include <QComboBox>
+#include <QDateTimeEdit>
+#include <QGroupBox>
+#include <QHBoxLayout>
+#include <QLabel>
+#include <QSpinBox>
+
 //! [0]
-Window::Window()
+Window::Window(QWidget *parent)
+    : QWidget(parent)
 {
     createSpinBoxes();
     createDateTimeEdits();
@@ -175,8 +182,8 @@ void Window::createDateTimeEdits()
     formatComboBox->addItem("hh:mm ap");
 //! [9] //! [10]
 
-    connect(formatComboBox, SIGNAL(activated(QString)),
-            this, SLOT(setFormatString(QString)));
+    connect(formatComboBox, &QComboBox::textActivated,
+            this, &Window::setFormatString);
 //! [10]
 
     setFormatString(formatComboBox->currentText());
@@ -255,9 +262,9 @@ void Window::createDoubleSpinBoxes()
     priceSpinBox->setPrefix("$");
     priceSpinBox->setValue(99.99);
 
-    connect(precisionSpinBox, SIGNAL(valueChanged(int)),
+    connect(precisionSpinBox, QOverload<int>::of(&QSpinBox::valueChanged),
 //! [17]
-            this, SLOT(changePrecision(int)));
+            this, &Window::changePrecision);
 
     groupSeparatorSpinBox_d = new QDoubleSpinBox;
     groupSeparatorSpinBox_d->setRange(-99999999, 99999999);

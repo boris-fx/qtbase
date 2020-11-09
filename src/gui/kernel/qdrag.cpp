@@ -112,8 +112,8 @@ QDrag::QDrag(QObject *dragSource)
 {
     Q_D(QDrag);
     d->source = dragSource;
-    d->target = 0;
-    d->data = 0;
+    d->target = nullptr;
+    d->data = nullptr;
     d->hotspot = QPoint(-10, -10);
     d->executed_action = Qt::IgnoreAction;
     d->supported_actions = Qt::IgnoreAction;
@@ -138,7 +138,7 @@ void QDrag::setMimeData(QMimeData *data)
     Q_D(QDrag);
     if (d->data == data)
         return;
-    if (d->data != 0)
+    if (d->data != nullptr)
         delete d->data;
     d->data = data;
 }
@@ -279,11 +279,15 @@ Qt::DropAction QDrag::exec(Qt::DropActions supportedActions, Qt::DropAction defa
     }
     d->supported_actions = supportedActions;
     d->default_action = transformedDefaultDropAction;
-    d->executed_action = QDragManager::self()->drag(this);
-
+    QPointer<QDrag> self = this;
+    auto executed_action = QDragManager::self()->drag(self.data());
+    if (self.isNull())
+        return Qt::IgnoreAction;
+    d->executed_action = executed_action;
     return d->executed_action;
 }
 
+#if QT_DEPRECATED_SINCE(5, 13)
 /*!
     \obsolete
 
@@ -311,6 +315,7 @@ Qt::DropAction QDrag::start(Qt::DropActions request)
     d->executed_action = QDragManager::self()->drag(this);
     return d->executed_action;
 }
+#endif
 
 /*!
     Sets the drag \a cursor for the \a action. This allows you

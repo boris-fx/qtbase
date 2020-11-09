@@ -48,10 +48,11 @@
 
 QT_BEGIN_NAMESPACE
 
+class QCocoaIntegration;
+
 class QCocoaScreen : public QPlatformScreen
 {
 public:
-    QCocoaScreen(int screenIndex);
     ~QCocoaScreen();
 
     // ----------------------------------------------------
@@ -61,49 +62,72 @@ public:
     QRect availableGeometry() const override { return m_availableGeometry; }
     int depth() const override { return m_depth; }
     QImage::Format format() const override { return m_format; }
-    qreal devicePixelRatio() const override;
+    qreal devicePixelRatio() const override { return m_devicePixelRatio; }
     QSizeF physicalSize() const override { return m_physicalSize; }
     QDpi logicalDpi() const override { return m_logicalDpi; }
+    QDpi logicalBaseDpi() const override { return m_logicalDpi; }
     qreal refreshRate() const override { return m_refreshRate; }
     QString name() const override { return m_name; }
     QPlatformCursor *cursor() const override { return m_cursor; }
     QWindow *topLevelAt(const QPoint &point) const override;
-    QList<QPlatformScreen *> virtualSiblings() const override { return m_siblings; }
+    QList<QPlatformScreen *> virtualSiblings() const override;
     QPlatformScreen::SubpixelAntialiasingType subpixelAntialiasingTypeHint() const override;
 
     // ----------------------------------------------------
-    // Additional methods
-    void setVirtualSiblings(const QList<QPlatformScreen *> &siblings) { m_siblings = siblings; }
+
     NSScreen *nativeScreen() const;
-    void updateProperties();
 
     void requestUpdate();
     void deliverUpdateRequests();
     bool isRunningDisplayLink() const;
 
     static QCocoaScreen *primaryScreen();
+    static QCocoaScreen *get(NSScreen *nsScreen);
+    static QCocoaScreen *get(CGDirectDisplayID displayId);
+    static QCocoaScreen *get(CFUUIDRef uuid);
 
     static CGPoint mapToNative(const QPointF &pos, QCocoaScreen *screen = QCocoaScreen::primaryScreen());
     static CGRect mapToNative(const QRectF &rect, QCocoaScreen *screen = QCocoaScreen::primaryScreen());
     static QPointF mapFromNative(CGPoint pos, QCocoaScreen *screen = QCocoaScreen::primaryScreen());
     static QRectF mapFromNative(CGRect rect, QCocoaScreen *screen = QCocoaScreen::primaryScreen());
 
-public:
-    int m_screenIndex;
+private:
+    static void initializeScreens();
+    static void updateScreens();
+    static void cleanupScreens();
+
+    static bool updateScreensIfNeeded();
+    static NSArray *s_screenConfigurationBeforeUpdate;
+
+    static void add(CGDirectDisplayID displayId);
+    QCocoaScreen(CGDirectDisplayID displayId);
+    void update(CGDirectDisplayID displayId);
+    void remove();
+
+    bool isOnline() const;
+    bool isMirroring() const;
+
+    CGDirectDisplayID m_displayId = kCGNullDirectDisplay;
+    CGDirectDisplayID displayId() const { return m_displayId; }
+
     QRect m_geometry;
     QRect m_availableGeometry;
     QDpi m_logicalDpi;
-    qreal m_refreshRate;
-    int m_depth;
+    qreal m_refreshRate = 0;
+    int m_depth = 0;
     QString m_name;
     QImage::Format m_format;
     QSizeF m_physicalSize;
     QCocoaCursor *m_cursor;
-    QList<QPlatformScreen *> m_siblings;
+    qreal m_devicePixelRatio = 0;
 
     CVDisplayLinkRef m_displayLink = nullptr;
     dispatch_source_t m_displayLinkSource = nullptr;
     QAtomicInt m_pendingUpdates;
+
+    friend class QCocoaIntegration;
+    friend class QCocoaWindow;
+    friend QDebug operator<<(QDebug debug, const QCocoaScreen *screen);
 };
 
 #ifndef QT_NO_DEBUG_STREAM
@@ -116,5 +140,4 @@ QT_END_NAMESPACE
 @property(readonly) CGDirectDisplayID qt_displayId;
 @end
 
-#endif
-
+#endif // QCOCOASCREEN_H

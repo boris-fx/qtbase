@@ -35,7 +35,9 @@
 #include <QtNetwork/QNetworkCookieJar>
 #include <QtNetwork/QNetworkCookie>
 #include <QtNetwork/QNetworkRequest>
+#if QT_CONFIG(topleveldomain)
 #include "private/qtldurl_p.h"
+#endif
 
 class tst_QNetworkCookieJar: public QObject
 {
@@ -47,7 +49,7 @@ private slots:
     void setCookiesFromUrl();
     void cookiesForUrl_data();
     void cookiesForUrl();
-#ifdef QT_BUILD_INTERNAL
+#if defined(QT_BUILD_INTERNAL) && QT_CONFIG(topleveldomain)
     void effectiveTLDs_data();
     void effectiveTLDs();
 #endif
@@ -58,11 +60,12 @@ private slots:
 class MyCookieJar: public QNetworkCookieJar
 {
 public:
-    inline QList<QNetworkCookie> allCookies() const
-        { return QNetworkCookieJar::allCookies(); }
-    inline void setAllCookies(const QList<QNetworkCookie> &cookieList)
-        { QNetworkCookieJar::setAllCookies(cookieList); }
+    ~MyCookieJar() override;
+    using QNetworkCookieJar::allCookies;
+    using QNetworkCookieJar::setAllCookies;
 };
+
+MyCookieJar::~MyCookieJar() = default;
 
 void tst_QNetworkCookieJar::getterSetter()
 {
@@ -161,6 +164,10 @@ void tst_QNetworkCookieJar::setCookiesFromUrl_data()
     QTest::newRow("effective-tld1-accepted") << preset << cookie << "http://something.co.uk" << result << true;
 
     // 2. anything .ck is an effective TLD ('*.ck'), but 'www.ck' is an exception
+    result.clear();
+    preset.clear();
+    cookie.setDomain(".ck");
+    QTest::newRow("effective-tld.ck-denied") << preset << cookie << "http://foo.ck" << result << false;
     result.clear();
     preset.clear();
     cookie.setDomain(".foo.ck");
@@ -398,7 +405,7 @@ void tst_QNetworkCookieJar::cookiesForUrl()
 }
 
 // This test requires private API.
-#ifdef QT_BUILD_INTERNAL
+#if defined(QT_BUILD_INTERNAL) && QT_CONFIG(topleveldomain)
 void tst_QNetworkCookieJar::effectiveTLDs_data()
 {
     QTest::addColumn<QString>("domain");

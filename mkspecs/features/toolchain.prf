@@ -193,7 +193,7 @@ isEmpty($${target_prefix}.INCDIRS) {
             cxx_flags += $$QMAKE_LFLAGS_SHLIB -o $$QMAKE_SYSTEM_NULL_DEVICE -v
         else: darwin:clang: \
             # Need to link to pick up library paths
-            cxx_flags += $$QMAKE_LFLAGS_SHLIB -o /dev/null -v -Wl,-v
+            cxx_flags += -g0 $$QMAKE_LFLAGS_SHLIB -o /dev/null -v -Wl,-v
         else: \
             # Just preprocess, might not pick up library paths
             cxx_flags += -E -v
@@ -267,9 +267,13 @@ isEmpty($${target_prefix}.INCDIRS) {
             for (line, output) {
                 contains(line, "^libraries: .*") {
                     line ~= s,^libraries: ,,
-                    # clang (7.x) on Windows uses the wrong path list separator ...
-                    equals(QMAKE_HOST.os, Windows): line ~= s,:(?![/\\\\]),;,
-                    paths = $$split(line, $$QMAKE_DIRLIST_SEP)
+                    equals(QMAKE_HOST.os, Windows) {
+                        # clang (7.x) on Windows uses the wrong path list separator ...
+                        line ~= s,:(?![/\\\\]),;,
+                        paths = $$split(line, ;)
+                    } else {
+                        paths = $$split(line, $$QMAKE_DIRLIST_SEP)
+                    }
                     for (path, paths): \
                         QMAKE_DEFAULT_LIBDIRS += $$clean_path($$replace(path, ^=, $$[SYSROOT]))
                 }

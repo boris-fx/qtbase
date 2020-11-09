@@ -67,7 +67,7 @@
 #include "qtoolbar_p.h"
 #endif
 #include "qwidgetanimator_p.h"
-#ifdef Q_OS_OSX
+#ifdef Q_OS_MACOS
 #include <qpa/qplatformnativeinterface.h>
 #endif
 
@@ -78,8 +78,8 @@ class QMainWindowPrivate : public QWidgetPrivate
     Q_DECLARE_PUBLIC(QMainWindow)
 public:
     inline QMainWindowPrivate()
-        : layout(0), explicitIconSize(false), toolButtonStyle(Qt::ToolButtonIconOnly)
-#ifdef Q_OS_OSX
+        : layout(nullptr), explicitIconSize(false), toolButtonStyle(Qt::ToolButtonIconOnly)
+#ifdef Q_OS_MACOS
             , useUnifiedToolBar(false)
 #endif
     { }
@@ -87,14 +87,14 @@ public:
     QSize iconSize;
     bool explicitIconSize;
     Qt::ToolButtonStyle toolButtonStyle;
-#ifdef Q_OS_OSX
+#ifdef Q_OS_MACOS
     bool useUnifiedToolBar;
 #endif
     void init();
 
     static inline QMainWindowLayout *mainWindowLayout(const QMainWindow *mainWindow)
     {
-        return mainWindow ? mainWindow->d_func()->layout : static_cast<QMainWindowLayout *>(0);
+        return mainWindow ? mainWindow->d_func()->layout : static_cast<QMainWindowLayout *>(nullptr);
     }
 };
 
@@ -152,10 +152,10 @@ void QMainWindowPrivate::init()
 
     topLayout->addItem(layout, 1, 1);
 #else
-    layout = new QMainWindowLayout(q, 0);
+    layout = new QMainWindowLayout(q, nullptr);
 #endif
 
-    const int metric = q->style()->pixelMetric(QStyle::PM_ToolBarIconSize, 0, q);
+    const int metric = q->style()->pixelMetric(QStyle::PM_ToolBarIconSize, nullptr, q);
     iconSize = QSize(metric, metric);
     q->setAttribute(Qt::WA_Hover);
 }
@@ -452,7 +452,7 @@ void QMainWindow::setIconSize(const QSize &iconSize)
     Q_D(QMainWindow);
     QSize sz = iconSize;
     if (!sz.isValid()) {
-        const int metric = style()->pixelMetric(QStyle::PM_ToolBarIconSize, 0, this);
+        const int metric = style()->pixelMetric(QStyle::PM_ToolBarIconSize, nullptr, this);
         sz = QSize(metric, metric);
     }
     if (d->iconSize != sz) {
@@ -596,7 +596,7 @@ QStatusBar *QMainWindow::statusBar() const
 /*!
     Sets the status bar for the main window to \a statusbar.
 
-    Setting the status bar to 0 will remove it from the main window.
+    Setting the status bar to \nullptr will remove it from the main window.
     Note that QMainWindow takes ownership of the \a statusbar pointer
     and deletes it at the appropriate time.
 
@@ -652,8 +652,8 @@ QWidget *QMainWindow::takeCentralWidget()
     Q_D(QMainWindow);
     QWidget *oldcentralwidget = d->layout->centralWidget();
     if (oldcentralwidget) {
-        oldcentralwidget->setParent(0);
-        d->layout->setCentralWidget(0);
+        oldcentralwidget->setParent(nullptr);
+        d->layout->setCentralWidget(nullptr);
     }
     return oldcentralwidget;
 }
@@ -851,7 +851,11 @@ void QMainWindow::removeToolBar(QToolBar *toolbar)
 
     \sa addToolBar(), addToolBarBreak(), Qt::ToolBarArea
 */
-Qt::ToolBarArea QMainWindow::toolBarArea(QToolBar *toolbar) const
+Qt::ToolBarArea QMainWindow::toolBarArea(
+#if QT_VERSION >= QT_VERSION_CHECK(6,0,0)
+    const
+#endif
+    QToolBar *toolbar) const
 { return d_func()->layout->toolBarArea(toolbar); }
 
 /*!
@@ -1134,6 +1138,7 @@ void QMainWindow::splitDockWidget(QDockWidget *after, QDockWidget *dockwidget,
     d_func()->layout->splitDockWidget(after, dockwidget, orientation);
 }
 
+#if QT_CONFIG(tabbar)
 /*!
     \fn void QMainWindow::tabifyDockWidget(QDockWidget *first, QDockWidget *second)
 
@@ -1160,9 +1165,6 @@ void QMainWindow::tabifyDockWidget(QDockWidget *first, QDockWidget *second)
 QList<QDockWidget*> QMainWindow::tabifiedDockWidgets(QDockWidget *dockwidget) const
 {
     QList<QDockWidget*> ret;
-#if !QT_CONFIG(tabbar)
-    Q_UNUSED(dockwidget);
-#else
     const QDockAreaLayoutInfo *info = d_func()->layout->layoutState.dockAreaLayout.info(dockwidget);
     if (info && info->tabbed && info->tabBar) {
         for(int i = 0; i < info->item_list.count(); ++i) {
@@ -1176,9 +1178,9 @@ QList<QDockWidget*> QMainWindow::tabifiedDockWidgets(QDockWidget *dockwidget) co
             }
         }
     }
-#endif
     return ret;
 }
+#endif // QT_CONFIG(tabbar)
 
 
 /*!
@@ -1355,13 +1357,15 @@ bool QMainWindow::event(QEvent *event)
 */
 void QMainWindow::setUnifiedTitleAndToolBarOnMac(bool set)
 {
-#ifdef Q_OS_OSX
+#ifdef Q_OS_MACOS
     Q_D(QMainWindow);
     if (isWindow()) {
         d->useUnifiedToolBar = set;
         createWinId();
 
         QPlatformNativeInterface *nativeInterface = QGuiApplication::platformNativeInterface();
+        if (!nativeInterface)
+            return; // Not Cocoa platform plugin.
         QPlatformNativeInterface::NativeResourceForIntegrationFunction function =
             nativeInterface->nativeResourceFunctionForIntegration("setContentBorderEnabled");
         if (!function)
@@ -1378,7 +1382,7 @@ void QMainWindow::setUnifiedTitleAndToolBarOnMac(bool set)
 
 bool QMainWindow::unifiedTitleAndToolBarOnMac() const
 {
-#ifdef Q_OS_OSX
+#ifdef Q_OS_MACOS
     return d_func()->useUnifiedToolBar;
 #endif
     return false;
@@ -1460,8 +1464,8 @@ void QMainWindow::contextMenuEvent(QContextMenuEvent *event)
 #if QT_CONFIG(menu)
 /*!
     Returns a popup menu containing checkable entries for the toolbars and
-    dock widgets present in the main window. If  there are no toolbars and
-    dock widgets present, this function returns a null pointer.
+    dock widgets present in the main window. If there are no toolbars and
+    dock widgets present, this function returns \nullptr.
 
     By default, this function is called by the main window when the user
     activates a context menu, typically by right-clicking on a toolbar or a dock
@@ -1476,7 +1480,7 @@ void QMainWindow::contextMenuEvent(QContextMenuEvent *event)
 QMenu *QMainWindow::createPopupMenu()
 {
     Q_D(QMainWindow);
-    QMenu *menu = 0;
+    QMenu *menu = nullptr;
 #if QT_CONFIG(dockwidget)
     QList<QDockWidget *> dockwidgets = findChildren<QDockWidget *>();
     if (dockwidgets.size()) {

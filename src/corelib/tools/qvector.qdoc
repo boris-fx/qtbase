@@ -173,6 +173,24 @@
     For a detailed discussion comparing Qt containers with each other and
     with STL containers, see \l {Understand the Qt Containers}.
 
+    \section1 Maximum size and out-of-memory conditions
+
+    The current version of QVector is limited to just under 2 GB (2^31 bytes)
+    in size. The exact value is architecture-dependent, since it depends on the
+    overhead required for managing the data block, but is no more than 32
+    bytes. The number of elements that can be stored in a QVector is that size
+    divided by the size of each element.
+
+    In case memory allocation fails, QVector will use the \l Q_CHECK_PTR macro,
+    which will throw a \c std::bad_alloc exception if the application is being
+    compiled with exception support. If exceptions are disabled, then running
+    out of memory is undefined behavior.
+
+    Note that the operating system may impose further limits on applications
+    holding a lot of allocated memory, especially large, contiguous blocks.
+    Such considerations, the configuration of such behavior or any mitigation
+    are outside the scope of the Qt API.
+
     \sa QVectorIterator, QMutableVectorIterator, QList, QLinkedList
 */
 
@@ -243,6 +261,18 @@
     lists.
 */
 
+/*! \fn template <typename T> template<typename InputIterator> QVector<T>::QVector(InputIterator first, InputIterator last)
+    \since 5.14
+
+    Constructs a vector with the contents in the iterator range [\a first, \a last).
+
+    The value type of \c InputIterator must be convertible to \c T.
+*/
+
+/*!
+    \fn template <typename T> QVector<T>::QVector(QArrayDataPointerRef<T> ref)
+    \internal
+*/
 
 /*! \fn template <typename T> QVector<T>::~QVector()
 
@@ -263,12 +293,33 @@
     \since 5.2
 */
 
+/*!
+    \fn template <typename T> QVector<T> &QVector<T>::operator=(std::initializer_list<T> args)
+
+    Assigns the collection of values in \a args to this QVector instance.
+
+    This operator is only enabled if the compiler supports C++11 initializer
+    lists.
+
+    \since 5.14
+*/
+
 /*! \fn template <typename T> void QVector<T>::swap(QVector<T> &other)
     \since 4.8
 
     Swaps vector \a other with this vector. This operation is very fast and
     never fails.
 */
+
+/*! \fn template <typename T> void QVector<T>::swapItemsAt(int i, int j)
+    \since 5.14
+
+    Exchange the item at index position \a i with the item at index
+    position \a j. This function assumes that both \a i and \a j are
+    at least 0 but less than size(). To avoid failure, test that both
+    \a i and \a j are at least 0 and less than size().
+*/
+
 
 /*! \fn template <typename T> bool QVector<T>::operator==(const QVector<T> &other) const
 
@@ -1308,6 +1359,8 @@
 
     \snippet code/src_corelib_tools_qvector.cpp 14
 
+    \include containers-range-constructor.qdocinc
+
     \sa fromList(), QList::fromVector()
 */
 
@@ -1318,6 +1371,8 @@
     Example:
 
     \snippet code/src_corelib_tools_qvector.cpp 15
+
+    \include containers-range-constructor.qdocinc
 
     \sa toList(), QList::toVector()
 */
@@ -1331,6 +1386,8 @@
 
     \snippet code/src_corelib_tools_qvector.cpp 16
 
+    \include containers-range-constructor.qdocinc
+
     \sa toStdVector(), QList::fromStdList()
 */
 
@@ -1340,6 +1397,8 @@
     Example:
 
     \snippet code/src_corelib_tools_qvector.cpp 17
+
+    \include containers-range-constructor.qdocinc
 
     \sa fromStdVector(), QList::toStdList()
 */

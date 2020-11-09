@@ -59,6 +59,10 @@
 #  include <gnu/lib-names.h>
 #endif
 
+#if defined(Q_OS_FREEBSD) || QT_CONFIG(dlopen)
+#  include <dlfcn.h>
+#endif
+
 #include <cstring>
 
 QT_BEGIN_NAMESPACE
@@ -69,13 +73,13 @@ QT_BEGIN_NAMESPACE
 typedef struct __res_state* res_state;
 #endif
 typedef int (*dn_expand_proto)(const unsigned char *, const unsigned char *, const unsigned char *, char *, int);
-static dn_expand_proto local_dn_expand = 0;
+static dn_expand_proto local_dn_expand = nullptr;
 typedef void (*res_nclose_proto)(res_state);
-static res_nclose_proto local_res_nclose = 0;
+static res_nclose_proto local_res_nclose = nullptr;
 typedef int (*res_ninit_proto)(res_state);
-static res_ninit_proto local_res_ninit = 0;
+static res_ninit_proto local_res_ninit = nullptr;
 typedef int (*res_nquery_proto)(res_state, const char *, int, int, unsigned char *, int);
-static res_nquery_proto local_res_nquery = 0;
+static res_nquery_proto local_res_nquery = nullptr;
 
 // Custom deleter to close resolver state.
 
@@ -87,6 +91,18 @@ struct QDnsLookupStateDeleter
     }
 };
 
+static QFunctionPointer resolveSymbol(QLibrary &lib, const char *sym)
+{
+    if (lib.isLoaded())
+        return lib.resolve(sym);
+
+#if defined(RTLD_DEFAULT) && (defined(Q_OS_FREEBSD) || QT_CONFIG(dlopen))
+    return reinterpret_cast<QFunctionPointer>(dlsym(RTLD_DEFAULT, sym));
+#else
+    return nullptr;
+#endif
+}
+
 static bool resolveLibraryInternal()
 {
     QLibrary lib;
@@ -96,31 +112,30 @@ static bool resolveLibraryInternal()
 #endif
     {
         lib.setFileName(QLatin1String("resolv"));
-        if (!lib.load())
-            return false;
+        lib.load();
     }
 
-    local_dn_expand = dn_expand_proto(lib.resolve("__dn_expand"));
+    local_dn_expand = dn_expand_proto(resolveSymbol(lib, "__dn_expand"));
     if (!local_dn_expand)
-        local_dn_expand = dn_expand_proto(lib.resolve("dn_expand"));
+        local_dn_expand = dn_expand_proto(resolveSymbol(lib, "dn_expand"));
 
-    local_res_nclose = res_nclose_proto(lib.resolve("__res_nclose"));
+    local_res_nclose = res_nclose_proto(resolveSymbol(lib, "__res_nclose"));
     if (!local_res_nclose)
-        local_res_nclose = res_nclose_proto(lib.resolve("res_9_nclose"));
+        local_res_nclose = res_nclose_proto(resolveSymbol(lib, "res_9_nclose"));
     if (!local_res_nclose)
-        local_res_nclose = res_nclose_proto(lib.resolve("res_nclose"));
+        local_res_nclose = res_nclose_proto(resolveSymbol(lib, "res_nclose"));
 
-    local_res_ninit = res_ninit_proto(lib.resolve("__res_ninit"));
+    local_res_ninit = res_ninit_proto(resolveSymbol(lib, "__res_ninit"));
     if (!local_res_ninit)
-        local_res_ninit = res_ninit_proto(lib.resolve("res_9_ninit"));
+        local_res_ninit = res_ninit_proto(resolveSymbol(lib, "res_9_ninit"));
     if (!local_res_ninit)
-        local_res_ninit = res_ninit_proto(lib.resolve("res_ninit"));
+        local_res_ninit = res_ninit_proto(resolveSymbol(lib, "res_ninit"));
 
-    local_res_nquery = res_nquery_proto(lib.resolve("__res_nquery"));
+    local_res_nquery = res_nquery_proto(resolveSymbol(lib, "__res_nquery"));
     if (!local_res_nquery)
-        local_res_nquery = res_nquery_proto(lib.resolve("res_9_nquery"));
+        local_res_nquery = res_nquery_proto(resolveSymbol(lib, "res_9_nquery"));
     if (!local_res_nquery)
-        local_res_nquery = res_nquery_proto(lib.resolve("res_nquery"));
+        local_res_nquery = res_nquery_proto(resolveSymbol(lib, "res_nquery"));
 
     return true;
 }

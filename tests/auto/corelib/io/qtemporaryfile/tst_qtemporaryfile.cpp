@@ -215,7 +215,7 @@ void tst_QTemporaryFile::fileTemplate()
     if (!fileTemplate.isEmpty())
         file.setFileTemplate(fileTemplate);
 
-    QCOMPARE(file.open(), true);
+    QVERIFY2(file.open(), qPrintable(file.errorString()));
 
     QString fileName = QFileInfo(file).fileName();
     if (prefix.length())
@@ -376,7 +376,7 @@ void tst_QTemporaryFile::io()
     before.setSecsSinceEpoch(before.toSecsSinceEpoch());
 
     QVERIFY(file.open());
-    QVERIFY(file.readLink().isEmpty()); // it's not a link!
+    QVERIFY(file.symLinkTarget().isEmpty()); // it's not a link!
     QFile::Permissions perm = file.permissions();
     QVERIFY(perm & QFile::ReadOwner);
     QVERIFY(file.setPermissions(perm));
@@ -517,6 +517,9 @@ void tst_QTemporaryFile::openOnRootDrives()
             QTemporaryFile file(driveInfo.filePath() + "XXXXXX.txt");
             file.setAutoRemove(true);
             QVERIFY(file.open());
+
+            QFileInfo fi(file.fileName());
+            QCOMPARE(fi.absoluteDir(), driveInfo.filePath());
         }
     }
 #if defined(Q_OS_WIN) && !defined(Q_OS_WINRT)
@@ -569,13 +572,7 @@ void tst_QTemporaryFile::rename()
 
 void tst_QTemporaryFile::renameFdLeak()
 {
-#ifdef Q_OS_UNIX
-
-#  if defined(Q_OS_ANDROID) && !defined(Q_OS_ANDROID_EMBEDDED)
-    ChdirOnReturn cor(QDir::currentPath());
-    QDir::setCurrent(QStandardPaths::writableLocation(QStandardPaths::CacheLocation));
-#  endif
-
+#if defined(Q_OS_UNIX) && !defined(Q_OS_ANDROID)
     const QByteArray sourceFile = QFile::encodeName(QFINDTESTDATA(__FILE__));
     QVERIFY(!sourceFile.isEmpty());
     // Test this on Unix only

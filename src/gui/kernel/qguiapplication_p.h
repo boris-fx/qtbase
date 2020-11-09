@@ -55,6 +55,7 @@
 #include <QtGui/qguiapplication.h>
 
 #include <QtCore/QPointF>
+#include <QtCore/QSharedPointer>
 #include <QtCore/private/qcoreapplication_p.h>
 
 #include <QtCore/private/qthread_p.h>
@@ -66,7 +67,7 @@
 
 QT_BEGIN_NAMESPACE
 
-class QColorProfile;
+class QColorTrcLut;
 class QPlatformIntegration;
 class QPlatformTheme;
 class QPlatformDragQtResponse;
@@ -91,11 +92,15 @@ public:
     virtual void notifyLayoutDirectionChange();
     virtual void notifyActiveWindowChange(QWindow *previous);
 
+#if QT_CONFIG(commandlineparser)
+    void addQtOptions(QList<QCommandLineOption> *options) override;
+#endif
     virtual bool shouldQuit() override;
 
     bool shouldQuitInternal(const QWindowList &processedWindows);
     virtual bool tryCloseAllWindows();
 
+    static void captureGlobalModifierState(QEvent *e);
     static Qt::KeyboardModifiers modifier_buttons;
     static Qt::MouseButtons mouse_buttons;
 
@@ -112,9 +117,9 @@ public:
     static QAbstractEventDispatcher *qt_qpa_core_dispatcher()
     {
         if (QCoreApplication::instance())
-            return QCoreApplication::instance()->d_func()->threadData->eventDispatcher.load();
+            return QCoreApplication::instance()->d_func()->threadData.loadRelaxed()->eventDispatcher.loadRelaxed();
         else
-            return 0;
+            return nullptr;
     }
 
     static void processMouseEvent(QWindowSystemInterfacePrivate::MouseEvent *e);
@@ -136,6 +141,8 @@ public:
     static void processSafeAreaMarginsChangedEvent(QWindowSystemInterfacePrivate::SafeAreaMarginsChangedEvent *e);
 
     static void processWindowSystemEvent(QWindowSystemInterfacePrivate::WindowSystemEvent *e);
+
+    static void processApplicationTermination(QWindowSystemInterfacePrivate::WindowSystemEvent *e);
 
     static void updateFilteredScreenOrientation(QScreen *screen);
     static void reportScreenOrientationChange(QScreen *screen);
@@ -171,7 +178,11 @@ public:
                                                Qt::MouseButtons buttons, Qt::KeyboardModifiers modifiers);
 #endif
 
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    static bool processNativeEvent(QWindow *window, const QByteArray &eventType, void *message, qintptr *result);
+#else
     static bool processNativeEvent(QWindow *window, const QByteArray &eventType, void *message, long *result);
+#endif
 
     static bool sendQWindowEventToQPlatformWindow(QWindow *window, QEvent *event);
 
@@ -204,18 +215,18 @@ public:
     static void showModalWindow(QWindow *window);
     static void hideModalWindow(QWindow *window);
     static void updateBlockedStatus(QWindow *window);
-    virtual bool isWindowBlocked(QWindow *window, QWindow **blockingWindow = 0) const;
+    virtual bool isWindowBlocked(QWindow *window, QWindow **blockingWindow = nullptr) const;
     virtual bool popupActive() { return false; }
 
     static ulong mousePressTime;
     static Qt::MouseButton mousePressButton;
     static int mousePressX;
     static int mousePressY;
-    static int mouse_double_click_distance;
     static QPointF lastCursorPosition;
     static QWindow *currentMouseWindow;
     static QWindow *currentMousePressWindow;
     static Qt::ApplicationState applicationState;
+    static Qt::HighDpiScaleFactorRoundingPolicy highDpiScaleFactorRoundingPolicy;
     static bool highDpiScalingUpdated;
     static QPointer<QWindow> currentDragWindow;
 
@@ -299,8 +310,8 @@ public:
 
     static QInputDeviceManager *inputDeviceManager();
 
-    const QColorProfile *colorProfileForA8Text();
-    const QColorProfile *colorProfileForA32Text();
+    const QColorTrcLut *colorProfileForA8Text();
+    const QColorTrcLut *colorProfileForA32Text();
 
     // hook reimplemented in QApplication to apply the QStyle function on the QIcon
     virtual QPixmap applyQIconStyleHelper(QIcon::Mode, const QPixmap &basePixmap) const { return basePixmap; }
@@ -311,26 +322,40 @@ public:
 
     static void setApplicationState(Qt::ApplicationState state, bool forcePropagate = false);
 
+    static void resetCachedDevicePixelRatio();
+
+    static void updatePalette();
+
 protected:
     virtual void notifyThemeChanged();
-    virtual void sendApplicationPaletteChange(bool toAllWidgets = false, const char *className = nullptr);
+
+    static bool setPalette(const QPalette &palette);
+    virtual QPalette basePalette() const;
+    virtual void handlePaletteChanged(const char *className = nullptr);
+
     bool tryCloseRemainingWindows(QWindowList processedWindows);
 #if QT_CONFIG(draganddrop)
     virtual void notifyDragStarted(const QDrag *);
 #endif // QT_CONFIG(draganddrop)
 
 private:
+    static void clearPalette();
+
     friend class QDragManager;
 
     static QGuiApplicationPrivate *self;
     static QTouchDevice *m_fakeTouchDevice;
     static int m_fakeMouseSourcePointId;
-    QAtomicPointer<QColorProfile> m_a8ColorProfile;
-    QAtomicPointer<QColorProfile> m_a32ColorProfile;
+    QSharedPointer<QColorTrcLut> m_a8ColorProfile;
+    QSharedPointer<QColorTrcLut> m_a32ColorProfile;
 
     bool ownGlobalShareContext;
 
     static QInputDeviceManager *m_inputDeviceManager;
+
+    // Cache the maximum device pixel ratio, to iterate through the screen list
+    // only the first time it's required, or when devices are added or removed.
+    static qreal m_maxDevicePixelRatio;
 };
 
 Q_GUI_EXPORT uint qHash(const QGuiApplicationPrivate::ActiveTouchPointsKey &k);

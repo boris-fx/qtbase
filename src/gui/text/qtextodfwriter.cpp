@@ -43,6 +43,7 @@
 
 #include "qtextodfwriter_p.h"
 
+#include <QImageReader>
 #include <QImageWriter>
 #include <QTextListFormat>
 #include <QTextList>
@@ -69,7 +70,7 @@ static QString pixelToPoint(qreal pixels)
 // strategies
 class QOutputStrategy {
 public:
-    QOutputStrategy() : contentStream(0), counter(1) { }
+    QOutputStrategy() : contentStream(nullptr), counter(1) { }
     virtual ~QOutputStrategy() {}
     virtual void addFile(const QString &fileName, const QString &mimeType, const QByteArray &bytes) = 0;
 
@@ -89,7 +90,7 @@ public:
         contentStream = device;
     }
 
-    virtual ~QXmlStreamStrategy()
+    ~QXmlStreamStrategy()
     {
         if (contentStream)
             contentStream->close();
@@ -239,7 +240,7 @@ void QTextOdfWriter::writeFrame(QXmlStreamWriter &writer, const QTextFrame *fram
     }
 
     QTextFrame::iterator iterator = frame->begin();
-    QTextFrame *child = 0;
+    QTextFrame *child = nullptr;
 
     int tableRow = -1;
     while (! iterator.atEnd()) {
@@ -357,7 +358,7 @@ void QTextOdfWriter::writeBlock(QXmlStreamWriter &writer, const QTextBlock &bloc
         int precedingSpaces = 0;
         int exportedIndex = 0;
         for (int i=0; i <= fragmentText.count(); ++i) {
-            QChar character = fragmentText[i];
+            QChar character = (i == fragmentText.count() ? QChar() : fragmentText.at(i));
             bool isSpace = character.unicode() == ' ';
 
             // find more than one space. -> <text:s text:c="2" />
@@ -410,57 +411,106 @@ void QTextOdfWriter::writeBlock(QXmlStreamWriter &writer, const QTextBlock &bloc
         writer.writeEndElement(); // list-item
 }
 
+static bool probeImageData(QIODevice *device, QImage *image, QString *mimeType, qreal *width, qreal *height)
+{
+    QImageReader reader(device);
+    const QByteArray format = reader.format().toLower();
+    if (format == "png") {
+        *mimeType = QStringLiteral("image/png");
+    } else if (format == "jpg") {
+        *mimeType = QStringLiteral("image/jpg");
+    } else if (format == "svg") {
+        *mimeType = QStringLiteral("image/svg+xml");
+    } else {
+        *image = reader.read();
+        return false;
+    }
+
+    const QSize size = reader.size();
+
+    *width = size.width();
+    *height = size.height();
+
+    return true;
+}
+
 void QTextOdfWriter::writeInlineCharacter(QXmlStreamWriter &writer, const QTextFragment &fragment) const
 {
     writer.writeStartElement(drawNS, QString::fromLatin1("frame"));
-    if (m_strategy == 0) {
+    if (m_strategy == nullptr) {
         // don't do anything.
     }
     else if (fragment.charFormat().isImageFormat()) {
         QTextImageFormat imageFormat = fragment.charFormat().toImageFormat();
         writer.writeAttribute(drawNS, QString::fromLatin1("name"), imageFormat.name());
 
+        QByteArray data;
+        QString mimeType;
+        qreal width = 0;
+        qreal height = 0;
+
         QImage image;
         QString name = imageFormat.name();
         if (name.startsWith(QLatin1String(":/"))) // auto-detect resources
             name.prepend(QLatin1String("qrc"));
         QUrl url = QUrl(name);
-        const QVariant data = m_document->resource(QTextDocument::ImageResource, url);
-        if (data.type() == QVariant::Image) {
-            image = qvariant_cast<QImage>(data);
-        } else if (data.type() == QVariant::ByteArray) {
-            image.loadFromData(data.toByteArray());
-        }
+        const QVariant variant = m_document->resource(QTextDocument::ImageResource, url);
+        if (variant.userType() == QMetaType::QImage) {
+            image = qvariant_cast<QImage>(variant);
+        } else if (variant.userType() == QMetaType::QByteArray) {
+            data = variant.toByteArray();
 
-        if (image.isNull()) {
-            if (image.isNull()) { // try direct loading
-                name = imageFormat.name(); // remove qrc:/ prefix again
-                image.load(name);
+            QBuffer buffer(&data);
+            buffer.open(QIODevice::ReadOnly);
+            probeImageData(&buffer, &image, &mimeType, &width, &height);
+        } else {
+            // try direct loading
+            QFile file(imageFormat.name());
+            if (file.open(QIODevice::ReadOnly) && !probeImageData(&file, &image, &mimeType, &width, &height)) {
+                file.seek(0);
+                data = file.readAll();
             }
         }
 
         if (! image.isNull()) {
             QBuffer imageBytes;
-            QString filename = m_strategy->createUniqueImageName();
+
             int imgQuality = imageFormat.quality();
             if (imgQuality >= 100 || imgQuality < 0 || image.hasAlphaChannel()) {
                 QImageWriter imageWriter(&imageBytes, "png");
                 imageWriter.write(image);
-                m_strategy->addFile(filename, QString::fromLatin1("image/png"), imageBytes.data());
+
+                data = imageBytes.data();
+                mimeType = QStringLiteral("image/png");
             } else {
                 // Write images without alpha channel as jpg with quality set by QTextImageFormat
                 QImageWriter imageWriter(&imageBytes, "jpg");
                 imageWriter.setQuality(imgQuality);
                 imageWriter.write(image);
-                m_strategy->addFile(filename, QString::fromLatin1("image/jpg"), imageBytes.data());
+
+                data = imageBytes.data();
+                mimeType = QStringLiteral("image/jpg");
             }
-            // get the width/height from the format.
-            qreal width = imageFormat.hasProperty(QTextFormat::ImageWidth)
-                    ? imageFormat.width() : image.width();
+
+            width = image.width();
+            height = image.height();
+        }
+
+        if (!data.isEmpty()) {
+            if (imageFormat.hasProperty(QTextFormat::ImageWidth)) {
+                width = imageFormat.width();
+            }
+            if (imageFormat.hasProperty(QTextFormat::ImageHeight)) {
+                height = imageFormat.height();
+            }
+
+            QString filename = m_strategy->createUniqueImageName();
+
+            m_strategy->addFile(filename, mimeType, data);
+
             writer.writeAttribute(svgNS, QString::fromLatin1("width"), pixelToPoint(width));
-            qreal height = imageFormat.hasProperty(QTextFormat::ImageHeight)
-                    ? imageFormat.height() : image.height();
             writer.writeAttribute(svgNS, QString::fromLatin1("height"), pixelToPoint(height));
+            writer.writeAttribute(textNS, QStringLiteral("anchor-type"), QStringLiteral("as-char"));
             writer.writeStartElement(drawNS, QString::fromLatin1("image"));
             writer.writeAttribute(xlinkNS, QString::fromLatin1("href"), filename);
             writer.writeEndElement(); // image
@@ -473,9 +523,7 @@ void QTextOdfWriter::writeFormats(QXmlStreamWriter &writer, const QSet<int> &for
 {
     writer.writeStartElement(officeNS, QString::fromLatin1("automatic-styles"));
     QVector<QTextFormat> allStyles = m_document->allFormats();
-    QSetIterator<int> formatId(formats);
-    while(formatId.hasNext()) {
-        int formatIndex = formatId.next();
+    for (int formatIndex : formats) {
         QTextFormat textFormat = allStyles.at(formatIndex);
         switch (textFormat.type()) {
         case QTextFormat::CharFormat:
@@ -496,10 +544,12 @@ void QTextOdfWriter::writeFormats(QXmlStreamWriter &writer, const QSet<int> &for
             else
                 writeFrameFormat(writer, textFormat.toFrameFormat(), formatIndex);
             break;
+#if QT_DEPRECATED_SINCE(5, 3)
         case QTextFormat::TableFormat:
             // this case never happens, because TableFormat is a FrameFormat
             Q_UNREACHABLE();
             break;
+#endif
         }
     }
 
@@ -886,26 +936,30 @@ void QTextOdfWriter::tableCellStyleElement(QXmlStreamWriter &writer, const int &
     if (hasBorder) {
         writer.writeAttribute(foNS, QString::fromLatin1("border"),
                               pixelToPoint(tableFormatTmp.border()) + QLatin1String(" ")
-                              + borderStyleName(tableFormatTmp.borderStyle())
-                              + QLatin1String(" #000000"));  //!! HARD-CODING color black
+                              + borderStyleName(tableFormatTmp.borderStyle()) + QLatin1String(" ")
+                              + tableFormatTmp.borderBrush().color().name(QColor::HexRgb));
     }
-    qreal padding = format.topPadding();
-    if (padding > 0 && padding == format.bottomPadding()
-        && padding == format.leftPadding() && padding == format.rightPadding()) {
+    qreal topPadding = format.topPadding();
+    qreal padding = topPadding + tableFormatTmp.cellPadding();
+    if (padding > 0 && topPadding == format.bottomPadding()
+        && topPadding == format.leftPadding() && topPadding == format.rightPadding()) {
         writer.writeAttribute(foNS, QString::fromLatin1("padding"), pixelToPoint(padding));
     }
     else {
         if (padding > 0)
             writer.writeAttribute(foNS, QString::fromLatin1("padding-top"), pixelToPoint(padding));
-        if (format.bottomPadding() > 0)
+        padding = format.bottomPadding() + tableFormatTmp.cellPadding();
+        if (padding > 0)
             writer.writeAttribute(foNS, QString::fromLatin1("padding-bottom"),
-                                  pixelToPoint(format.bottomPadding()));
-        if (format.leftPadding() > 0)
+                                  pixelToPoint(padding));
+        padding = format.leftPadding() + tableFormatTmp.cellPadding();
+        if (padding > 0)
             writer.writeAttribute(foNS, QString::fromLatin1("padding-left"),
-                                  pixelToPoint(format.leftPadding()));
-        if (format.rightPadding() > 0)
+                                  pixelToPoint(padding));
+        padding = format.rightPadding() + tableFormatTmp.cellPadding();
+        if (padding > 0)
             writer.writeAttribute(foNS, QString::fromLatin1("padding-right"),
-                                  pixelToPoint(format.rightPadding()));
+                                  pixelToPoint(padding));
     }
 
     if (format.hasProperty(QTextFormat::TextVerticalAlignment)) {
@@ -943,8 +997,8 @@ QTextOdfWriter::QTextOdfWriter(const QTextDocument &document, QIODevice *device)
     svgNS (QLatin1String("urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0")),
     m_document(&document),
     m_device(device),
-    m_strategy(0),
-    m_codec(0),
+    m_strategy(nullptr),
+    m_codec(nullptr),
     m_createArchive(true)
 {
 }
@@ -957,7 +1011,7 @@ bool QTextOdfWriter::writeAll()
         m_strategy = new QXmlStreamStrategy(m_device);
 
     if (!m_device->isWritable() && ! m_device->open(QIODevice::WriteOnly)) {
-        qWarning("QTextOdfWriter::writeAll: the device can not be opened for writing");
+        qWarning("QTextOdfWriter::writeAll: the device cannot be opened for writing");
         return false;
     }
     QXmlStreamWriter writer(m_strategy->contentStream);
@@ -1001,7 +1055,7 @@ bool QTextOdfWriter::writeAll()
 
     // add objects for lists, frames and tables
     const QVector<QTextFormat> allFormats = m_document->allFormats();
-    const QList<int> copy = formats.toList();
+    const QList<int> copy = formats.values();
     for (auto index : copy) {
         QTextObject *object = m_document->objectForFormat(allFormats[index]);
         if (object) {
@@ -1039,7 +1093,7 @@ bool QTextOdfWriter::writeAll()
     writer.writeEndElement(); // document-content
     writer.writeEndDocument();
     delete m_strategy;
-    m_strategy = 0;
+    m_strategy = nullptr;
 
     return true;
 }

@@ -69,7 +69,7 @@ class QStyleOptionToolBar;
 class QToolBarAreaLayoutItem
 {
 public:
-    QToolBarAreaLayoutItem(QLayoutItem *item = 0)
+    QToolBarAreaLayoutItem(QLayoutItem *item = nullptr)
         : widgetItem(item), pos(0), size(-1), preferredSize(-1), gap(false) {}
 
     bool skip() const;
@@ -196,7 +196,7 @@ public:
     void insertItem(QInternal::DockPosition pos, QLayoutItem *item);
     void insertItem(QToolBar *before, QLayoutItem *item);
 
-    QInternal::DockPosition findToolBar(QToolBar *toolBar) const;
+    QInternal::DockPosition findToolBar(const QToolBar *toolBar) const;
     bool toolBarBreak(QToolBar *toolBar) const;
 
     void getStyleOptionInfo(QStyleOptionToolBar *option, QToolBar *toolBar) const;

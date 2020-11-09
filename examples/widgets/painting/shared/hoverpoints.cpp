@@ -73,8 +73,8 @@ HoverPoints::HoverPoints(QWidget *widget, PointShape shape)
     m_editable = true;
     m_enabled = true;
 
-    connect(this, SIGNAL(pointsChanged(QPolygonF)),
-            m_widget, SLOT(update()));
+    connect(this, &HoverPoints::pointsChanged,
+            m_widget, QOverload<>::of(&QWidget::update));
 }
 
 
@@ -174,13 +174,14 @@ bool HoverPoints::eventFilter(QObject *object, QEvent *event)
                 const QTouchEvent *const touchEvent = static_cast<const QTouchEvent*>(event);
                 const QList<QTouchEvent::TouchPoint> points = touchEvent->touchPoints();
                 const qreal pointSize = qMax(m_pointSize.width(), m_pointSize.height());
-                foreach (const QTouchEvent::TouchPoint &touchPoint, points) {
+                for (const QTouchEvent::TouchPoint &touchPoint : points) {
                     const int id = touchPoint.id();
                     switch (touchPoint.state()) {
                     case Qt::TouchPointPressed:
                         {
                             // find the point, move it
-                            QSet<int> activePoints = QSet<int>::fromList(m_fingerPointMapping.values());
+                            const auto mappedPoints = m_fingerPointMapping.values();
+                            QSet<int> activePoints = QSet<int>(mappedPoints.begin(), mappedPoints.end());
                             int activePoint = -1;
                             qreal distance = -1;
                             const int pointsCount = m_points.size();
@@ -261,8 +262,8 @@ bool HoverPoints::eventFilter(QObject *object, QEvent *event)
         case QEvent::Paint:
         {
             QWidget *that_widget = m_widget;
-            m_widget = 0;
-            QApplication::sendEvent(object, event);
+            m_widget = nullptr;
+            QCoreApplication::sendEvent(object, event);
             m_widget = that_widget;
             paintPoints();
             return true;

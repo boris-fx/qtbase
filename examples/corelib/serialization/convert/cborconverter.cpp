@@ -56,7 +56,6 @@
 #include <QCborArray>
 #include <QCborValue>
 #include <QDataStream>
-#include <QDebug>
 #include <QFloat16>
 #include <QFile>
 #include <QMetaType>
@@ -83,19 +82,6 @@ static const char diagnosticHelp[] =
         ;
 
 QT_BEGIN_NAMESPACE
-
-QDataStream &operator<<(QDataStream &ds, QCborSimpleType st)
-{
-    return ds << quint8(st);
-}
-
-QDataStream &operator>>(QDataStream &ds, QCborSimpleType &st)
-{
-    quint8 v;
-    ds >> v;
-    st = QCborSimpleType(v);
-    return ds;
-}
 
 QDataStream &operator<<(QDataStream &ds, QCborTag tag)
 {
@@ -148,7 +134,7 @@ static QVariant convertCborValue(const QCborValue &value)
 enum TrimFloatingPoint { Double, Float, Float16 };
 static QCborValue convertFromVariant(const QVariant &v, TrimFloatingPoint fpTrimming)
 {
-    if (v.userType() == QVariant::List) {
+    if (v.userType() == QMetaType::QVariantList) {
         const QVariantList list = v.toList();
         QCborArray array;
         for (const QVariant &v : list)
@@ -158,7 +144,7 @@ static QCborValue convertFromVariant(const QVariant &v, TrimFloatingPoint fpTrim
     }
 
     if (v.userType() == qMetaTypeId<VariantOrderedMap>()) {
-        const auto m = v.value<VariantOrderedMap>();
+        const auto m = qvariant_cast<VariantOrderedMap>(v);
         QCborMap map;
         for (const auto &pair : m)
             map.insert(convertFromVariant(pair.first, fpTrimming),
@@ -166,7 +152,7 @@ static QCborValue convertFromVariant(const QVariant &v, TrimFloatingPoint fpTrim
         return map;
     }
 
-    if (v.userType() == QVariant::Double && fpTrimming != Double) {
+    if (v.userType() == QMetaType::Double && fpTrimming != Double) {
         float f = float(v.toDouble());
         if (fpTrimming == Float16)
             return float(qfloat16(f));
@@ -240,7 +226,7 @@ void CborDiagnosticDumper::saveFile(QIODevice *f, const QVariant &contents, cons
 
     QTextStream out(f);
     out << convertFromVariant(contents, Double).toDiagnosticNotation(opts)
-        << endl;
+        << Qt::endl;
 }
 
 CborConverter::CborConverter()

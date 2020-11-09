@@ -49,8 +49,8 @@
 ****************************************************************************/
 
 
-#include "interfaces.h"
 #include "plugindialog.h"
+#include "interfaces.h"
 
 #include <QDir>
 #include <QGridLayout>
@@ -125,7 +125,7 @@ void PluginDialog::populateTreeWidget(QObject *plugin, const QString &text)
 {
     auto pluginItem = new QTreeWidgetItem(treeWidget);
     pluginItem->setText(0, text);
-    treeWidget->setItemExpanded(pluginItem, true);
+    pluginItem->setExpanded(true);
 
     QFont boldFont = pluginItem->font(0);
     boldFont.setBold(true);

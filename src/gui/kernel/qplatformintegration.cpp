@@ -66,7 +66,7 @@ QT_BEGIN_NAMESPACE
 */
 QPlatformFontDatabase *QPlatformIntegration::fontDatabase() const
 {
-    static QPlatformFontDatabase *db = 0;
+    static QPlatformFontDatabase *db = nullptr;
     if (!db) {
         db = new QPlatformFontDatabase;
     }
@@ -86,7 +86,7 @@ QPlatformFontDatabase *QPlatformIntegration::fontDatabase() const
 
 QPlatformClipboard *QPlatformIntegration::clipboard() const
 {
-    static QPlatformClipboard *clipboard = 0;
+    static QPlatformClipboard *clipboard = nullptr;
     if (!clipboard) {
         clipboard = new QPlatformClipboard;
     }
@@ -104,7 +104,7 @@ QPlatformClipboard *QPlatformIntegration::clipboard() const
 */
 QPlatformDrag *QPlatformIntegration::drag() const
 {
-    static QSimpleDrag *drag = 0;
+    static QSimpleDrag *drag = nullptr;
     if (!drag) {
         drag = new QSimpleDrag;
     }
@@ -114,12 +114,12 @@ QPlatformDrag *QPlatformIntegration::drag() const
 
 QPlatformNativeInterface * QPlatformIntegration::nativeInterface() const
 {
-    return 0;
+    return nullptr;
 }
 
 QPlatformServices *QPlatformIntegration::services() const
 {
-    return 0;
+    return nullptr;
 }
 
 /*!
@@ -244,6 +244,9 @@ QPlatformServices *QPlatformIntegration::services() const
     \value TopStackedNativeChildWindows The platform supports native child windows via
     QWindowContainer without having to punch a transparent hole in the
     backingstore. (since 5.10)
+
+    \value OpenGLOnRasterSurface The platform supports making a QOpenGLContext current
+    in combination with a QWindow of type RasterSurface.
  */
 
 /*!
@@ -291,7 +294,7 @@ QPlatformPixmap *QPlatformIntegration::createPlatformPixmap(QPlatformPixmap::Pix
     platform implementation is responsible for querying the configuriation from the provided
     native context.
 
-    Returns a pointer to a QPlatformOpenGLContext instance or \c NULL if the context could
+    Returns a pointer to a QPlatformOpenGLContext instance or \nullptr if the context could
     not be created.
 
     \sa QOpenGLContext
@@ -300,7 +303,7 @@ QPlatformOpenGLContext *QPlatformIntegration::createPlatformOpenGLContext(QOpenG
 {
     Q_UNUSED(context);
     qWarning("This plugin does not support createPlatformOpenGLContext!");
-    return 0;
+    return nullptr;
 }
 #endif // QT_NO_OPENGL
 
@@ -312,7 +315,7 @@ QPlatformSharedGraphicsCache *QPlatformIntegration::createPlatformSharedGraphics
 {
     qWarning("This plugin does not support createPlatformSharedGraphicsBuffer for cacheId: %s!",
              cacheId);
-    return 0;
+    return nullptr;
 }
 
 /*!
@@ -322,7 +325,7 @@ QPlatformSharedGraphicsCache *QPlatformIntegration::createPlatformSharedGraphics
 QPaintEngine *QPlatformIntegration::createImagePaintEngine(QPaintDevice *paintDevice) const
 {
     Q_UNUSED(paintDevice)
-    return 0;
+    return nullptr;
 }
 
 /*!
@@ -354,7 +357,7 @@ void QPlatformIntegration::destroy()
 */
 QPlatformInputContext *QPlatformIntegration::inputContext() const
 {
-    return 0;
+    return nullptr;
 }
 
 #ifndef QT_NO_ACCESSIBILITY
@@ -367,7 +370,7 @@ QPlatformInputContext *QPlatformIntegration::inputContext() const
 */
 QPlatformAccessibility *QPlatformIntegration::accessibility() const
 {
-    static QPlatformAccessibility *accessibility = 0;
+    static QPlatformAccessibility *accessibility = nullptr;
     if (Q_UNLIKELY(!accessibility)) {
         accessibility = new QPlatformAccessibility;
     }
@@ -462,42 +465,6 @@ QList<int> QPlatformIntegration::possibleKeys(const QKeyEvent *) const
     return QList<int>();
 }
 
-/*!
-  \deprecated Use QWindowSystemInterface::handleScreenAdded instead.
-*/
-void QPlatformIntegration::screenAdded(QPlatformScreen *ps, bool isPrimary)
-{
-    QWindowSystemInterface::handleScreenAdded(ps, isPrimary);
-}
-
-/*!
-  \deprecated Use QWindowSystemInterface::handleScreenRemoved instead.
-*/
-void QPlatformIntegration::removeScreen(QScreen *screen)
-{
-    const bool wasPrimary = (!QGuiApplicationPrivate::screen_list.isEmpty() && QGuiApplicationPrivate::screen_list.at(0) == screen);
-    QGuiApplicationPrivate::screen_list.removeOne(screen);
-
-    if (wasPrimary && qGuiApp && !QGuiApplicationPrivate::screen_list.isEmpty())
-        emit qGuiApp->primaryScreenChanged(QGuiApplicationPrivate::screen_list.at(0));
-}
-
-/*!
-  \deprecated Use QWindowSystemInterface::handleScreenRemoved instead.
-*/
-void QPlatformIntegration::destroyScreen(QPlatformScreen *platformScreen)
-{
-    QWindowSystemInterface::handleScreenRemoved(platformScreen);
-}
-
-/*!
-  \deprecated Use QWindowSystemInterface::handlePrimaryScreenChanged instead.
-*/
-void QPlatformIntegration::setPrimaryScreen(QPlatformScreen *newPrimary)
-{
-    QWindowSystemInterface::handlePrimaryScreenChanged(newPrimary);
-}
-
 QStringList QPlatformIntegration::themeNames() const
 {
     return QStringList();
@@ -517,7 +484,7 @@ class QPlatformTheme *QPlatformIntegration::createPlatformTheme(const QString &n
 QPlatformOffscreenSurface *QPlatformIntegration::createPlatformOffscreenSurface(QOffscreenSurface *surface) const
 {
     Q_UNUSED(surface)
-    return 0;
+    return nullptr;
 }
 
 #ifndef QT_NO_SESSIONMANAGER
@@ -602,7 +569,7 @@ void QPlatformIntegration::setApplicationIcon(const QIcon &icon) const
     pointer to the instance for which a platform-specific backend needs to be
     created.
 
-    Returns a pointer to a QPlatformOpenGLContext instance or \c NULL if the context could
+    Returns a pointer to a QPlatformOpenGLContext instance or \nullptr if the context could
     not be created.
 
     \sa QVulkanInstance

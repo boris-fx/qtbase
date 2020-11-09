@@ -38,10 +38,13 @@ void QWasmFontDatabase::populateFontDatabase()
     // Load font file from resources. Currently
     // all fonts needs to be bundled with the nexe
     // as Qt resources.
-    QStringList fontFileNames = QStringList() << QStringLiteral(":/fonts/Vera.ttf")
-                                              << QStringLiteral(":/fonts/DejaVuSans.ttf");
 
-    foreach (const QString &fontFileName, fontFileNames) {
+    const QString fontFileNames[] = {
+        QStringLiteral(":/fonts/DejaVuSansMono.ttf"),
+        QStringLiteral(":/fonts/Vera.ttf"),
+        QStringLiteral(":/fonts/DejaVuSans.ttf"),
+    };
+    for (const QString &fontFileName : fontFileNames) {
         QFile theFont(fontFileName);
         if (!theFont.open(QIODevice::ReadOnly))
             break;
@@ -82,5 +85,9 @@ void QWasmFontDatabase::releaseHandle(void *handle)
     QFreeTypeFontDatabase::releaseHandle(handle);
 }
 
+QFont QWasmFontDatabase::defaultFont() const
+{
+    return QFont(QLatin1String("Bitstream Vera Sans"));
+}
 
 QT_END_NAMESPACE

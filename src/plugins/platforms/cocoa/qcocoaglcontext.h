@@ -50,11 +50,15 @@
 
 QT_BEGIN_NAMESPACE
 
+class QCocoaWindow;
+
 class QCocoaGLContext : public QPlatformOpenGLContext
 {
 public:
     QCocoaGLContext(QOpenGLContext *context);
     ~QCocoaGLContext();
+
+    void initialize() override;
 
     bool makeCurrent(QPlatformSurface *surface) override;
     void swapBuffers(QPlatformSurface *surface) override;
@@ -74,14 +78,18 @@ private:
     static NSOpenGLPixelFormat *pixelFormatForSurfaceFormat(const QSurfaceFormat &format);
 
     bool setDrawable(QPlatformSurface *surface);
+    void prepareDrawable(QCocoaWindow *platformWindow);
     void updateSurfaceFormat();
 
     NSOpenGLContext *m_context = nil;
     NSOpenGLContext *m_shareContext = nil;
     QSurfaceFormat m_format;
-    bool m_didCheckForSoftwareContext = false;
-    QVarLengthArray<QMacScopedObserver, 3> m_updateObservers;
+    QVarLengthArray<QMacNotificationObserver, 3> m_updateObservers;
     QAtomicInt m_needsUpdate = false;
+
+#ifndef QT_NO_DEBUG_STREAM
+    friend QDebug operator<<(QDebug debug, const QCocoaGLContext *screen);
+#endif
 };
 
 QT_END_NAMESPACE

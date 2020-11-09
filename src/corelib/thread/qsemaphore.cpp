@@ -264,7 +264,7 @@ template <bool IsTimed> bool futexSemaphoreTryAcquire(QBasicAtomicInteger<quintp
 
     if (futexHasWaiterCount) {
         // decrement the number of threads waiting
-        Q_ASSERT(futexHigh32(&u)->load() & 0x7fffffffU);
+        Q_ASSERT(futexHigh32(&u)->loadRelaxed() & 0x7fffffffU);
         u.fetchAndSubRelaxed(oneWaiter);
     }
     return false;
@@ -293,7 +293,7 @@ QSemaphore::QSemaphore(int n)
         quintptr nn = unsigned(n);
         if (futexHasWaiterCount)
             nn |= quint64(nn) << 32;    // token count replicated in high word
-        u.store(nn);
+        u.storeRelaxed(nn);
     } else {
         d = new QSemaphorePrivate(n);
     }
@@ -425,7 +425,7 @@ void QSemaphore::release(int n)
 int QSemaphore::available() const
 {
     if (futexAvailable())
-        return futexAvailCounter(u.load());
+        return futexAvailCounter(u.loadRelaxed());
 
     QMutexLocker locker(&d->mutex);
     return d->avail;
@@ -606,7 +606,7 @@ bool QSemaphore::tryAcquire(int n, int timeout)
     \fn QSemaphoreReleaser::semaphore() const
 
     Returns a pointer to the QSemaphore object provided to the constructor,
-    or by the last move assignment, if any. Otherwise, returns \c nullptr.
+    or by the last move assignment, if any. Otherwise, returns \nullptr.
 */
 
 /*!
@@ -614,7 +614,7 @@ bool QSemaphore::tryAcquire(int n, int timeout)
 
     Cancels this QSemaphoreReleaser such that the destructor will no longer
     call \c{semaphore()->release()}. Returns the value of semaphore()
-    before this call. After this call, semaphore() will return \c nullptr.
+    before this call. After this call, semaphore() will return \nullptr.
 
     To enable again, assign a new QSemaphoreReleaser:
 

@@ -41,16 +41,21 @@
 package org.qtproject.qt5.android;
 
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.util.ArrayList;
 import java.util.concurrent.Semaphore;
+import java.io.IOException;
+import java.util.HashMap;
 
 import android.app.Activity;
 import android.app.Service;
+import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.ContentResolver;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.pm.ActivityInfo;
+import android.content.UriPermission;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Handler;
@@ -59,6 +64,7 @@ import android.os.Looper;
 import android.content.ClipboardManager;
 import android.content.ClipboardManager.OnPrimaryClipChangedListener;
 import android.content.ClipData;
+import android.os.ParcelFileDescriptor;
 import android.util.Log;
 import android.view.ContextMenu;
 import android.view.KeyEvent;
@@ -66,11 +72,14 @@ import android.view.Menu;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.InputDevice;
+import android.database.Cursor;
+import android.provider.DocumentsContract;
 
 import java.lang.reflect.Method;
 import java.security.KeyStore;
 import java.security.cert.X509Certificate;
 import java.util.Iterator;
+import java.util.List;
 import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
@@ -103,6 +112,9 @@ public class QtNative
     private static boolean m_usePrimaryClip = false;
     public static QtThread m_qtThread = new QtThread();
     private static Method m_addItemMethod = null;
+    private static HashMap<String, Uri> m_cachedUris = new HashMap<String, Uri>();
+    private static ArrayList<String> m_knownDirs = new ArrayList<String>();
+
     private static final Runnable runPendingCppRunnablesRunnable = new Runnable() {
         @Override
         public void run() {
@@ -150,24 +162,249 @@ public class QtNative
         }
     }
 
-    public static boolean openURL(String url, String mime)
+    public static String[] getStringArray(String joinedString)
     {
-        boolean ok = true;
-
-        try {
-            Uri uri = Uri.parse(url);
-            Intent intent = new Intent(Intent.ACTION_VIEW, uri);
-            if (!mime.isEmpty())
-                intent.setDataAndType(uri, mime);
-            activity().startActivity(intent);
-        } catch (Exception e) {
-            e.printStackTrace();
-            ok = false;
-        }
-
-        return ok;
+        return joinedString.split(",");
     }
 
+    private static Uri getUriWithValidPermission(Context context, String uri, String openMode)
+    {
+        try {
+            Uri parsedUri = Uri.parse(uri);
+            String scheme = parsedUri.getScheme();
+
+            // We only want to check permissions for content Uris
+            if (scheme.compareTo("content") != 0)
+                return parsedUri;
+
+            List<UriPermission> permissions = context.getContentResolver().getPersistedUriPermissions();
+            String uriStr = parsedUri.getPath();
+
+            for (int i = 0; i < permissions.size(); ++i) {
+                Uri iterUri = permissions.get(i).getUri();
+                boolean isRightPermission = permissions.get(i).isReadPermission();
+
+                if (!openMode.equals("r"))
+                   isRightPermission = permissions.get(i).isWritePermission();
+
+                if (iterUri.getPath().equals(uriStr) && isRightPermission)
+                    return iterUri;
+            }
+
+            return null;
+        } catch (SecurityException e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    public static boolean openURL(Context context, String url, String mime)
+    {
+        Uri uri = getUriWithValidPermission(context, url, "r");
+
+        if (uri == null) {
+            Log.e(QtTAG, "openURL(): No permissions to open Uri");
+            return false;
+        }
+
+        try {
+            Intent intent = new Intent(Intent.ACTION_VIEW, uri);
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            if (!mime.isEmpty())
+                intent.setDataAndType(uri, mime);
+
+            activity().startActivity(intent);
+
+            return true;
+        } catch (IllegalArgumentException e) {
+            Log.e(QtTAG, "openURL(): Invalid Uri");
+            e.printStackTrace();
+            return false;
+        } catch (UnsupportedOperationException e) {
+            Log.e(QtTAG, "openURL(): Unsupported operation for given Uri");
+            e.printStackTrace();
+            return false;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    public static int openFdForContentUrl(Context context, String contentUrl, String openMode)
+    {
+        Uri uri = m_cachedUris.get(contentUrl);
+        if (uri == null)
+            uri = getUriWithValidPermission(context, contentUrl, openMode);
+        int error = -1;
+
+        if (uri == null) {
+            Log.e(QtTAG, "openFdForContentUrl(): No permissions to open Uri");
+            return error;
+        }
+
+        try {
+            ContentResolver resolver = context.getContentResolver();
+            ParcelFileDescriptor fdDesc = resolver.openFileDescriptor(uri, openMode);
+            return fdDesc.detachFd();
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+            return error;
+        } catch (IllegalArgumentException e) {
+            Log.e(QtTAG, "openFdForContentUrl(): Invalid Uri");
+            e.printStackTrace();
+            return error;
+        }
+    }
+
+    public static long getSize(Context context, String contentUrl)
+    {
+        long size = -1;
+        Uri uri = m_cachedUris.get(contentUrl);
+        if (uri == null)
+            uri = getUriWithValidPermission(context, contentUrl, "r");
+
+        if (uri == null) {
+            Log.e(QtTAG, "getSize(): No permissions to open Uri");
+            return size;
+        } else {
+            m_cachedUris.putIfAbsent(contentUrl, uri);
+        }
+
+        try {
+            ContentResolver resolver = context.getContentResolver();
+            Cursor cur = resolver.query(uri, new String[] { DocumentsContract.Document.COLUMN_SIZE }, null, null, null);
+            if (cur != null) {
+                if (cur.moveToFirst())
+                    size = cur.getLong(0);
+                cur.close();
+            }
+            return size;
+        } catch (IllegalArgumentException e) {
+            Log.e(QtTAG, "getSize(): Invalid Uri");
+            e.printStackTrace();
+            return size;
+        }  catch (UnsupportedOperationException e) {
+            Log.e(QtTAG, "getSize(): Unsupported operation for given Uri");
+            e.printStackTrace();
+            return size;
+        }
+    }
+
+    public static boolean checkFileExists(Context context, String contentUrl)
+    {
+        boolean exists = false;
+        Uri uri = m_cachedUris.get(contentUrl);
+        if (uri == null)
+            uri = getUriWithValidPermission(context, contentUrl, "r");
+        if (uri == null) {
+            Log.e(QtTAG, "checkFileExists(): No permissions to open Uri");
+            return exists;
+        } else {
+            if (!m_cachedUris.containsKey(contentUrl))
+                m_cachedUris.put(contentUrl, uri);
+        }
+
+        try {
+            ContentResolver resolver = context.getContentResolver();
+            Cursor cur = resolver.query(uri, null, null, null, null);
+            if (cur != null) {
+                exists = true;
+                cur.close();
+            }
+            return exists;
+        } catch (IllegalArgumentException e) {
+            Log.e(QtTAG, "checkFileExists(): Invalid Uri");
+            e.printStackTrace();
+            return exists;
+        } catch (UnsupportedOperationException e) {
+            Log.e(QtTAG, "checkFileExists(): Unsupported operation for given Uri");
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    public static boolean checkIfDir(Context context, String contentUrl)
+    {
+        boolean isDir = false;
+        Uri uri = m_cachedUris.get(contentUrl);
+        if (m_knownDirs.contains(contentUrl))
+            return true;
+        if (uri == null) {
+            uri = getUriWithValidPermission(context, contentUrl, "r");
+        }
+        if (uri == null) {
+            Log.e(QtTAG, "isDir(): No permissions to open Uri");
+            return isDir;
+        } else {
+            if (!m_cachedUris.containsKey(contentUrl))
+                m_cachedUris.put(contentUrl, uri);
+        }
+
+        try {
+            final List<String> paths = uri.getPathSegments();
+            // getTreeDocumentId will throw an exception if it is not a directory so check manually
+            if (!paths.get(0).equals("tree"))
+                return false;
+            ContentResolver resolver = context.getContentResolver();
+            Uri docUri = DocumentsContract.buildDocumentUriUsingTree(uri, DocumentsContract.getTreeDocumentId(uri));
+            if (!docUri.toString().startsWith(uri.toString()))
+                return false;
+            Cursor cur = resolver.query(docUri, new String[] { DocumentsContract.Document.COLUMN_MIME_TYPE }, null, null, null);
+            if (cur != null) {
+                if (cur.moveToFirst()) {
+                    final String dirStr = new String(DocumentsContract.Document.MIME_TYPE_DIR);
+                    isDir = cur.getString(0).equals(dirStr);
+                    if (isDir)
+                        m_knownDirs.add(contentUrl);
+                }
+                cur.close();
+            }
+            return isDir;
+        } catch (IllegalArgumentException e) {
+            Log.e(QtTAG, "checkIfDir(): Invalid Uri");
+            e.printStackTrace();
+            return false;
+        } catch (UnsupportedOperationException e) {
+            Log.e(QtTAG, "checkIfDir(): Unsupported operation for given Uri");
+            e.printStackTrace();
+            return false;
+        }
+    }
+    public static String[] listContentsFromTreeUri(Context context, String contentUrl)
+    {
+        Uri treeUri = Uri.parse(contentUrl);
+        final ArrayList<String> results = new ArrayList<String>();
+        if (treeUri == null) {
+            Log.e(QtTAG, "listContentsFromTreeUri(): Invalid uri");
+            return results.toArray(new String[results.size()]);
+        }
+        final ContentResolver resolver = context.getContentResolver();
+        final Uri docUri = DocumentsContract.buildDocumentUriUsingTree(treeUri,
+                DocumentsContract.getTreeDocumentId(treeUri));
+        final Uri childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(docUri,
+                                DocumentsContract.getDocumentId(docUri));
+        Cursor c = null;
+        final String dirStr = new String(DocumentsContract.Document.MIME_TYPE_DIR);
+        try {
+            c = resolver.query(childrenUri, new String[] {
+                    DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_DISPLAY_NAME, DocumentsContract.Document.COLUMN_MIME_TYPE }, null, null, null);
+            while (c.moveToNext()) {
+                final String fileString = c.getString(1);
+                if (!m_cachedUris.containsKey(contentUrl + "/" + fileString)) {
+                    m_cachedUris.put(contentUrl + "/" + fileString,
+                                     DocumentsContract.buildDocumentUriUsingTree(treeUri, c.getString(0)));
+                }
+                results.add(fileString);
+                if (c.getString(2).equals(dirStr))
+                    m_knownDirs.add(contentUrl + "/" + fileString);
+            }
+            c.close();
+        } catch (Exception e) {
+            Log.w(QtTAG, "Failed query: " + e);
+            return results.toArray(new String[results.size()]);
+        }
+        return results.toArray(new String[results.size()]);
+    }
     // this method loads full path libs
     public static void loadQtLibraries(final ArrayList<String> libraries)
     {
@@ -216,7 +453,7 @@ public class QtNative
                                     systemLibraryDir = info.metaData.getString("android.app.system_libs_prefix");
                                 f = new File(systemLibraryDir + libNameTemplate);
                             } catch (Exception e) {
-
+                                e.printStackTrace();
                             }
                         }
                         if (f.exists())
@@ -712,6 +949,8 @@ public class QtNative
 
     private static void clearClipData()
     {
+        if (Build.VERSION.SDK_INT >= 28 && m_clipboardManager != null && m_usePrimaryClip)
+            m_clipboardManager.clearPrimaryClip();
         m_usePrimaryClip = false;
     }
     private static void setClipboardText(String text)
@@ -724,54 +963,67 @@ public class QtNative
 
     public static boolean hasClipboardText()
     {
-        if (m_clipboardManager != null && m_clipboardManager.hasPrimaryClip()) {
-            ClipData primaryClip = m_clipboardManager.getPrimaryClip();
-            for (int i = 0; i < primaryClip.getItemCount(); ++i)
-                if (primaryClip.getItemAt(i).getText() != null)
-                    return true;
+        try {
+            if (m_clipboardManager != null && m_clipboardManager.hasPrimaryClip()) {
+                ClipData primaryClip = m_clipboardManager.getPrimaryClip();
+                for (int i = 0; i < primaryClip.getItemCount(); ++i)
+                    if (primaryClip.getItemAt(i).getText() != null)
+                        return true;
+            }
+        } catch (Exception e) {
+            Log.e(QtTAG, "Failed to get clipboard data", e);
         }
         return false;
     }
 
     private static String getClipboardText()
     {
-        if (m_clipboardManager != null && m_clipboardManager.hasPrimaryClip()) {
-            ClipData primaryClip = m_clipboardManager.getPrimaryClip();
-            for (int i = 0; i < primaryClip.getItemCount(); ++i)
-                if (primaryClip.getItemAt(i).getText() != null)
-                    return primaryClip.getItemAt(i).getText().toString();
+        try {
+            if (m_clipboardManager != null && m_clipboardManager.hasPrimaryClip()) {
+                ClipData primaryClip = m_clipboardManager.getPrimaryClip();
+                for (int i = 0; i < primaryClip.getItemCount(); ++i)
+                    if (primaryClip.getItemAt(i).getText() != null)
+                        return primaryClip.getItemAt(i).getText().toString();
+            }
+        } catch (Exception e) {
+            Log.e(QtTAG, "Failed to get clipboard data", e);
         }
         return "";
     }
 
     private static void updatePrimaryClip(ClipData clipData)
     {
-        if (m_usePrimaryClip) {
-            ClipData clip = m_clipboardManager.getPrimaryClip();
-            if (Build.VERSION.SDK_INT >= 26) {
-                if (m_addItemMethod == null) {
-                    Class[] cArg = new Class[2];
-                    cArg[0] = ContentResolver.class;
-                    cArg[1] = ClipData.Item.class;
-                    try {
-                        m_addItemMethod = m_clipboardManager.getClass().getMethod("addItem", cArg);
-                    } catch (Exception e) {
+        try {
+            if (m_usePrimaryClip) {
+                ClipData clip = m_clipboardManager.getPrimaryClip();
+                if (Build.VERSION.SDK_INT >= 26) {
+                    if (m_addItemMethod == null) {
+                        Class[] cArg = new Class[2];
+                        cArg[0] = ContentResolver.class;
+                        cArg[1] = ClipData.Item.class;
+                        try {
+                            m_addItemMethod = m_clipboardManager.getClass().getMethod("addItem", cArg);
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                        }
                     }
                 }
-            }
-            if (m_addItemMethod != null) {
-                try {
-                    m_addItemMethod.invoke(m_activity.getContentResolver(), clipData.getItemAt(0));
-                } catch (Exception e) {
-                    e.printStackTrace();
+                if (m_addItemMethod != null) {
+                    try {
+                        m_addItemMethod.invoke(m_activity.getContentResolver(), clipData.getItemAt(0));
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                } else {
+                    clip.addItem(clipData.getItemAt(0));
                 }
+                m_clipboardManager.setPrimaryClip(clip);
             } else {
-                clip.addItem(clipData.getItemAt(0));
+                m_clipboardManager.setPrimaryClip(clipData);
+                m_usePrimaryClip = true;
             }
-            m_clipboardManager.setPrimaryClip(clip);
-        } else {
-            m_clipboardManager.setPrimaryClip(clipData);
-            m_usePrimaryClip = true;
+        } catch (Exception e) {
+            Log.e(QtTAG, "Failed to set clipboard data", e);
         }
     }
 
@@ -785,22 +1037,30 @@ public class QtNative
 
     public static boolean hasClipboardHtml()
     {
-        if (m_clipboardManager != null && m_clipboardManager.hasPrimaryClip()) {
-            ClipData primaryClip = m_clipboardManager.getPrimaryClip();
-            for (int i = 0; i < primaryClip.getItemCount(); ++i)
-                if (primaryClip.getItemAt(i).getHtmlText() != null)
-                    return true;
+        try {
+            if (m_clipboardManager != null && m_clipboardManager.hasPrimaryClip()) {
+                ClipData primaryClip = m_clipboardManager.getPrimaryClip();
+                for (int i = 0; i < primaryClip.getItemCount(); ++i)
+                    if (primaryClip.getItemAt(i).getHtmlText() != null)
+                        return true;
+            }
+        } catch (Exception e) {
+            Log.e(QtTAG, "Failed to get clipboard data", e);
         }
         return false;
     }
 
     private static String getClipboardHtml()
     {
-        if (m_clipboardManager != null && m_clipboardManager.hasPrimaryClip()) {
-            ClipData primaryClip = m_clipboardManager.getPrimaryClip();
-            for (int i = 0; i < primaryClip.getItemCount(); ++i)
-                if (primaryClip.getItemAt(i).getHtmlText() != null)
-                    return primaryClip.getItemAt(i).getHtmlText().toString();
+        try {
+            if (m_clipboardManager != null && m_clipboardManager.hasPrimaryClip()) {
+                ClipData primaryClip = m_clipboardManager.getPrimaryClip();
+                for (int i = 0; i < primaryClip.getItemCount(); ++i)
+                    if (primaryClip.getItemAt(i).getHtmlText() != null)
+                        return primaryClip.getItemAt(i).getHtmlText().toString();
+            }
+        } catch (Exception e) {
+            Log.e(QtTAG, "Failed to get clipboard data", e);
         }
         return "";
     }
@@ -816,11 +1076,15 @@ public class QtNative
 
     public static boolean hasClipboardUri()
     {
-        if (m_clipboardManager != null && m_clipboardManager.hasPrimaryClip()) {
-            ClipData primaryClip = m_clipboardManager.getPrimaryClip();
-            for (int i = 0; i < primaryClip.getItemCount(); ++i)
-                if (primaryClip.getItemAt(i).getUri() != null)
-                    return true;
+        try {
+            if (m_clipboardManager != null && m_clipboardManager.hasPrimaryClip()) {
+                ClipData primaryClip = m_clipboardManager.getPrimaryClip();
+                for (int i = 0; i < primaryClip.getItemCount(); ++i)
+                    if (primaryClip.getItemAt(i).getUri() != null)
+                        return true;
+            }
+        } catch (Exception e) {
+            Log.e(QtTAG, "Failed to get clipboard data", e);
         }
         return false;
     }
@@ -828,11 +1092,15 @@ public class QtNative
     private static String[] getClipboardUris()
     {
         ArrayList<String> uris = new ArrayList<String>();
-        if (m_clipboardManager != null && m_clipboardManager.hasPrimaryClip()) {
-            ClipData primaryClip = m_clipboardManager.getPrimaryClip();
-            for (int i = 0; i < primaryClip.getItemCount(); ++i)
-                if (primaryClip.getItemAt(i).getUri() != null)
-                    uris.add(primaryClip.getItemAt(i).getUri().toString());
+        try {
+            if (m_clipboardManager != null && m_clipboardManager.hasPrimaryClip()) {
+                ClipData primaryClip = m_clipboardManager.getPrimaryClip();
+                for (int i = 0; i < primaryClip.getItemCount(); ++i)
+                    if (primaryClip.getItemAt(i).getUri() != null)
+                        uris.add(primaryClip.getItemAt(i).getUri().toString());
+            }
+        } catch (Exception e) {
+            Log.e(QtTAG, "Failed to get clipboard data", e);
         }
         String[] strings = new String[uris.size()];
         strings = uris.toArray(strings);
@@ -995,6 +1263,29 @@ public class QtNative
                     m_activityDelegate.hideSplashScreen(duration);
             }
         });
+    }
+
+    private static String[] listAssetContent(android.content.res.AssetManager asset, String path) {
+        String [] list;
+        ArrayList<String> res = new ArrayList<String>();
+        try {
+            list = asset.list(path);
+            if (list.length > 0) {
+                for (String file : list) {
+                    try {
+                        String[] isDir = asset.list(path.length() > 0 ? path + "/" + file : file);
+                        if (isDir != null && isDir.length > 0)
+                            file += "/";
+                        res.add(file);
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return res.toArray(new String[res.size()]);
     }
 
     // screen methods

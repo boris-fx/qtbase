@@ -38,11 +38,6 @@
 
 QT_BEGIN_NAMESPACE
 
-NmakeMakefileGenerator::NmakeMakefileGenerator() : usePCH(false), usePCHC(false)
-{
-
-}
-
 bool
 NmakeMakefileGenerator::writeMakefile(QTextStream &t)
 {
@@ -53,10 +48,6 @@ NmakeMakefileGenerator::writeMakefile(QTextStream &t)
     if(project->first("TEMPLATE") == "app" ||
        project->first("TEMPLATE") == "lib" ||
        project->first("TEMPLATE") == "aux") {
-#if 0
-        if(Option::mkfile::do_stub_makefile)
-            return MakefileGenerator::writeStubMakefile(t);
-#endif
         writeNmakeParts(t);
         return MakefileGenerator::writeMakefile(t);
     }
@@ -143,7 +134,7 @@ void NmakeMakefileGenerator::writeNmakeParts(QTextStream &t)
         t << escapeDependencyPath(precompObj) << ": " << escapeDependencyPath(precompH) << ' '
           << finalizeDependencyPaths(findDependencies(precompH)).join(" \\\n\t\t")
           << "\n\t$(CXX) " + precompRule +" $(CXXFLAGS) $(INCPATH) -TP "
-          << escapeFilePath(precompH) << endl << endl;
+          << escapeFilePath(precompH) << Qt::endl << Qt::endl;
     }
     if (usePCHC) {
         QString precompRuleC = QString("-c -Yc -Fp%1 -Fo%2")
@@ -151,7 +142,7 @@ void NmakeMakefileGenerator::writeNmakeParts(QTextStream &t)
         t << escapeDependencyPath(precompObjC) << ": " << escapeDependencyPath(precompH) << ' '
           << finalizeDependencyPaths(findDependencies(precompH)).join(" \\\n\t\t")
           << "\n\t$(CC) " + precompRuleC +" $(CFLAGS) $(INCPATH) -TC "
-          << escapeFilePath(precompH) << endl << endl;
+          << escapeFilePath(precompH) << Qt::endl << Qt::endl;
     }
 }
 
@@ -165,21 +156,17 @@ QString NmakeMakefileGenerator::var(const ProKey &value) const
                                || value == "QMAKE_RUN_CXX_IMP"
                                || value == "QMAKE_RUN_CXX");
         if ((isRunCpp && usePCH) || (isRunC && usePCHC)) {
-            QFileInfo precompHInfo(fileInfo(precompH));
-            QString precompH_f = escapeFilePath(precompHInfo.fileName());
+            QString precompH_f = escapeFilePath(fileFixify(precompH, FileFixifyBackwards));
             QString precompRule = QString("-c -FI%1 -Yu%2 -Fp%3")
                     .arg(precompH_f, precompH_f, escapeFilePath(isRunC ? precompPchC : precompPch));
+            // ### For clang_cl 8 we force inline methods to be compiled here instead
+            // linking them from a pch.o file. We do this by pretending we are also doing
+            // the pch.o generation step.
+            if (project->isActiveConfig("clang_cl"))
+                precompRule += QString(" -Xclang -building-pch-with-obj");
             QString p = MakefileGenerator::var(value);
             p.replace(QLatin1String("-c"), precompRule);
-            // Cannot use -Gm with -FI & -Yu, as this gives an
-            // internal compiler error, on the newer compilers
-            // ### work-around for a VS 2003 bug. Move to some prf file or remove completely.
-            p.remove("-Gm");
             return p;
-        } else if (value == "QMAKE_CXXFLAGS") {
-            // Remove internal compiler error option
-            // ### work-around for a VS 2003 bug. Move to some prf file or remove completely.
-            return MakefileGenerator::var(value).remove("-Gm");
         }
     }
 
@@ -238,7 +225,10 @@ void NmakeMakefileGenerator::init()
         precompObj = var("PRECOMPILED_DIR") + project->first("TARGET") + "_pch" + Option::obj_ext;
         precompPch = var("PRECOMPILED_DIR") + project->first("TARGET") + "_pch.pch";
         // Add linking of precompObj (required for whole precompiled classes)
-        project->values("OBJECTS") += precompObj;
+        // ### For clang_cl we currently let inline methods be generated in the normal objects,
+        // since the PCH object is buggy (as of clang 8.0.0)
+        if (!project->isActiveConfig("clang_cl"))
+            project->values("OBJECTS") += precompObj;
         // Add pch file to cleanup
         project->values("QMAKE_CLEAN") += precompPch;
         // Return to variable pool
@@ -248,7 +238,8 @@ void NmakeMakefileGenerator::init()
     if (usePCHC) {
         precompObjC = var("PRECOMPILED_DIR") + project->first("TARGET") + "_pch_c" + Option::obj_ext;
         precompPchC = var("PRECOMPILED_DIR") + project->first("TARGET") + "_pch_c.pch";
-        project->values("OBJECTS") += precompObjC;
+        if (!project->isActiveConfig("clang_cl"))
+            project->values("OBJECTS") += precompObjC;
         project->values("QMAKE_CLEAN") += precompPchC;
         project->values("PRECOMPILED_OBJECT_C") = ProStringList(precompObjC);
         project->values("PRECOMPILED_PCH_C")    = ProStringList(precompPchC);
@@ -281,10 +272,6 @@ void NmakeMakefileGenerator::init()
     if (project->isActiveConfig("debug")) {
         project->values("QMAKE_CLEAN").append(targetBase + ".ilk");
         project->values("QMAKE_CLEAN").append(targetBase + ".idb");
-    } else {
-        ProStringList &defines = project->values("DEFINES");
-        if (!defines.contains("NDEBUG"))
-            defines.append("NDEBUG");
     }
 
     if (project->values("QMAKE_APP_FLAG").isEmpty() && project->isActiveConfig("dll")) {
@@ -314,7 +301,7 @@ void NmakeMakefileGenerator::writeImplicitRulesPart(QTextStream &t)
         t << " " << (*cit);
     for(QStringList::Iterator cppit = Option::cpp_ext.begin(); cppit != Option::cpp_ext.end(); ++cppit)
         t << " " << (*cppit);
-    t << endl << endl;
+    t << Qt::endl << Qt::endl;
 
     bool useInferenceRules = !project->isActiveConfig("no_batch");
     QSet<QString> source_directories;
@@ -346,7 +333,7 @@ void NmakeMakefileGenerator::writeImplicitRulesPart(QTextStream &t)
         QHash<QString, QString> fileNames;
         bool duplicatesFound = false;
         const QStringList sourceFilesFilter = sourceFilesForImplicitRulesFilter();
-        QStringList fixifiedSourceDirs = fileFixify(source_directories.toList(), FileFixifyAbsolute);
+        QStringList fixifiedSourceDirs = fileFixify(QList<QString>(source_directories.constBegin(), source_directories.constEnd()), FileFixifyAbsolute);
         fixifiedSourceDirs.removeDuplicates();
         for (const QString &sourceDir : qAsConst(fixifiedSourceDirs)) {
             QDirIterator dit(sourceDir, sourceFilesFilter, QDir::Files | QDir::NoDotAndDotDot);
@@ -393,9 +380,9 @@ void NmakeMakefileGenerator::writeImplicitRulesPart(QTextStream &t)
         }
     } else {
         for(QStringList::Iterator cppit = Option::cpp_ext.begin(); cppit != Option::cpp_ext.end(); ++cppit)
-            t << (*cppit) << Option::obj_ext << ":\n\t" << var("QMAKE_RUN_CXX_IMP") << endl << endl;
+            t << (*cppit) << Option::obj_ext << ":\n\t" << var("QMAKE_RUN_CXX_IMP") << Qt::endl << Qt::endl;
         for(QStringList::Iterator cit = Option::c_ext.begin(); cit != Option::c_ext.end(); ++cit)
-            t << (*cit) << Option::obj_ext << ":\n\t" << var("QMAKE_RUN_CC_IMP") << endl << endl;
+            t << (*cit) << Option::obj_ext << ":\n\t" << var("QMAKE_RUN_CC_IMP") << Qt::endl << Qt::endl;
     }
 
 }
@@ -498,7 +485,7 @@ void NmakeMakefileGenerator::writeBuildRulesPart(QTextStream &t)
     if(!project->isEmpty("QMAKE_POST_LINK")) {
         t << "\n\t" << var("QMAKE_POST_LINK");
     }
-    t << endl;
+    t << Qt::endl;
 }
 
 void NmakeMakefileGenerator::writeLinkCommand(QTextStream &t, const QString &extraFlags, const QString &extraInlineFileContent)

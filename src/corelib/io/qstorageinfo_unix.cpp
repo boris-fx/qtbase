@@ -60,6 +60,7 @@
 #elif defined(Q_OS_LINUX) || defined(Q_OS_HURD)
 #  include <mntent.h>
 #  include <sys/statvfs.h>
+#  include <sys/sysmacros.h>
 #elif defined(Q_OS_SOLARIS)
 #  include <sys/mnttab.h>
 #  include <sys/statvfs.h>
@@ -108,7 +109,7 @@
 #  endif // QT_LARGEFILE_SUPPORT
 #endif // Q_OS_BSD4
 
-#if QT_HAS_INCLUDE(<paths.h>)
+#if __has_include(<paths.h>)
 #  include <paths.h>
 #endif
 #ifndef _PATH_MOUNTED
@@ -152,7 +153,7 @@ private:
         //(2)  parent ID: the ID of the parent mount (or of self for the top of the mount tree).
 //      int parent_id;
         //(3)  major:minor: the value of st_dev for files on this filesystem (see stat(2)).
-//      dev_t rdev;
+        dev_t rdev;
         //(4)  root: the pathname of the directory in the filesystem which forms the root of this mount.
         char *subvolume;
         //(5)  mount point: the pathname of the mount point relative to the process's root directory.
@@ -220,7 +221,7 @@ static bool shouldIncludeFs(const QStorageIterator &it)
         return false;
     }
 
-#ifdef Q_OS_LINUX
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
     if (it.fileSystemType() == "rootfs")
         return false;
 #endif
@@ -468,8 +469,18 @@ inline bool QStorageIterator::next()
     size_t len = strlen(buffer.data());
     if (len == 0)
         return false;
-    if (ptr[len - 1] == '\n')
-        ptr[len - 1] = '\0';
+    while (Q_UNLIKELY(ptr[len - 1] != '\n' && !feof(fp))) {
+        // buffer wasn't large enough. Enlarge and try again.
+        // (we're readidng from the kernel, so OOM is unlikely)
+        buffer.resize((buffer.size() + 4096) & ~4095);
+        ptr = buffer.data();
+        if (fgets(ptr + len, buffer.size() - len, fp) == nullptr)
+            return false;
+
+        len += strlen(ptr + len);
+        Q_ASSERT(len < size_t(buffer.size()));
+    }
+    ptr[len - 1] = '\0';
 
     // parse the line
     bool ok;
@@ -493,8 +504,7 @@ inline bool QStorageIterator::next()
     int rdevminor = qstrtoll(ptr + 1, const_cast<const char **>(&ptr), 10, &ok);
     if (!ptr || !ok)
         return false;
-    Q_UNUSED(rdevmajor);
-    Q_UNUSED(rdevminor);
+    mnt.rdev = makedev(rdevmajor, rdevminor);
 
     if (*ptr != ' ')
         return false;
@@ -556,6 +566,21 @@ inline QByteArray QStorageIterator::fileSystemType() const
 
 inline QByteArray QStorageIterator::device() const
 {
+    // check that the device exists
+    if (mnt.mnt_fsname[0] == '/' && access(mnt.mnt_fsname, F_OK) != 0) {
+        // It doesn't, so let's try to resolve the dev_t from /dev/block.
+        // Note how strlen("4294967295") == digits10 + 1, so we need to add 1
+        // for each number, plus the ':'.
+        char buf[sizeof("/dev/block/") + 2 * std::numeric_limits<unsigned>::digits10 + 3];
+        QByteArray dev(PATH_MAX, Qt::Uninitialized);
+        char *devdata = dev.data();
+
+        snprintf(buf, sizeof(buf), "/dev/block/%u:%u", major(mnt.rdev), minor(mnt.rdev));
+        if (realpath(buf, devdata)) {
+            dev.truncate(strlen(devdata));
+            return dev;
+        }
+    }
     return QByteArray(mnt.mnt_fsname);
 }
 
@@ -812,7 +837,7 @@ void QStorageInfoPrivate::retrieveVolumeInfo()
         valid = true;
         ready = true;
 
-#if defined(Q_OS_INTEGRITY) || (defined(Q_OS_BSD4) && !defined(Q_OS_NETBSD))
+#if defined(Q_OS_INTEGRITY) || (defined(Q_OS_BSD4) && !defined(Q_OS_NETBSD)) || defined(Q_OS_RTEMS)
         bytesTotal = statfs_buf.f_blocks * statfs_buf.f_bsize;
         bytesFree = statfs_buf.f_bfree * statfs_buf.f_bsize;
         bytesAvailable = statfs_buf.f_bavail * statfs_buf.f_bsize;
@@ -822,7 +847,7 @@ void QStorageInfoPrivate::retrieveVolumeInfo()
         bytesAvailable = statfs_buf.f_bavail * statfs_buf.f_frsize;
 #endif
         blockSize = statfs_buf.f_bsize;
-#if defined(Q_OS_ANDROID) || defined(Q_OS_BSD4) || defined(Q_OS_INTEGRITY)
+#if defined(Q_OS_ANDROID) || defined(Q_OS_BSD4) || defined(Q_OS_INTEGRITY) || defined(Q_OS_RTEMS)
 #if defined(_STATFS_F_FLAGS)
         readOnly = (statfs_buf.f_flags & ST_RDONLY) != 0;
 #endif
@@ -846,7 +871,10 @@ QList<QStorageInfo> QStorageInfoPrivate::mountedVolumes()
 
         const QString mountDir = it.rootPath();
         QStorageInfo info(mountDir);
-        if (info.bytesTotal() == 0)
+        info.d->device = it.device();
+        info.d->fileSystemType = it.fileSystemType();
+        info.d->subvolume = it.subvolume();
+        if (info.bytesTotal() == 0 && info != root())
             continue;
         volumes.append(info);
     }

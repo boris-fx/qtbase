@@ -48,12 +48,13 @@
 **
 ****************************************************************************/
 
-#include <QtWidgets>
-
 #include "mainwindow.h"
 #include "stylesheeteditor.h"
 
-MainWindow::MainWindow()
+#include <QMessageBox>
+
+MainWindow::MainWindow(QWidget *parent)
+    : QMainWindow(parent)
 {
     ui.setupUi(this);
 
@@ -63,8 +64,8 @@ MainWindow::MainWindow()
 
     statusBar()->addWidget(new QLabel(tr("Ready")));
 
-    connect(ui.exitAction, SIGNAL(triggered()), qApp, SLOT(quit()));
-    connect(ui.aboutQtAction, SIGNAL(triggered()), qApp, SLOT(aboutQt()));
+    connect(ui.exitAction, &QAction::triggered, qApp, &QApplication::quit);
+    connect(ui.aboutQtAction, &QAction::triggered, qApp, &QApplication::aboutQt);
 }
 
 void MainWindow::on_editStyleAction_triggered()

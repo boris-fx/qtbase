@@ -6,7 +6,8 @@ QT += \
     core-private gui-private \
     service_support-private theme_support-private \
     fontdatabase_support-private \
-    edid_support-private
+    edid_support-private \
+    xkbcommon_support-private
 
 qtHaveModule(linuxaccessibility_support-private): \
     QT += linuxaccessibility_support-private
@@ -34,6 +35,7 @@ SOURCES = \
         qxcbeventdispatcher.cpp \
         qxcbconnection_basic.cpp \
         qxcbconnection_screens.cpp \
+        qxcbconnection_xi2.cpp \
         qxcbatom.cpp
 
 HEADERS = \
@@ -52,7 +54,6 @@ HEADERS = \
         qxcbimage.h \
         qxcbxsettings.h \
         qxcbsystemtraytracker.h \
-        qxcbxkbcommon.h \
         qxcbeventqueue.h \
         qxcbeventdispatcher.h \
         qxcbconnection_basic.h \
@@ -69,10 +70,6 @@ DEFINES += QT_BUILD_XCB_PLUGIN
 
 qtConfig(xcb-xlib) {
     QMAKE_USE += xcb_xlib
-}
-
-qtConfig(xcb-xinput) {
-    SOURCES += qxcbconnection_xi2.cpp
 }
 
 qtConfig(xcb-sm) {
@@ -94,20 +91,19 @@ qtConfig(vulkan) {
         qxcbvulkanwindow.h
 }
 
-!qtConfig(system-xcb) {
-    QMAKE_USE += xcb-static
-} else {
-    qtConfig(xcb-xinput): QMAKE_USE += xcb_xinput
-    QMAKE_USE += \
-        xcb_icccm xcb_image xcb_keysyms xcb_randr xcb_render xcb_renderutil \
-        xcb_shape xcb_shm xcb_sync xcb_xfixes xcb_xinerama
-}
-QMAKE_USE += xcb
+QMAKE_USE += \
+    xcb xcb_icccm xcb_image xcb_keysyms xcb_randr xcb_render xcb_renderutil \
+    xcb_shape xcb_shm xcb_sync xcb_xfixes xcb_xinerama xcb_xkb xkbcommon xkbcommon_x11
 
-QMAKE_USE += xkbcommon
-qtConfig(xkb) {
-    QMAKE_USE += xkbcommon_x11
-    qtConfig(system-xcb): QMAKE_USE += xcb_xkb
+qtConfig(system-xcb-xinput) {
+    QMAKE_USE += xcb_xinput
+} else {
+    # Use bundled xcb-xinput sources.
+    XCB_DIR = $$QT_SOURCE_TREE/src/3rdparty/xcb
+    INCLUDEPATH += $$XCB_DIR/include/
+    SOURCES += $$XCB_DIR/libxcb/xinput.c
+    # Ignore compiler warnings in 3rdparty C code.
+    QMAKE_CFLAGS+=-w
 }
 
 qtConfig(dlopen): QMAKE_USE += libdl

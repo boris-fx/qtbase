@@ -1,6 +1,8 @@
-TEMPLATE=subdirs
-SUBDIRS=\
+TEMPLATE = subdirs
+SUBDIRS = \
+   initmain \
+   outformat \
    qsignalspy \
    selftests \
 
-qtHaveModule(widgets):SUBDIRS += qabstractitemmodeltester
+qtHaveModule(widgets): SUBDIRS += qabstractitemmodeltester

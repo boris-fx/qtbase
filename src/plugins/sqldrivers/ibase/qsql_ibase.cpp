@@ -40,6 +40,7 @@
 #include "qsql_ibase_p.h"
 #include <qcoreapplication.h>
 #include <qdatetime.h>
+#include <qdeadlinetimer.h>
 #include <qvariant.h>
 #include <qsqlerror.h>
 #include <qsqlfield.h>
@@ -249,7 +250,7 @@ static QDateTime fromTimeStamp(char *buffer)
     return QDateTime(d, t);
 }
 
-static ISC_TIME toTime(const QTime &t)
+static ISC_TIME toTime(QTime t)
 {
     static const QTime midnight(0, 0, 0, 0);
     return (ISC_TIME)midnight.msecsTo(t) * 10;
@@ -265,7 +266,7 @@ static QTime fromTime(char *buffer)
     return t;
 }
 
-static ISC_DATE toDate(const QDate &t)
+static ISC_DATE toDate(QDate t)
 {
     static const QDate basedate(1858, 11, 17);
     ISC_DATE date;
@@ -729,7 +730,7 @@ static char* createArrayBuffer(char *buffer, const QList<QVariant> &list,
     if (curDim != dim) {
         for(i = 0; i < list.size(); ++i) {
 
-          if (list.at(i).type() != QVariant::List) { // dimensions mismatch
+          if (list.at(i).userType() != QVariant::List) { // dimensions mismatch
               error = QLatin1String("Array dimensons mismatch. Fieldname: %1");
               return 0;
           }
@@ -1161,7 +1162,7 @@ bool QIBaseResult::gotoNext(QSqlCachedResult::ValueCache& row, int rowIdx)
             // null value
             QVariant v;
             v.convert(qIBaseTypeName2(d->sqlda->sqlvar[i].sqltype, d->sqlda->sqlvar[i].sqlscale < 0));
-            if(v.type() == QVariant::Double) {
+            if (v.userType() == QVariant::Double) {
                 switch(numericalPrecisionPolicy()) {
                 case QSql::LowPrecisionInt32:
                     v.convert(QVariant::Int);
@@ -1396,8 +1397,8 @@ QSqlRecord QIBaseResult::record() const
             q.exec(QLatin1String("select b.RDB$FIELD_PRECISION, b.RDB$FIELD_SCALE, b.RDB$FIELD_LENGTH, a.RDB$NULL_FLAG "
                     "FROM RDB$RELATION_FIELDS a, RDB$FIELDS b "
                     "WHERE b.RDB$FIELD_NAME = a.RDB$FIELD_SOURCE "
-                    "AND a.RDB$RELATION_NAME = '") + QString::fromLatin1(v.relname, v.relname_length).toUpper() + QLatin1String("' "
-                    "AND a.RDB$FIELD_NAME = '") + QString::fromLatin1(v.sqlname, v.sqlname_length).toUpper() + QLatin1String("' "));
+                    "AND a.RDB$RELATION_NAME = '") + QString::fromLatin1(v.relname, v.relname_length) + QLatin1String("' "
+                    "AND a.RDB$FIELD_NAME = '") + QString::fromLatin1(v.sqlname, v.sqlname_length) + QLatin1String("' "));
             if(q.first()) {
                 if(v.sqlscale < 0) {
                     f.setLength(q.value(0).toInt());
@@ -1476,7 +1477,7 @@ bool QIBaseDriver::open(const QString & db,
     if (isOpen())
         close();
 
-    const QStringList opts(connOpts.split(QLatin1Char(';'), QString::SkipEmptyParts));
+    const QStringList opts(connOpts.split(QLatin1Char(';'), Qt::SkipEmptyParts));
 
     QString encString;
     QByteArray role;
@@ -1570,10 +1571,9 @@ void QIBaseDriver::close()
             d->eventBuffers.clear();
 
 #if defined(FB_API_VER)
-            // Workaround for Firebird crash
-            QTime timer;
-            timer.start();
-            while (timer.elapsed() < 500)
+            // TODO check whether this workaround for Firebird crash is still needed
+            QDeadlineTimer timer(500);
+            while (!timer.hasExpired())
                 QCoreApplication::processEvents();
 #endif
         }
@@ -1914,7 +1914,12 @@ void QIBaseDriver::qHandleEventNotification(void *updatedResultBuffer)
         if (counts[0]) {
 
             if (eBuffer->subscriptionState == QIBaseEventBuffer::Subscribed) {
+#if QT_DEPRECATED_SINCE(5, 15)
+QT_WARNING_PUSH
+QT_WARNING_DISABLE_DEPRECATED
                 emit notification(i.key());
+QT_WARNING_POP
+#endif
                 emit notification(i.key(), QSqlDriver::UnknownSource, QVariant());
             }
             else if (eBuffer->subscriptionState == QIBaseEventBuffer::Starting)

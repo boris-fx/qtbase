@@ -48,19 +48,37 @@
 **
 ****************************************************************************/
 
-#include <QtWidgets>
-
+#include "mainwindow.h"
 #include "iconpreviewarea.h"
 #include "iconsizespinbox.h"
 #include "imagedelegate.h"
-#include "mainwindow.h"
+
+#include <QApplication>
+#include <QButtonGroup>
+#include <QCheckBox>
+#include <QFileDialog>
+#include <QHeaderView>
+#include <QFormLayout>
+#include <QGridLayout>
+#include <QGroupBox>
+#include <QImageReader>
+#include <QLabel>
+#include <QMenuBar>
+#include <QMessageBox>
+#include <QRadioButton>
+#include <QScreen>
+#include <QStandardPaths>
+#include <QStyleFactory>
+#include <QTableWidget>
+#include <QWindow>
 
 //! [40]
 enum { OtherSize = QStyle::PM_CustomBase };
 //! [40]
 
 //! [0]
-MainWindow::MainWindow()
+MainWindow::MainWindow(QWidget *parent)
+    : QMainWindow(parent)
 {
     QWidget *centralWidget = new QWidget(this);
     setCentralWidget(centralWidget);
@@ -121,7 +139,8 @@ void MainWindow::changeStyle(bool checked)
     Q_ASSERT(style);
     QApplication::setStyle(style);
 
-    foreach (QAbstractButton *button, sizeButtonGroup->buttons()) {
+    const QList<QAbstractButton*> buttons = sizeButtonGroup->buttons();
+    for (QAbstractButton *button : buttons) {
         const QStyle::PixelMetric metric = static_cast<QStyle::PixelMetric>(sizeButtonGroup->id(button));
         const int value = style->pixelMetric(metric);
         switch (metric) {
@@ -197,16 +216,13 @@ void MainWindow::changeIcon()
             QImage image(fileName);
             if (!image.isNull())
                 icon.addPixmap(QPixmap::fromImage(image), mode, state);
-//! [8] //! [9]
+//! [8]
         }
-//! [9] //! [10]
     }
-//! [10]
-
 //! [11]
     previewArea->setIcon(icon);
-}
 //! [11]
+}
 
 void MainWindow::addSampleImages()
 {
@@ -229,7 +245,8 @@ void MainWindow::addImages(const QString &directory)
 {
     QFileDialog fileDialog(this, tr("Open Images"), directory);
     QStringList mimeTypeFilters;
-    foreach (const QByteArray &mimeTypeName, QImageReader::supportedMimeTypes())
+    const QList<QByteArray> mimeTypes = QImageReader::supportedMimeTypes();
+    for (const QByteArray &mimeTypeName : mimeTypes)
         mimeTypeFilters.append(mimeTypeName);
     mimeTypeFilters.sort();
     fileDialog.setMimeTypeFilters(mimeTypeFilters);
@@ -245,7 +262,7 @@ void MainWindow::addImages(const QString &directory)
 
 void MainWindow::loadImages(const QStringList &fileNames)
 {
-    foreach (const QString &fileName, fileNames) {
+    for (const QString &fileName : fileNames) {
         const int row = imagesTable->rowCount();
         imagesTable->setRowCount(row + 1);
 //! [13]
@@ -260,17 +277,15 @@ void MainWindow::loadImages(const QStringList &fileNames)
                .arg(QDir::toNativeSeparators(fileInfo.absolutePath()), fileInfo.fileName())
                .arg(fileInfo2x.exists() ? fileInfo2x.fileName() : tr("<None>"))
                .arg(image.width()).arg(image.height());
-//! [13] //! [14]
         QTableWidgetItem *fileItem = new QTableWidgetItem(imageName);
         fileItem->setData(Qt::UserRole, fileName);
         fileItem->setIcon(QPixmap::fromImage(image));
         fileItem->setFlags((fileItem->flags() | Qt::ItemIsUserCheckable) & ~Qt::ItemIsEditable);
         fileItem->setToolTip(toolTip);
-//! [14]
+//! [13]
 
 //! [15]
         QIcon::Mode mode = QIcon::Normal;
-//! [15] //! [16]
         QIcon::State state = QIcon::Off;
         if (guessModeStateAct->isChecked()) {
             if (imageName.contains(QLatin1String("_act"), Qt::CaseInsensitive))
@@ -282,13 +297,11 @@ void MainWindow::loadImages(const QStringList &fileNames)
 
             if (imageName.contains(QLatin1String("_on"), Qt::CaseInsensitive))
                 state = QIcon::On;
-//! [16] //! [17]
+//! [15]
         }
-//! [17]
 
 //! [18]
         imagesTable->setItem(row, 0, fileItem);
-//! [18] //! [19]
         QTableWidgetItem *modeItem =
             new QTableWidgetItem(IconPreviewArea::iconModeNames().at(IconPreviewArea::iconModes().indexOf(mode)));
         modeItem->setToolTip(toolTip);
@@ -301,9 +314,9 @@ void MainWindow::loadImages(const QStringList &fileNames)
         imagesTable->openPersistentEditor(stateItem);
 
         fileItem->setCheckState(Qt::Checked);
+//! [18]
     }
 }
-//! [19]
 
 void MainWindow::useHighDpiPixmapsChanged(int checkState)
 {
@@ -330,9 +343,7 @@ QWidget *MainWindow::createImagesGroupBox()
 //! [21]
 
 //! [22]
-    QStringList labels;
-//! [22] //! [23]
-    labels << tr("Image") << tr("Mode") << tr("State");
+    const QStringList labels({tr("Image"), tr("Mode"), tr("State")});
 
     imagesTable->horizontalHeader()->setDefaultSectionSize(90);
     imagesTable->setColumnCount(3);
@@ -341,18 +352,17 @@ QWidget *MainWindow::createImagesGroupBox()
     imagesTable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Fixed);
     imagesTable->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Fixed);
     imagesTable->verticalHeader()->hide();
-//! [23]
+//! [22]
 
 //! [24]
     connect(imagesTable, &QTableWidget::itemChanged,
-//! [24] //! [25]
             this, &MainWindow::changeIcon);
 
     QVBoxLayout *layout = new QVBoxLayout(imagesGroupBox);
     layout->addWidget(imagesTable);
     return imagesGroupBox;
+//! [24]
 }
-//! [25]
 
 //! [26]
 QWidget *MainWindow::createIconSizeGroupBox()
@@ -408,8 +418,8 @@ QWidget *MainWindow::createIconSizeGroupBox()
     layout->addLayout(otherSizeLayout, 3, 0, 1, 2);
     layout->setRowStretch(4, 1);
     return iconSizeGroupBox;
-}
 //! [27]
+}
 
 void MainWindow::screenChanged()
 {
@@ -468,7 +478,8 @@ void MainWindow::createActions()
     QMenu *viewMenu = menuBar()->addMenu(tr("&View"));
 
     styleActionGroup = new QActionGroup(this);
-    foreach (const QString &styleName, QStyleFactory::keys()) {
+    const QStringList styleKeys = QStyleFactory::keys();
+    for (const QString &styleName : styleKeys) {
         QAction *action = new QAction(tr("%1 Style").arg(styleName), styleActionGroup);
         action->setData(styleName);
         action->setCheckable(true);
@@ -507,10 +518,11 @@ void MainWindow::createContextMenu()
 //! [31]
 void MainWindow::checkCurrentStyle()
 {
-    foreach (QAction *action, styleActionGroup->actions()) {
-        QString styleName = action->data().toString();
-        QScopedPointer<QStyle> candidate(QStyleFactory::create(styleName));
-        Q_ASSERT(!candidate.isNull());
+    const QList<QAction *> actions = styleActionGroup->actions();
+    for (QAction *action : actions) {
+        const QString styleName = action->data().toString();
+        const std::unique_ptr<QStyle> candidate{QStyleFactory::create(styleName)};
+        Q_ASSERT(candidate);
         if (candidate->metaObject()->className()
                 == QApplication::style()->metaObject()->className()) {
             action->trigger();

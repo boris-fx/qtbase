@@ -126,6 +126,46 @@ void tst_QGlobal::for_each()
         QCOMPARE(i, counter++);
     }
     QCOMPARE(counter, list.count());
+
+    // Should also work with an existing variable
+    int local;
+    counter = 0;
+    foreach (local, list) {
+        QCOMPARE(local, counter++);
+    }
+    QCOMPARE(counter, list.count());
+    QCOMPARE(local, counter - 1);
+
+    // Test the macro does not mess if/else conditions
+    counter = 0;
+    if (true)
+        foreach (int i, list)
+            QCOMPARE(i, counter++);
+    else
+        QFAIL("If/Else mismatch");
+    QCOMPARE(counter, list.count());
+
+    counter = 0;
+    if (false)
+        foreach (int i, list)
+            if (i) QFAIL("If/Else mismatch");
+            else QFAIL("If/Else mismatch");
+    else
+        foreach (int i, list)
+            if (false) { }
+            else QCOMPARE(i, counter++);
+    QCOMPARE(counter, list.count());
+
+    // break and continue
+    counter = 0;
+    foreach (int i, list) {
+        if (i == 0)
+            continue;
+        QCOMPARE(i, (counter++) + 1);
+        if (i == 3)
+            break;
+    }
+    QCOMPARE(counter, 3);
 }
 
 void tst_QGlobal::qassert()
@@ -416,19 +456,15 @@ typedef int (Empty::*memFun) ();
     } while (false)                                                         \
     /**/
 
-#ifdef Q_COMPILER_RVALUE_REFS
 #define TEST_AlignOf_RValueRef(type, alignment) \
         TEST_AlignOf_impl(type, alignment)
-#else
-#define TEST_AlignOf_RValueRef(type, alignment) do {} while (false)
-#endif
 
 #define TEST_AlignOf_impl(type, alignment) \
     do { \
         QCOMPARE(Q_ALIGNOF(type), size_t(alignment)); \
         /* Compare to native operator for compilers that support it,
            otherwise...  erm... check consistency! :-) */ \
-        QCOMPARE(QT_EMULATED_ALIGNOF(type), Q_ALIGNOF(type)); \
+        QCOMPARE(alignof(type), Q_ALIGNOF(type)); \
     } while (false)
     /**/
 
@@ -481,7 +517,7 @@ void tst_QGlobal::qAlignOf()
     TEST_AlignOf_impl(AlignmentInStruct<double>, Q_ALIGNOF(AlignmentInStruct<qint64>));
 
     // 32-bit x86 ABI, Clang disagrees with gcc
-#if !defined(Q_PROCESSOR_X86_32) || !defined(Q_CC_CLANG)
+#if !defined(Q_PROCESSOR_X86_32) || !defined(Q_CC_CLANG) || defined(Q_OS_ANDROID)
     TEST_AlignOf_impl(qint64 [5],       Q_ALIGNOF(qint64));
 #else
     TEST_AlignOf_impl(qint64 [5],       Q_ALIGNOF(AlignmentInStruct<qint64>));

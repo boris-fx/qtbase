@@ -84,6 +84,8 @@ class QVulkanInstance;
 class Q_GUI_EXPORT QPlatformIntegration
 {
 public:
+    Q_DISABLE_COPY_MOVE(QPlatformIntegration)
+
     enum Capability {
         ThreadedPixmaps = 1,
         OpenGL,
@@ -103,7 +105,9 @@ public:
         AllGLFunctionsQueryable,
         ApplicationIcon,
         SwitchableWidgetComposition,
-        TopStackedNativeChildWindows
+        TopStackedNativeChildWindows,
+        OpenGLOnRasterSurface,
+        MaximizeUsingFullscreenGeometry
     };
 
     virtual ~QPlatformIntegration() { }
@@ -112,7 +116,7 @@ public:
 
     virtual QPlatformPixmap *createPlatformPixmap(QPlatformPixmap::PixelType type) const;
     virtual QPlatformWindow *createPlatformWindow(QWindow *window) const = 0;
-    virtual QPlatformWindow *createForeignWindow(QWindow *, WId) const { return 0; }
+    virtual QPlatformWindow *createForeignWindow(QWindow *, WId) const { return nullptr; }
     virtual QPlatformBackingStore *createPlatformBackingStore(QWindow *window) const = 0;
 #ifndef QT_NO_OPENGL
     virtual QPlatformOpenGLContext *createPlatformOpenGLContext(QOpenGLContext *context) const;
@@ -190,10 +194,6 @@ public:
 #endif
     virtual void setApplicationIcon(const QIcon &icon) const;
 
-#if QT_DEPRECATED_SINCE(5, 12)
-    QT_DEPRECATED_X("Use QWindowSystemInterface::handleScreenRemoved") void removeScreen(QScreen *screen);
-#endif
-
     virtual void beep() const;
 
 #if QT_CONFIG(vulkan) || defined(Q_CLANG_QDOC)
@@ -201,11 +201,7 @@ public:
 #endif
 
 protected:
-#if QT_DEPRECATED_SINCE(5, 12)
-    QT_DEPRECATED_X("Use QWindowSystemInterface::handleScreenAdded") void screenAdded(QPlatformScreen *screen, bool isPrimary = false);
-    QT_DEPRECATED_X("Use QWindowSystemInterface::handleScreenRemoved") void destroyScreen(QPlatformScreen *screen);
-    QT_DEPRECATED_X("Use QWindowSystemInterface::handlePrimaryScreenChanged") void setPrimaryScreen(QPlatformScreen *newPrimary);
-#endif
+    QPlatformIntegration() = default;
 };
 
 QT_END_NAMESPACE

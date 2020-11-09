@@ -589,7 +589,7 @@
     \snippet graphicsview/diagramscene/diagramscene.cpp 14
 
     The scene has single selection, i.e., only one item can be
-    selected at any given time. The foreach will then loop one time
+    selected at any given time. The for loop will then loop one time
     with the selected item or none if no item is selected. \c
     isItemChange() is used to check whether a selected item exists
     and also is of the specified diagram \a type.
@@ -643,7 +643,9 @@
     This function is called when the item is removed from the scene
     and removes all arrows that are connected to this item. The arrow
     must be removed from the \c arrows list of both its start and end
-    item.
+    item. Since either the start or the end item is the object where
+    this function is currently called, we have to make sure to work on
+    a copy of arrows since removeArrow() is modifying this container.
 
     Here is the \c addArrow() function:
 

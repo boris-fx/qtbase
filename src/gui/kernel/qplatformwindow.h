@@ -63,6 +63,7 @@ QT_BEGIN_NAMESPACE
 
 class QPlatformScreen;
 class QPlatformWindowPrivate;
+class QScreen;
 class QWindow;
 class QIcon;
 class QRegion;
@@ -71,6 +72,8 @@ class Q_GUI_EXPORT QPlatformWindow : public QPlatformSurface
 {
     Q_DECLARE_PRIVATE(QPlatformWindow)
 public:
+    Q_DISABLE_COPY_MOVE(QPlatformWindow)
+
     explicit QPlatformWindow(QWindow *window);
     ~QPlatformWindow() override;
 
@@ -129,8 +132,8 @@ public:
 
     virtual bool windowEvent(QEvent *event);
 
-    virtual bool startSystemResize(const QPoint &pos, Qt::Corner corner);
-    virtual bool startSystemMove(const QPoint &pos);
+    virtual bool startSystemResize(Qt::Edges edges);
+    virtual bool startSystemMove();
 
     virtual void setFrameStrutEventsEnabled(bool enabled);
     virtual bool frameStrutEventsEnabled() const;
@@ -140,8 +143,9 @@ public:
 
     virtual void invalidateSurface();
 
-    static QRect initialGeometry(const QWindow *w,
-        const QRect &initialGeometry, int defaultWidth, int defaultHeight);
+    static QRect initialGeometry(const QWindow *w, const QRect &initialGeometry,
+                                 int defaultWidth, int defaultHeight,
+                                 const QScreen **resultingScreenReturn = nullptr);
 
     virtual void requestUpdate();
     bool hasPendingUpdateRequest() const;
@@ -164,8 +168,6 @@ protected:
     static QSize constrainWindowSize(const QSize &size);
 
     QScopedPointer<QPlatformWindowPrivate> d_ptr;
-private:
-    Q_DISABLE_COPY(QPlatformWindow)
 };
 
 QT_END_NAMESPACE

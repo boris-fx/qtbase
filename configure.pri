@@ -14,21 +14,26 @@ defineTest(qtConfCommandline_qmakeArgs) {
 }
 
 defineTest(qtConfCommandline_cxxstd) {
-    msvc: \
-        qtConfAddError("Command line option -c++std is not supported with MSVC compilers.")
-
     arg = $${1}
     val = $${2}
     isEmpty(val): val = $$qtConfGetNextCommandlineArg()
     !contains(val, "^-.*"):!isEmpty(val) {
         contains(val, "(c\+\+)?11") {
             qtConfCommandlineSetInput("c++14", "no")
+            qtConfCommandlineSetInput("c++1z", "no")
+            qtConfCommandlineSetInput("c++2a", "no")
         } else: contains(val, "(c\+\+)?(14|1y)") {
             qtConfCommandlineSetInput("c++14", "yes")
             qtConfCommandlineSetInput("c++1z", "no")
-        } else: contains(val, "(c\+\+)?(1z)") {
+            qtConfCommandlineSetInput("c++2a", "no")
+        } else: contains(val, "(c\+\+)?(17|1z)") {
             qtConfCommandlineSetInput("c++14", "yes")
             qtConfCommandlineSetInput("c++1z", "yes")
+            qtConfCommandlineSetInput("c++2a", "no")
+        } else: contains(val, "(c\+\+)?(2a)") {
+            qtConfCommandlineSetInput("c++14", "yes")
+            qtConfCommandlineSetInput("c++1z", "yes")
+            qtConfCommandlineSetInput("c++2a", "yes")
         } else {
             qtConfAddError("Invalid argument $$val to command line parameter $$arg")
         }
@@ -48,6 +53,8 @@ defineTest(qtConfCommandline_sanitize) {
             qtConfCommandlineSetInput("sanitize_thread", "yes")
         } else: equals(val, "memory") {
             qtConfCommandlineSetInput("sanitize_memory", "yes")
+        } else: equals(val, "fuzzer-no-link") {
+            qtConfCommandlineSetInput("sanitize_fuzzer_no_link", "yes")
         } else: equals(val, "undefined") {
             qtConfCommandlineSetInput("sanitize_undefined", "yes")
         } else {
@@ -58,9 +65,28 @@ defineTest(qtConfCommandline_sanitize) {
     }
 }
 
+defineTest(qtConfCommandline_coverage) {
+    arg = $${1}
+    val = $${2}
+    isEmpty(val): val = $$qtConfGetNextCommandlineArg()
+    !contains(val, "^-.*"):!isEmpty(val) {
+        equals(val, "trace-pc-guard") {
+            qtConfCommandlineSetInput("coverage_trace_pc_guard", "yes")
+        } else: equals(val, "source-based") {
+            qtConfCommandlineSetInput("coverage_source_based", "yes")
+        } else: {
+            qtConfAddError("Invalid argument $$val to command line parameter $$arg")
+        }
+    } else {
+        qtConfAddError("Missing argument to command line parameter $$arg")
+    }
+}
+
 # callbacks
 
 defineReplace(qtConfFunc_crossCompile) {
+    !isEmpty(config.input.xplatform): return(true)
+    !isEmpty(config.input.device-option): return(true)
     !isEmpty(config.input.sysroot): return(true)
     spec = $$[QMAKE_SPEC]
     !equals(spec, $$[QMAKE_XSPEC]): return(true)
@@ -72,7 +98,7 @@ defineReplace(qtConfFunc_licenseCheck) {
         hasOpenSource = true
     else: \
         hasOpenSource = false
-    exists($$QT_SOURCE_TREE/LICENSE.QT-LICENSE-AGREEMENT-4.0): \
+    exists($$QT_SOURCE_TREE/LICENSE.QT-LICENSE-AGREEMENT): \
         hasCommercial = true
     else: \
         hasCommercial = false
@@ -202,7 +228,7 @@ defineReplace(qtConfFunc_licenseCheck) {
             affix = either
         }
     } else {
-        theLicense = $$cat($$QT_SOURCE_TREE/LICENSE.QT-LICENSE-AGREEMENT-4.0, lines)
+        theLicense = $$cat($$QT_SOURCE_TREE/LICENSE.QT-LICENSE-AGREEMENT, lines)
         theLicense = $$first(theLicense)
         showWhat = "Type '?' to view the $${theLicense}."
     }
@@ -229,7 +255,7 @@ defineReplace(qtConfFunc_licenseCheck) {
             } else: equals(val, n)|equals(val, no) {
                 return(false)
             } else: equals(commercial, yes):equals(val, ?) {
-                licenseFile = $$QT_SOURCE_TREE/LICENSE.QT-LICENSE-AGREEMENT-4.0
+                licenseFile = $$QT_SOURCE_TREE/LICENSE.QT-LICENSE-AGREEMENT
             } else: equals(commercial, no):equals(val, l) {
                 licenseFile = $$QT_SOURCE_TREE/LICENSE.LGPL3
             } else: equals(commercial, no):equals(val, g):$$gpl2Ok {
@@ -267,17 +293,14 @@ defineTest(qtConfTest_architecture) {
         error("Could not determine $$eval($${1}.label). See config.log for details.")
 
     test = $$eval($${1}.test)
+    output = $$eval($${1}.output)
     test_out_dir = $$OUT_PWD/$$basename(QMAKE_CONFIG_TESTS_DIR)/$$test
-    unix:exists($$test_out_dir/arch): \
-        content = $$cat($$test_out_dir/arch, blob)
-    else: win32:exists($$test_out_dir/arch.exe): \
-        content = $$cat($$test_out_dir/arch.exe, blob)
-    else: android:exists($$test_out_dir/libarch.so): \
-        content = $$cat($$test_out_dir/libarch.so, blob)
-    else: wasm:exists($$test_out_dir/arch.wasm): \
-        content = $$cat($$test_out_dir/arch.wasm, blob)
+    test_out_file = $$test_out_dir/$$cat($$test_out_dir/$${output}.target.txt)
+    exists($$test_out_file): \
+        content = $$cat($$test_out_file, blob)
     else: \
         error("$$eval($${1}.label) detection binary not found.")
+    content = $$cat($$test_out_file, blob)
 
     arch_magic = ".*==Qt=magic=Qt== Architecture:([^\\0]*).*"
     subarch_magic = ".*==Qt=magic=Qt== Sub-architecture:([^\\0]*).*"
@@ -556,14 +579,7 @@ defineTest(qtConfOutput_prepareOptions) {
             qtConfFatalError("Cannot find Android NDK." \
                              "Please use -android-ndk option to specify one.")
 
-        ndk_tc_ver = $$eval(config.input.android-toolchain-version)
-        isEmpty(ndk_tc_ver): \
-            ndk_tc_ver = 4.9
-        !exists($$ndk_root/toolchains/arm-linux-androideabi-$$ndk_tc_ver/prebuilt/*): \
-            qtConfFatalError("Cannot detect Android NDK toolchain." \
-                             "Please use -android-toolchain-version to specify it.")
-
-        ndk_tc_pfx = $$ndk_root/toolchains/arm-linux-androideabi-$$ndk_tc_ver/prebuilt
+        ndk_tc_pfx = $$ndk_root/toolchains/llvm/prebuilt
         ndk_host = $$eval(config.input.android-ndk-host)
         isEmpty(ndk_host): \
             ndk_host = $$getenv(ANDROID_NDK_HOST)
@@ -597,31 +613,28 @@ defineTest(qtConfOutput_prepareOptions) {
                 qtConfAddNote("Available Android host does not match host architecture.")
             }
         } else {
-            !exists($$ndk_tc_pfx/$$ndk_host/*): \
-                qtConfFatalError("Specified Android NDK host is invalid.")
+            !exists($$ndk_tc_pfx/$$ndk_host/*) {
+                err = "Specified Android NDK host '$$ndk_host' is invalid. Expected files in the following directory to exist:"
+                err += '$${ndk_tc_pfx}/$${ndk_host}/'
+                qtConfFatalError($$err)
+            }
         }
 
-        target_arch = $$eval(config.input.android-arch)
-        isEmpty(target_arch): \
-            target_arch = armeabi-v7a
-
+        android_abis = $$eval(config.input.android-abis)
+        isEmpty(android_abis): \
+            android_abis = $$eval(config.input.android-arch)
+        isEmpty(android_abis): \
+            android_abis = armeabi-v7a,arm64-v8a,x86,x86_64
         platform = $$eval(config.input.android-ndk-platform)
-        isEmpty(platform): equals(target_arch, arm64-v8a): \
-            platform = android-21
-
-        isEmpty(platform): equals(target_arch, x86_64): \
-            platform = android-21
-
         isEmpty(platform): \
-            platform = android-16  ### the windows configure disagrees ...
+            platform = android-21
 
         $${currentConfig}.output.devicePro += \
             "DEFAULT_ANDROID_SDK_ROOT = $$val_escape(sdk_root)" \
             "DEFAULT_ANDROID_NDK_ROOT = $$val_escape(ndk_root)" \
             "DEFAULT_ANDROID_PLATFORM = $$platform" \
             "DEFAULT_ANDROID_NDK_HOST = $$ndk_host" \
-            "DEFAULT_ANDROID_TARGET_ARCH = $$target_arch" \
-            "DEFAULT_ANDROID_NDK_TOOLCHAIN_VERSION = $$ndk_tc_ver"
+            "DEFAULT_ANDROID_ABIS = $$split(android_abis, ',')"
     }
 
     export($${currentConfig}.output.devicePro)
@@ -730,7 +743,13 @@ defineTest(qtConfOutput_preparePaths) {
         }
         have_prefix = false
     } else {
-        config.input.prefix = $$absolute_path($$config.input.prefix, $$OUT_PWD)
+        equals(XSPEC, $$[QMAKE_SPEC]) {
+            # Only make the user-specified prefix absolute if we're not cross-compiling.
+            config.input.prefix = $$absolute_path($$config.input.prefix, $$OUT_PWD)
+        } else {
+            # But we still must normalize path separators.
+            config.input.prefix = $$replace(config.input.prefix, \\\\, /)
+        }
         have_prefix = true
     }
 
@@ -758,6 +777,11 @@ defineTest(qtConfOutput_preparePaths) {
             config.input.hostprefix = $$absolute_path($$config.input.hostprefix, $$OUT_PWD)
         have_hostprefix = true
     }
+
+    equals(config.input.prefix, $$config.input.extprefix): \
+        qmake_crossbuild = false
+    else: \
+        qmake_crossbuild = true
 
     PREFIX_COMPLAINTS =
     PREFIX_REMINDER = false
@@ -797,6 +821,20 @@ defineTest(qtConfOutput_preparePaths) {
         processQtPath(host, hostlibdir, $$config.rel_input.libdir)
         processQtPath(host, hostdatadir, $$config.rel_input.archdatadir)
     }
+
+    win32:$$qtConfEvaluate("features.shared") {
+        # Windows DLLs are in the bin dir.
+        libloc_absolute_path = $$absolute_path($$config.rel_input.bindir, $$config.input.prefix)
+    } else {
+        libloc_absolute_path = $$absolute_path($$config.rel_input.libdir, $$config.input.prefix)
+    }
+    config.input.liblocation_to_prefix = $$relative_path($$config.input.prefix, $$libloc_absolute_path)
+    config.qtbase.features.shared.available =
+    export(config.qtbase.features.shared.available)
+
+    hostbindir_absolute_path = $$absolute_path($$config.rel_input.hostbindir, $$config.input.hostprefix)
+    config.input.hostbindir_to_hostprefix = $$relative_path($$config.input.hostprefix, $$hostbindir_absolute_path)
+    config.input.hostbindir_to_extprefix = $$relative_path($$config.input.extprefix, $$hostbindir_absolute_path)
 
     !isEmpty(PREFIX_COMPLAINTS) {
         PREFIX_COMPLAINTS = "$$join(PREFIX_COMPLAINTS, "$$escape_expand(\\n)Note: ")"
@@ -839,9 +877,6 @@ defineTest(qtConfOutput_preparePaths) {
     addConfStr($$[QMAKE_SPEC])
 
     $${currentConfig}.output.qconfigSource = \
-        "/* Installation date */" \
-        "static const char qt_configure_installation     [12+11]  = \"qt_instdate=2012-12-20\";" \
-        "" \
         "/* Installation Info */" \
         "static const char qt_configure_prefix_path_str  [12+256] = \"qt_prfxpath=$$config.input.prefix\";" \
         "$${LITERAL_HASH}ifdef QT_BUILD_QMAKE" \
@@ -863,9 +898,13 @@ defineTest(qtConfOutput_preparePaths) {
         ";" \
         "" \
         "$${LITERAL_HASH}define QT_CONFIGURE_SETTINGS_PATH \"$$config.rel_input.sysconfdir\"" \
+        "$${LITERAL_HASH}define QT_CONFIGURE_LIBLOCATION_TO_PREFIX_PATH \"$$config.input.liblocation_to_prefix\"" \
+        "$${LITERAL_HASH}define QT_CONFIGURE_HOSTBINDIR_TO_EXTPREFIX_PATH \"$$config.input.hostbindir_to_extprefix\"" \
+        "$${LITERAL_HASH}define QT_CONFIGURE_HOSTBINDIR_TO_HOSTPREFIX_PATH \"$$config.input.hostbindir_to_hostprefix\"" \
         "" \
         "$${LITERAL_HASH}ifdef QT_BUILD_QMAKE" \
         "$${LITERAL_HASH} define QT_CONFIGURE_SYSROOTIFY_PREFIX $$qmake_sysrootify" \
+        "$${LITERAL_HASH} define QT_CONFIGURE_CROSSBUILD $$qmake_crossbuild" \
         "$${LITERAL_HASH}endif" \
         "" \
         "$${LITERAL_HASH}define QT_CONFIGURE_PREFIX_PATH qt_configure_prefix_path_str + 12" \
@@ -1020,11 +1059,27 @@ defineTest(qtConfOutput_crossCompile) {
     export(CONFIG)
 }
 
+defineTest(qtConfOutput_useBFDLinker) {
+    !$${2}: return()
+
+    # We need to preempt the output here, so that qtConfTest_linkerSupportsFlag can work properly in qtbase
+    CONFIG += use_bfd_linker
+    export(CONFIG)
+}
+
 defineTest(qtConfOutput_useGoldLinker) {
     !$${2}: return()
 
     # We need to preempt the output here, so that qtConfTest_linkerSupportsFlag can work properly in qtbase
     CONFIG += use_gold_linker
+    export(CONFIG)
+}
+
+defineTest(qtConfOutput_useLLDLinker) {
+    !$${2}: return()
+
+    # We need to preempt the output here, so that qtConfTest_linkerSupportsFlag can work properly in qtbase
+    CONFIG += use_lld_linker
     export(CONFIG)
 }
 
@@ -1177,6 +1232,12 @@ defineReplace(qtConfOutputPostProcess_publicPro) {
             "QT_RELEASE_DATE = $$config.input.qt_release_date"
     }
 
+    wasm: {
+        qt_emcc_version = $$qtSystemEmccVersion()
+        output += \
+           "QT_EMCC_VERSION = $$qt_emcc_version"
+    }
+
     return($$output)
 }
 
@@ -1208,6 +1269,12 @@ defineReplace(qtConfOutputPostProcess_publicHeader) {
 
     !isEmpty(config.input.qt_libinfix): \
         output += "$${LITERAL_HASH}define QT_LIBINFIX \"$$eval(config.input.qt_libinfix)\""
+
+    wasm: {
+        qt_emcc_version = $$qtSystemEmccVersion()
+output += \
+           "$${LITERAL_HASH}define QT_EMCC_VERSION \"$$qt_emcc_version\""
+    }
 
     return($$output)
 }
@@ -1289,6 +1356,14 @@ defineTest(qtConfReport_buildMode) {
         build_mode = "$$build_mode; optimized tools"
 
     qtConfReportPadded($$1, $$build_mode)
+}
+
+defineTest(qtConfReport_emccVersion) {
+    EMCC_VERSION = $$qtSystemEmccVersion()
+    REQ_VERSION = $$qtEmccRecommendedVersion()
+    !equals(EMCC_VERSION, $$REQ_VERSION) {
+        qtConfAddReport("You should use the recommended Emscripten version $$REQ_VERSION with this Qt. You have $$EMCC_VERSION $$QT_EMCC_VERSION")
+    }
 }
 
 # ensure pristine environment for configuration

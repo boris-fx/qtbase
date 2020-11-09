@@ -78,7 +78,7 @@ class QTreeModel : public QAbstractItemModel
     friend class QTreeWidgetItemIteratorPrivate;
 
 public:
-    explicit QTreeModel(int columns = 0, QTreeWidget *parent = 0);
+    explicit QTreeModel(int columns = 0, QTreeWidget *parent = nullptr);
     ~QTreeModel();
 
     inline QTreeWidget *view() const
@@ -99,7 +99,9 @@ public:
 
     QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
     bool setData(const QModelIndex &index, const QVariant &value, int role) override;
-
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    bool clearItemData(const QModelIndex &index) override;
+#endif
     QMap<int, QVariant> itemData(const QModelIndex &index) const override;
 
     QVariant headerData(int section, Qt::Orientation orientation, int role) const override;
@@ -138,7 +140,7 @@ public:
     { return createIndex(row, col, item); }
 
 protected:
-    QTreeModel(QTreeModelPrivate &, QTreeWidget *parent = 0);
+    QTreeModel(QTreeModelPrivate &, QTreeWidget *parent = nullptr);
     void emitDataChanged(QTreeWidgetItem *item, int column, const QVector<int> &roles);
     void beginInsertItems(QTreeWidgetItem *parent, int row, int count);
     void endInsertItems();

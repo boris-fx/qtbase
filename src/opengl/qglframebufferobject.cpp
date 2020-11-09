@@ -145,7 +145,7 @@ extern QImage qt_gl_read_frame_buffer(const QSize&, bool, bool);
 */
 void QGLFramebufferObjectFormat::detach()
 {
-    if (d->ref.load() != 1) {
+    if (d->ref.loadRelaxed() != 1) {
         QGLFramebufferObjectFormatPrivate *newd
             = new QGLFramebufferObjectFormatPrivate(d);
         if (!d->ref.deref())
@@ -211,7 +211,7 @@ QGLFramebufferObjectFormat::~QGLFramebufferObjectFormat()
 
     If the desired amount of samples per pixel is not supported by the hardware
     then the maximum number of samples per pixel will be used. Note that
-    multisample framebuffer objects can not be bound as textures. Also, the
+    multisample framebuffer objects cannot be bound as textures. Also, the
     \c{GL_EXT_framebuffer_multisample} extension is required to create a
     framebuffer with more than one sample per pixel.
 
@@ -1395,7 +1395,7 @@ bool QGLFramebufferObject::hasOpenGLFramebufferBlit()
     Blits from the \a sourceRect rectangle in the \a source framebuffer
     object to the \a targetRect rectangle in the \a target framebuffer object.
 
-    If \a source or \a target is 0, the default framebuffer will be used
+    If \a source or \a target is \nullptr, the default framebuffer will be used
     instead of a framebuffer object as source or target respectively.
 
     The \a buffers parameter should be a mask consisting of any combination of

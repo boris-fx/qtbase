@@ -59,7 +59,7 @@
 
 //! [0]
 GraphWidget::GraphWidget(QWidget *parent)
-    : QGraphicsView(parent), timerId(0)
+    : QGraphicsView(parent) 
 {
     QGraphicsScene *scene = new QGraphicsScene(this);
     scene->setItemIndexMethod(QGraphicsScene::NoIndex);
@@ -163,17 +163,18 @@ void GraphWidget::timerEvent(QTimerEvent *event)
 {
     Q_UNUSED(event);
 
-    QList<Node *> nodes;
-    foreach (QGraphicsItem *item, scene()->items()) {
+    QVector<Node *> nodes;
+    const QList<QGraphicsItem *> items = scene()->items();
+    for (QGraphicsItem *item : items) {
         if (Node *node = qgraphicsitem_cast<Node *>(item))
             nodes << node;
     }
 
-    foreach (Node *node, nodes)
+    for (Node *node : qAsConst(nodes))
         node->calculateForces();
 
     bool itemsMoved = false;
-    foreach (Node *node, nodes) {
+    for (Node *node : qAsConst(nodes)) {
         if (node->advancePosition())
             itemsMoved = true;
     }
@@ -189,7 +190,7 @@ void GraphWidget::timerEvent(QTimerEvent *event)
 //! [5]
 void GraphWidget::wheelEvent(QWheelEvent *event)
 {
-    scaleView(pow((double)2, -event->delta() / 240.0));
+    scaleView(pow(2., -event->angleDelta().y() / 240.0));
 }
 //! [5]
 #endif
@@ -246,7 +247,8 @@ void GraphWidget::scaleView(qreal scaleFactor)
 
 void GraphWidget::shuffle()
 {
-    foreach (QGraphicsItem *item, scene()->items()) {
+    const QList<QGraphicsItem *> items = scene()->items();
+    for (QGraphicsItem *item : items) {
         if (qgraphicsitem_cast<Node *>(item))
             item->setPos(-150 + QRandomGenerator::global()->bounded(300), -150 + QRandomGenerator::global()->bounded(300));
     }

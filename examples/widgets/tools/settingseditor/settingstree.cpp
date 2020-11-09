@@ -48,20 +48,20 @@
 **
 ****************************************************************************/
 
-#include <QtWidgets>
-
 #include "settingstree.h"
 #include "variantdelegate.h"
 
+#include <QApplication>
+#include <QHeaderView>
+#include <QScreen>
+#include <QSettings>
+
 SettingsTree::SettingsTree(QWidget *parent)
     : QTreeWidget(parent)
-    , autoRefresh(false)
 {
     setItemDelegate(new VariantDelegate(this));
 
-    QStringList labels;
-    labels << tr("Setting") << tr("Type") << tr("Value");
-    setHeaderLabels(labels);
+    setHeaderLabels({tr("Setting"), tr("Type"), tr("Value")});
     header()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
     header()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
     header()->setSectionResizeMode(2, QHeaderView::Stretch);
@@ -75,10 +75,6 @@ SettingsTree::SettingsTree(QWidget *parent)
     keyIcon.addPixmap(style()->standardPixmap(QStyle::SP_FileIcon));
 
     connect(&refreshTimer, &QTimer::timeout, this, &SettingsTree::maybeRefresh);
-}
-
-SettingsTree::~SettingsTree()
-{
 }
 
 void SettingsTree::setSettingsObject(const SettingsPtr &newSettings)
@@ -97,7 +93,7 @@ void SettingsTree::setSettingsObject(const SettingsPtr &newSettings)
 
 QSize SettingsTree::sizeHint() const
 {
-    const QRect availableGeometry = QApplication::desktop()->availableGeometry(this);
+    const QRect availableGeometry = screen()->availableGeometry();
     return QSize(availableGeometry.width() * 2 / 3, availableGeometry.height() * 2 / 3);
 }
 
@@ -137,7 +133,7 @@ void SettingsTree::refresh()
                this, &SettingsTree::updateSetting);
 
     settings->sync();
-    updateChildItems(0);
+    updateChildItems(nullptr);
 
     connect(this, &QTreeWidget::itemChanged,
             this, &SettingsTree::updateSetting);
@@ -170,7 +166,8 @@ void SettingsTree::updateChildItems(QTreeWidgetItem *parent)
 {
     int dividerIndex = 0;
 
-    foreach (QString group, settings->childGroups()) {
+    const QStringList childGroups = settings->childGroups();
+    for (const QString &group : childGroups) {
         QTreeWidgetItem *child;
         int childIndex = findChild(parent, group, dividerIndex);
         if (childIndex != -1) {
@@ -190,7 +187,8 @@ void SettingsTree::updateChildItems(QTreeWidgetItem *parent)
         settings->endGroup();
     }
 
-    foreach (const QString &key, settings->childKeys()) {
+    const QStringList childKeys = settings->childKeys();
+    for (const QString &key : childKeys) {
         QTreeWidgetItem *child;
         int childIndex = findChild(parent, key, 0);
 
@@ -210,7 +208,7 @@ void SettingsTree::updateChildItems(QTreeWidgetItem *parent)
         }
 
         QVariant value = settings->value(key);
-        if (value.type() == QVariant::Invalid) {
+        if (value.userType() == QMetaType::UnknownType) {
             child->setText(1, "Invalid");
         } else {
             child->setText(1, value.typeName());
@@ -226,7 +224,7 @@ void SettingsTree::updateChildItems(QTreeWidgetItem *parent)
 QTreeWidgetItem *SettingsTree::createItem(const QString &text,
                                           QTreeWidgetItem *parent, int index)
 {
-    QTreeWidgetItem *after = 0;
+    QTreeWidgetItem *after = nullptr;
     if (index != 0)
         after = childAt(parent, index - 1);
 
@@ -241,24 +239,18 @@ QTreeWidgetItem *SettingsTree::createItem(const QString &text,
     return item;
 }
 
-QTreeWidgetItem *SettingsTree::childAt(QTreeWidgetItem *parent, int index)
+QTreeWidgetItem *SettingsTree::childAt(QTreeWidgetItem *parent, int index) const
 {
-    if (parent)
-        return parent->child(index);
-    else
-        return topLevelItem(index);
+    return (parent ? parent->child(index) : topLevelItem(index));
 }
 
-int SettingsTree::childCount(QTreeWidgetItem *parent)
+int SettingsTree::childCount(QTreeWidgetItem *parent) const
 {
-    if (parent)
-        return parent->childCount();
-    else
-        return topLevelItemCount();
+    return (parent ? parent->childCount() : topLevelItemCount());
 }
 
 int SettingsTree::findChild(QTreeWidgetItem *parent, const QString &text,
-                            int startIndex)
+                            int startIndex) const
 {
     for (int i = startIndex; i < childCount(parent); ++i) {
         if (childAt(parent, i)->text(0) == text)

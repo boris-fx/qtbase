@@ -48,13 +48,20 @@
 **
 ****************************************************************************/
 
-#include <QtWidgets>
 #include "mainwindow.h"
 #include "textedit.h"
 
+#include <QAction>
+#include <QApplication>
+#include <QCompleter>
+#include <QFile>
+#include <QMenuBar>
+#include <QMessageBox>
+#include <QStringListModel>
+
 //! [0]
 MainWindow::MainWindow(QWidget *parent)
-    : QMainWindow(parent), completer(0)
+    : QMainWindow(parent)
 {
     createMenu();
 
@@ -79,14 +86,14 @@ void MainWindow::createMenu()
     QAction *aboutAct = new QAction(tr("About"), this);
     QAction *aboutQtAct = new QAction(tr("About Qt"), this);
 
-    connect(exitAction, SIGNAL(triggered()), qApp, SLOT(quit()));
-    connect(aboutAct, SIGNAL(triggered()), this, SLOT(about()));
-    connect(aboutQtAct, SIGNAL(triggered()), qApp, SLOT(aboutQt()));
+    connect(exitAction, &QAction::triggered, qApp, &QApplication::quit);
+    connect(aboutAct, &QAction::triggered, this, &MainWindow::about);
+    connect(aboutQtAct, &QAction::triggered, qApp, &QApplication::aboutQt);
 
-    QMenu* fileMenu = menuBar()->addMenu(tr("File"));
+    QMenu *fileMenu = menuBar()->addMenu(tr("File"));
     fileMenu->addAction(exitAction);
 
-    QMenu* helpMenu = menuBar()->addMenu(tr("About"));
+    QMenu *helpMenu = menuBar()->addMenu(tr("About"));
     helpMenu->addAction(aboutAct);
     helpMenu->addAction(aboutQtAct);
 }
@@ -100,18 +107,18 @@ QAbstractItemModel *MainWindow::modelFromFile(const QString& fileName)
         return new QStringListModel(completer);
 
 #ifndef QT_NO_CURSOR
-    QApplication::setOverrideCursor(QCursor(Qt::WaitCursor));
+    QGuiApplication::setOverrideCursor(QCursor(Qt::WaitCursor));
 #endif
     QStringList words;
 
     while (!file.atEnd()) {
         QByteArray line = file.readLine();
         if (!line.isEmpty())
-            words << line.trimmed();
+            words << QString::fromUtf8(line.trimmed());
     }
 
 #ifndef QT_NO_CURSOR
-    QApplication::restoreOverrideCursor();
+    QGuiApplication::restoreOverrideCursor();
 #endif
     return new QStringListModel(words, completer);
 }

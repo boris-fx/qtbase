@@ -44,10 +44,12 @@
 #include "qlogging_p.h"
 #include "qlist.h"
 #include "qbytearray.h"
+#include "qscopeguard.h"
 #include "qstring.h"
 #include "qvarlengtharray.h"
 #include "qdebug.h"
 #include "qmutex.h"
+#include <QtCore/private/qlocking_p.h>
 #include "qloggingcategory.h"
 #ifndef QT_BOOTSTRAPPED
 #include "qelapsedtimer.h"
@@ -57,6 +59,7 @@
 #include "private/qloggingregistry_p.h"
 #include "private/qcoreapplication_p.h"
 #include "private/qsimd_p.h"
+#include <qtcore_tracepoints_p.h>
 #endif
 #ifdef Q_OS_WIN
 #include <qt_windows.h>
@@ -67,7 +70,7 @@
 #if QT_CONFIG(slog2)
 #include <sys/slog2.h>
 #endif
-#if QT_HAS_INCLUDE(<paths.h>)
+#if __has_include(<paths.h>)
 #include <paths.h>
 #endif
 
@@ -103,7 +106,7 @@
 #    if __UCLIBC_HAS_BACKTRACE__
 #      define QLOGGING_HAVE_BACKTRACE
 #    endif
-#  elif (defined(__GLIBC__) && defined(__GLIBCXX__)) || (QT_HAS_INCLUDE(<cxxabi.h>) && QT_HAS_INCLUDE(<execinfo.h>))
+#  elif (defined(__GLIBC__) && defined(__GLIBCXX__)) || (__has_include(<cxxabi.h>) && __has_include(<execinfo.h>))
 #    define QLOGGING_HAVE_BACKTRACE
 #  endif
 #endif
@@ -113,7 +116,7 @@ extern char *__progname;
 #endif
 
 #ifndef QT_BOOTSTRAPPED
-#if defined(Q_OS_LINUX) && (defined(__GLIBC__) || QT_HAS_INCLUDE(<sys/syscall.h>))
+#if defined(Q_OS_LINUX) && (defined(__GLIBC__) || __has_include(<sys/syscall.h>))
 #  include <sys/syscall.h>
 
 # if defined(Q_OS_ANDROID) && !defined(SYS_gettid)
@@ -157,6 +160,9 @@ static QT_PREPEND_NAMESPACE(qint64) qt_gettid()
 #endif // !QT_BOOTSTRAPPED
 
 #include <cstdlib>
+#include <algorithm>
+#include <memory>
+#include <vector>
 
 #include <stdio.h>
 
@@ -193,7 +199,7 @@ static bool isFatal(QtMsgType msgType)
 
         // it's fatal if the current value is exactly 1,
         // otherwise decrement if it's non-zero
-        return fatalCriticals.load() && fatalCriticals.fetchAndAddRelaxed(-1) == 1;
+        return fatalCriticals.loadRelaxed() && fatalCriticals.fetchAndAddRelaxed(-1) == 1;
     }
 
     if (msgType == QtWarningMsg || msgType == QtCriticalMsg) {
@@ -201,7 +207,7 @@ static bool isFatal(QtMsgType msgType)
 
         // it's fatal if the current value is exactly 1,
         // otherwise decrement if it's non-zero
-        return fatalWarnings.load() && fatalWarnings.fetchAndAddRelaxed(-1) == 1;
+        return fatalWarnings.loadRelaxed() && fatalWarnings.fetchAndAddRelaxed(-1) == 1;
     }
 
     return false;
@@ -239,7 +245,7 @@ static bool systemHasStderr()
 
     \note Qt Creator does not implement a pseudo TTY, nor does it launch apps with
     the override environment variable set, but it will read stderr and print it to
-    the user, so in effect this function can not be used to conclude that stderr
+    the user, so in effect this function cannot be used to conclude that stderr
     output will _not_ be visible to the user, as even if this function returns false,
     the output might still end up visible to the user. For this reason, we don't guard
     the stderr output in the default message handler with stderrHasConsoleAttached().
@@ -346,7 +352,7 @@ using namespace QtPrivate;
 */
 
 #if defined(Q_CC_MSVC) && defined(QT_DEBUG) && defined(_DEBUG) && defined(_CRT_ERROR)
-static inline void convert_to_wchar_t_elided(wchar_t *d, size_t space, const char *s) Q_DECL_NOEXCEPT
+static inline void convert_to_wchar_t_elided(wchar_t *d, size_t space, const char *s) noexcept
 {
     size_t len = qstrlen(s);
     if (len + 1 > space) {
@@ -438,7 +444,7 @@ void QMessageLogger::debug(const QLoggingCategory &cat, const char *msg, ...) co
         return;
 
     QMessageLogContext ctxt;
-    ctxt.copy(context);
+    ctxt.copyContextFrom(context);
     ctxt.category = cat.categoryName();
 
     va_list ap;
@@ -465,7 +471,7 @@ void QMessageLogger::debug(QMessageLogger::CategoryFunction catFunc,
         return;
 
     QMessageLogContext ctxt;
-    ctxt.copy(context);
+    ctxt.copyContextFrom(context);
     ctxt.category = cat.categoryName();
 
     va_list ap;
@@ -488,7 +494,7 @@ QDebug QMessageLogger::debug() const
 {
     QDebug dbg = QDebug(QtDebugMsg);
     QMessageLogContext &ctxt = dbg.stream->context;
-    ctxt.copy(context);
+    ctxt.copyContextFrom(context);
     return dbg;
 }
 
@@ -505,7 +511,7 @@ QDebug QMessageLogger::debug(const QLoggingCategory &cat) const
         dbg.stream->message_output = false;
 
     QMessageLogContext &ctxt = dbg.stream->context;
-    ctxt.copy(context);
+    ctxt.copyContextFrom(context);
     ctxt.category = cat.categoryName();
 
     return dbg;
@@ -529,7 +535,7 @@ QDebug QMessageLogger::debug(QMessageLogger::CategoryFunction catFunc) const
 
     \sa QNoDebug, qDebug()
 */
-QNoDebug QMessageLogger::noDebug() const Q_DECL_NOTHROW
+QNoDebug QMessageLogger::noDebug() const noexcept
 {
     return QNoDebug();
 }
@@ -549,7 +555,7 @@ void QMessageLogger::info(const QLoggingCategory &cat, const char *msg, ...) con
         return;
 
     QMessageLogContext ctxt;
-    ctxt.copy(context);
+    ctxt.copyContextFrom(context);
     ctxt.category = cat.categoryName();
 
     va_list ap;
@@ -576,7 +582,7 @@ void QMessageLogger::info(QMessageLogger::CategoryFunction catFunc,
         return;
 
     QMessageLogContext ctxt;
-    ctxt.copy(context);
+    ctxt.copyContextFrom(context);
     ctxt.category = cat.categoryName();
 
     va_list ap;
@@ -600,7 +606,7 @@ QDebug QMessageLogger::info() const
 {
     QDebug dbg = QDebug(QtInfoMsg);
     QMessageLogContext &ctxt = dbg.stream->context;
-    ctxt.copy(context);
+    ctxt.copyContextFrom(context);
     return dbg;
 }
 
@@ -617,7 +623,7 @@ QDebug QMessageLogger::info(const QLoggingCategory &cat) const
         dbg.stream->message_output = false;
 
     QMessageLogContext &ctxt = dbg.stream->context;
-    ctxt.copy(context);
+    ctxt.copyContextFrom(context);
     ctxt.category = cat.categoryName();
 
     return dbg;
@@ -667,7 +673,7 @@ void QMessageLogger::warning(const QLoggingCategory &cat, const char *msg, ...) 
         return;
 
     QMessageLogContext ctxt;
-    ctxt.copy(context);
+    ctxt.copyContextFrom(context);
     ctxt.category = cat.categoryName();
 
     va_list ap;
@@ -694,7 +700,7 @@ void QMessageLogger::warning(QMessageLogger::CategoryFunction catFunc,
         return;
 
     QMessageLogContext ctxt;
-    ctxt.copy(context);
+    ctxt.copyContextFrom(context);
     ctxt.category = cat.categoryName();
 
     va_list ap;
@@ -716,7 +722,7 @@ QDebug QMessageLogger::warning() const
 {
     QDebug dbg = QDebug(QtWarningMsg);
     QMessageLogContext &ctxt = dbg.stream->context;
-    ctxt.copy(context);
+    ctxt.copyContextFrom(context);
     return dbg;
 }
 
@@ -732,7 +738,7 @@ QDebug QMessageLogger::warning(const QLoggingCategory &cat) const
         dbg.stream->message_output = false;
 
     QMessageLogContext &ctxt = dbg.stream->context;
-    ctxt.copy(context);
+    ctxt.copyContextFrom(context);
     ctxt.category = cat.categoryName();
 
     return dbg;
@@ -783,7 +789,7 @@ void QMessageLogger::critical(const QLoggingCategory &cat, const char *msg, ...)
         return;
 
     QMessageLogContext ctxt;
-    ctxt.copy(context);
+    ctxt.copyContextFrom(context);
     ctxt.category = cat.categoryName();
 
     va_list ap;
@@ -810,7 +816,7 @@ void QMessageLogger::critical(QMessageLogger::CategoryFunction catFunc,
         return;
 
     QMessageLogContext ctxt;
-    ctxt.copy(context);
+    ctxt.copyContextFrom(context);
     ctxt.category = cat.categoryName();
 
     va_list ap;
@@ -832,7 +838,7 @@ QDebug QMessageLogger::critical() const
 {
     QDebug dbg = QDebug(QtCriticalMsg);
     QMessageLogContext &ctxt = dbg.stream->context;
-    ctxt.copy(context);
+    ctxt.copyContextFrom(context);
     return dbg;
 }
 
@@ -849,7 +855,7 @@ QDebug QMessageLogger::critical(const QLoggingCategory &cat) const
         dbg.stream->message_output = false;
 
     QMessageLogContext &ctxt = dbg.stream->context;
-    ctxt.copy(context);
+    ctxt.copyContextFrom(context);
     ctxt.category = cat.categoryName();
 
     return dbg;
@@ -875,7 +881,7 @@ QDebug QMessageLogger::critical(QMessageLogger::CategoryFunction catFunc) const
 
     \sa qFatal()
 */
-void QMessageLogger::fatal(const char *msg, ...) const Q_DECL_NOTHROW
+void QMessageLogger::fatal(const char *msg, ...) const noexcept
 {
     QString message;
 
@@ -1075,8 +1081,8 @@ struct QMessagePattern {
     void setPattern(const QString &pattern);
 
     // 0 terminated arrays of literal tokens / literal or placeholder tokens
-    const char **literals;
-    const char **tokens;
+    std::unique_ptr<std::unique_ptr<const char[]>[]> literals;
+    std::unique_ptr<const char*[]> tokens;
     QList<QString> timeArgs;   // timeFormats in sequence of %{time
 #ifndef QT_BOOTSTRAPPED
     QElapsedTimer timer;
@@ -1099,9 +1105,6 @@ Q_DECLARE_TYPEINFO(QMessagePattern::BacktraceParams, Q_MOVABLE_TYPE);
 QBasicMutex QMessagePattern::mutex;
 
 QMessagePattern::QMessagePattern()
-    : literals(0)
-    , tokens(0)
-    , fromEnvironment(false)
 {
 #ifndef QT_BOOTSTRAPPED
     timer.start();
@@ -1109,6 +1112,7 @@ QMessagePattern::QMessagePattern()
     const QString envPattern = QString::fromLocal8Bit(qgetenv("QT_MESSAGE_PATTERN"));
     if (envPattern.isEmpty()) {
         setPattern(QLatin1String(defaultPattern));
+        fromEnvironment = false;
     } else {
         setPattern(envPattern);
         fromEnvironment = true;
@@ -1116,23 +1120,10 @@ QMessagePattern::QMessagePattern()
 }
 
 QMessagePattern::~QMessagePattern()
-{
-    for (int i = 0; literals[i]; ++i)
-        delete [] literals[i];
-    delete [] literals;
-    literals = 0;
-    delete [] tokens;
-    tokens = 0;
-}
+    = default;
 
 void QMessagePattern::setPattern(const QString &pattern)
 {
-    if (literals) {
-        for (int i = 0; literals[i]; ++i)
-            delete [] literals[i];
-        delete [] literals;
-    }
-    delete [] tokens;
     timeArgs.clear();
 #ifdef QLOGGING_HAVE_BACKTRACE
     backtraceArgs.clear();
@@ -1170,9 +1161,9 @@ void QMessagePattern::setPattern(const QString &pattern)
         lexemes.append(lexeme);
 
     // tokenizer
-    QVarLengthArray<const char*> literalsVar;
-    tokens = new const char*[lexemes.size() + 1];
-    tokens[lexemes.size()] = 0;
+    std::vector<std::unique_ptr<const char[]>> literalsVar;
+    tokens.reset(new const char*[lexemes.size() + 1]);
+    tokens[lexemes.size()] = nullptr;
 
     bool nestedIfError = false;
     bool inIf = false;
@@ -1266,7 +1257,7 @@ void QMessagePattern::setPattern(const QString &pattern)
             char *literal = new char[lexeme.size() + 1];
             strncpy(literal, lexeme.toLatin1().constData(), lexeme.size());
             literal[lexeme.size()] = '\0';
-            literalsVar.append(literal);
+            literalsVar.emplace_back(literal);
             tokens[i] = literal;
         }
     }
@@ -1278,15 +1269,14 @@ void QMessagePattern::setPattern(const QString &pattern)
     if (!error.isEmpty())
         qt_message_print(error);
 
-    literals = new const char*[literalsVar.size() + 1];
-    literals[literalsVar.size()] = 0;
-    memcpy(literals, literalsVar.constData(), literalsVar.size() * sizeof(const char*));
+    literals.reset(new std::unique_ptr<const char[]>[literalsVar.size() + 1]);
+    std::move(literalsVar.begin(), literalsVar.end(), &literals[0]);
 }
 
 #if defined(QLOGGING_HAVE_BACKTRACE) && !defined(QT_BOOTSTRAPPED)
 // make sure the function has "Message" in the name so the function is removed
 
-#if ((defined(Q_CC_GNU) && defined(QT_COMPILER_SUPPORTS_SIMD_ALWAYS)) || QT_HAS_ATTRIBUTE(optimize)) \
+#if ((defined(Q_CC_GNU) && defined(QT_COMPILER_SUPPORTS_SIMD_ALWAYS)) || __has_attribute(optimize)) \
     && !defined(Q_CC_INTEL) && !defined(Q_CC_CLANG)
 // force skipping the frame pointer, to save the backtrace() function some work
 __attribute__((optimize("omit-frame-pointer")))
@@ -1325,7 +1315,7 @@ static QStringList backtraceFramesForLogMessage(int frameCount)
 
                 if (function.startsWith(QLatin1String("_Z"))) {
                     QScopedPointer<char, QScopedPointerPodDeleter> demangled(
-                                abi::__cxa_demangle(function.toUtf8(), 0, 0, 0));
+                                abi::__cxa_demangle(function.toUtf8(), nullptr, nullptr, nullptr));
                     if (demangled)
                         function = QString::fromUtf8(qCleanupFuncinfo(demangled.data()));
                 }
@@ -1386,7 +1376,7 @@ QString qFormatLogMessage(QtMsgType type, const QMessageLogContext &context, con
 {
     QString message;
 
-    QMutexLocker lock(&QMessagePattern::mutex);
+    const auto locker = qt_scoped_lock(QMessagePattern::mutex);
 
     QMessagePattern *pattern = qMessagePattern();
     if (!pattern) {
@@ -1405,7 +1395,7 @@ QString qFormatLogMessage(QtMsgType type, const QMessageLogContext &context, con
 #endif
 
     // we do not convert file, function, line literals to local encoding due to overhead
-    for (int i = 0; pattern->tokens[i] != 0; ++i) {
+    for (int i = 0; pattern->tokens[i]; ++i) {
         const char *token = pattern->tokens[i];
         if (token == endifTokenC) {
             skip = false;
@@ -1511,9 +1501,9 @@ static void qDefaultMsgHandler(QtMsgType type, const char *buf);
 static void qDefaultMessageHandler(QtMsgType type, const QMessageLogContext &context, const QString &buf);
 
 // pointer to QtMsgHandler debug handler (without context)
-static QBasicAtomicPointer<void (QtMsgType, const char*)> msgHandler = Q_BASIC_ATOMIC_INITIALIZER(qDefaultMsgHandler);
+static QBasicAtomicPointer<void (QtMsgType, const char*)> msgHandler = Q_BASIC_ATOMIC_INITIALIZER(nullptr);
 // pointer to QtMessageHandler debug handler (with context)
-static QBasicAtomicPointer<void (QtMsgType, const QMessageLogContext &, const QString &)> messageHandler = Q_BASIC_ATOMIC_INITIALIZER(qDefaultMessageHandler);
+static QBasicAtomicPointer<void (QtMsgType, const QMessageLogContext &, const QString &)> messageHandler = Q_BASIC_ATOMIC_INITIALIZER(nullptr);
 
 // ------------------------ Alternate logging sinks -------------------------
 
@@ -1679,14 +1669,34 @@ static bool android_default_message_handler(QtMsgType type,
 #endif //Q_OS_ANDROID
 
 #ifdef Q_OS_WIN
+static void win_outputDebugString_helper(QStringView message)
+{
+    const int maxOutputStringLength = 32766;
+    static QBasicMutex m;
+    auto locker = qt_unique_lock(m);
+    // fast path: Avoid string copies if one output is enough
+    if (message.length() <= maxOutputStringLength) {
+        OutputDebugString(reinterpret_cast<const wchar_t *>(message.utf16()));
+    } else {
+        wchar_t *messagePart = new wchar_t[maxOutputStringLength + 1];
+        for (int i = 0; i < message.length(); i += maxOutputStringLength ) {
+            const int length = std::min(message.length() - i, maxOutputStringLength );
+            const int len = message.mid(i, length).toWCharArray(messagePart);
+            Q_ASSERT(len == length);
+            messagePart[len] = 0;
+            OutputDebugString(messagePart);
+        }
+        delete[] messagePart;
+    }
+}
+
 static bool win_message_handler(QtMsgType type, const QMessageLogContext &context, const QString &message)
 {
     if (shouldLogToStderr())
         return false; // Leave logging up to stderr handler
 
-    QString formattedMessage = qFormatLogMessage(type, context, message);
-    formattedMessage.append(QLatin1Char('\n'));
-    OutputDebugString(reinterpret_cast<const wchar_t *>(formattedMessage.utf16()));
+    const QString formattedMessage = qFormatLogMessage(type, context, message).append('\n');
+    win_outputDebugString_helper(formattedMessage);
 
     return true; // Prevent further output to stderr
 }
@@ -1811,8 +1821,10 @@ static void ungrabMessageHandler() { }
 static void qt_message_print(QtMsgType msgType, const QMessageLogContext &context, const QString &message)
 {
 #ifndef QT_BOOTSTRAPPED
-    // qDebug, qWarning, ... macros do not check whether category is enabled
-    if (isDefaultCategory(context.category)) {
+    Q_TRACE(qt_message_print, msgType, context.category, context.function, context.file, context.line, message);
+
+    // qDebug, qWarning, ... macros do not check whether category is enabledgc
+    if (msgType != QtFatalMsg && isDefaultCategory(context.category)) {
         if (QLoggingCategory *defaultCategory = QLoggingCategory::defaultCategory()) {
             if (!defaultCategory->isEnabled(msgType))
                 return;
@@ -1823,14 +1835,15 @@ static void qt_message_print(QtMsgType msgType, const QMessageLogContext &contex
     // prevent recursion in case the message handler generates messages
     // itself, e.g. by using Qt API
     if (grabMessageHandler()) {
+        const auto ungrab = qScopeGuard([]{ ungrabMessageHandler(); });
+        auto oldStyle = msgHandler.loadAcquire();
+        auto newStye = messageHandler.loadAcquire();
         // prefer new message handler over the old one
-        if (msgHandler.load() == qDefaultMsgHandler
-                || messageHandler.load() != qDefaultMessageHandler) {
-            (*messageHandler.load())(msgType, context, message);
+        if (newStye || !oldStyle) {
+            (newStye ? newStye : qDefaultMessageHandler)(msgType, context, message);
         } else {
-            (*msgHandler.load())(msgType, message.toLocal8Bit().constData());
+            (oldStyle ? oldStyle : qDefaultMsgHandler)(msgType, message.toLocal8Bit().constData());
         }
-        ungrabMessageHandler();
     } else {
         fprintf(stderr, "%s\n", message.toLocal8Bit().constData());
     }
@@ -1839,11 +1852,11 @@ static void qt_message_print(QtMsgType msgType, const QMessageLogContext &contex
 static void qt_message_print(const QString &message)
 {
 #if defined(Q_OS_WINRT)
-    OutputDebugString(reinterpret_cast<const wchar_t*>(message.utf16()));
+    win_outputDebugString_helper(message);
     return;
 #elif defined(Q_OS_WIN) && !defined(QT_BOOTSTRAPPED)
     if (!shouldLogToStderr()) {
-        OutputDebugString(reinterpret_cast<const wchar_t*>(message.utf16()));
+        win_outputDebugString_helper(message);
         return;
     }
 #endif
@@ -1917,12 +1930,14 @@ void qErrnoWarning(const char *msg, ...)
 {
     // qt_error_string() will allocate anyway, so we don't have
     // to be careful here (like we do in plain qWarning())
+    QString error_string = qt_error_string(-1);  // before vasprintf changes errno/GetLastError()
+
     va_list ap;
     va_start(ap, msg);
     QString buf = QString::vasprintf(msg, ap);
     va_end(ap);
 
-    buf += QLatin1String(" (") + qt_error_string(-1) + QLatin1Char(')');
+    buf += QLatin1String(" (") + error_string + QLatin1Char(')');
     QMessageLogContext context;
     qt_message_output(QtCriticalMsg, context, buf);
 }
@@ -2081,23 +2096,25 @@ void qErrnoWarning(int code, const char *msg, ...)
 
 QtMessageHandler qInstallMessageHandler(QtMessageHandler h)
 {
-    if (!h)
-        h = qDefaultMessageHandler;
-    //set 'h' and return old message handler
-    return messageHandler.fetchAndStoreRelaxed(h);
+    const auto old = messageHandler.fetchAndStoreOrdered(h);
+    if (old)
+        return old;
+    else
+        return qDefaultMessageHandler;
 }
 
 QtMsgHandler qInstallMsgHandler(QtMsgHandler h)
 {
-    if (!h)
-        h = qDefaultMsgHandler;
-    //set 'h' and return old message handler
-    return msgHandler.fetchAndStoreRelaxed(h);
+    const auto old = msgHandler.fetchAndStoreOrdered(h);
+    if (old)
+        return old;
+    else
+        return qDefaultMsgHandler;
 }
 
 void qSetMessagePattern(const QString &pattern)
 {
-    QMutexLocker lock(&QMessagePattern::mutex);
+    const auto locker = qt_scoped_lock(QMessagePattern::mutex);
 
     if (!qMessagePattern()->fromEnvironment)
         qMessagePattern()->setPattern(pattern);
@@ -2105,15 +2122,20 @@ void qSetMessagePattern(const QString &pattern)
 
 
 /*!
-    Copies context information from \a logContext into this QMessageLogContext
+    Copies context information from \a logContext into this QMessageLogContext.
+    Returns a reference to this object.
+
+    Note that the version is \b not copied, only the context information.
+
     \internal
 */
-void QMessageLogContext::copy(const QMessageLogContext &logContext)
+QMessageLogContext &QMessageLogContext::copyContextFrom(const QMessageLogContext &logContext) noexcept
 {
     this->category = logContext.category;
     this->file = logContext.file;
     this->line = logContext.line;
     this->function = logContext.function;
+    return *this;
 }
 
 /*!

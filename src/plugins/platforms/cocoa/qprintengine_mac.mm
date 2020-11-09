@@ -37,6 +37,9 @@
 **
 ****************************************************************************/
 
+#include <AppKit/AppKit.h>
+#include <ApplicationServices/ApplicationServices.h>
+
 #include "qprintengine_mac_p.h"
 #include "qcocoaprintersupport.h"
 #include <quuid.h>
@@ -44,6 +47,7 @@
 #include <QtCore/qcoreapplication.h>
 #include <QtCore/qdebug.h>
 
+#include <QtCore/private/qcore_mac_p.h>
 
 #ifndef QT_NO_PRINTER
 
@@ -59,6 +63,8 @@ QMacPrintEngine::QMacPrintEngine(QPrinter::PrinterMode mode, const QString &devi
     QString id = deviceId;
     if (id.isEmpty())
         id = QCocoaPrinterSupport().defaultPrintDeviceId();
+    else
+        setProperty(QPrintEngine::PPK_PrinterName, deviceId);
     d->m_printDevice.reset(new QCocoaPrintDevice(id));
     d->m_pageLayout.setPageSize(d->m_printDevice->defaultPageSize());
     d->initialize();
@@ -483,7 +489,7 @@ void QMacPrintEngine::setProperty(PrintEnginePropertyKey key, const QVariant &va
         int bestResolution = 0;
         int dpi = value.toInt();
         int bestDistance = INT_MAX;
-        foreach (int resolution, d->m_printDevice->supportedResolutions()) {
+        for (int resolution : d->m_printDevice->supportedResolutions()) {
             if (dpi == resolution) {
                 bestResolution = resolution;
                 break;
@@ -522,16 +528,16 @@ void QMacPrintEngine::setProperty(PrintEnginePropertyKey key, const QVariant &va
         if (mode == property(PPK_Duplex).toInt() || !d->m_printDevice->supportedDuplexModes().contains(mode))
             break;
         switch (mode) {
-        case QPrinter::DuplexNone:
+        case QPrint::DuplexNone:
             PMSetDuplex(d->settings(), kPMDuplexNone);
             break;
-        case QPrinter::DuplexAuto:
+        case QPrint::DuplexAuto:
             PMSetDuplex(d->settings(), d->m_pageLayout.orientation() == QPageLayout::Landscape ? kPMDuplexTumble : kPMDuplexNoTumble);
             break;
-        case QPrinter::DuplexLongSide:
+        case QPrint::DuplexLongSide:
             PMSetDuplex(d->settings(), kPMDuplexNoTumble);
             break;
-        case QPrinter::DuplexShortSide:
+        case QPrint::DuplexShortSide:
             PMSetDuplex(d->settings(), kPMDuplexTumble);
             break;
         default:
@@ -756,7 +762,7 @@ QVariant QMacPrintEngine::property(PrintEnginePropertyKey key) const
     }
     case PPK_SupportedResolutions: {
         QList<QVariant> list;
-        foreach (int resolution, d->m_printDevice->supportedResolutions())
+        for (int resolution : d->m_printDevice->supportedResolutions())
             list << resolution;
         ret = list;
         break;

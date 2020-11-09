@@ -50,16 +50,13 @@
 
 #include "animation.h"
 
-#include <QPointF>
-#include <QVector>
 #include <QIODevice>
 #include <QDataStream>
 
 class Frame
 {
 public:
-    Frame() {
-    }
+    Frame() = default;
 
     int nodeCount() const
     {
@@ -85,9 +82,8 @@ private:
     QVector<QPointF> m_nodePositions;
 };
 
-Animation::Animation()
+Animation::Animation() : m_currentFrame(0)
 {
-    m_currentFrame = 0;
     m_frames.append(new Frame);
 }
 
@@ -103,6 +99,8 @@ void Animation::setTotalFrames(int totalFrames)
 
     while (totalFrames < m_frames.size())
         delete m_frames.takeLast();
+
+    setCurrentFrame(m_currentFrame);
 }
 
 int Animation::totalFrames() const
@@ -112,7 +110,7 @@ int Animation::totalFrames() const
 
 void Animation::setCurrentFrame(int currentFrame)
 {
-    m_currentFrame = qMax(qMin(currentFrame, totalFrames()-1), 0);
+    m_currentFrame = qBound(0, currentFrame, totalFrames() - 1);
 }
 
 int Animation::currentFrame() const
@@ -159,18 +157,16 @@ void Animation::save(QIODevice *device) const
     QDataStream stream(device);
     stream << m_name;
     stream << m_frames.size();
-    foreach (Frame *frame, m_frames) {
+    for (const Frame *frame : qAsConst(m_frames)) {
         stream << frame->nodeCount();
-        for (int i=0; i<frame->nodeCount(); ++i)
+        for (int i = 0; i < frame->nodeCount(); ++i)
             stream << frame->nodePos(i);
     }
 }
 
 void Animation::load(QIODevice *device)
 {
-    if (!m_frames.isEmpty())
-        qDeleteAll(m_frames);
-
+    qDeleteAll(m_frames);
     m_frames.clear();
 
     QDataStream stream(device);
@@ -179,18 +175,16 @@ void Animation::load(QIODevice *device)
     int frameCount;
     stream >> frameCount;
 
-    for (int i=0; i<frameCount; ++i) {
-
+    for (int i = 0; i < frameCount; ++i) {
         int nodeCount;
         stream >> nodeCount;
 
         Frame *frame = new Frame;
         frame->setNodeCount(nodeCount);
 
-        for (int j=0; j<nodeCount; ++j) {
+        for (int j = 0; j < nodeCount; ++j) {
             QPointF pos;
             stream >> pos;
-
             frame->setNodePos(j, pos);
         }
 

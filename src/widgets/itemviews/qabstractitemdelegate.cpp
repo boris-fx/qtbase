@@ -88,7 +88,7 @@ QT_BEGIN_NAMESPACE
     and is part of Qt's \l{Model/View Programming}{model/view framework}.
 
     To render an item in a custom way, you must implement paint() and
-    sizeHint(). The QItemDelegate class provides default implementations for
+    sizeHint(). The QStyledItemDelegate class provides default implementations for
     these functions; if you do not need custom rendering, subclass that
     class instead.
 
@@ -115,7 +115,7 @@ QT_BEGIN_NAMESPACE
     The second approach is to handle user events directly by reimplementing
     editorEvent().
 
-    \sa {model-view-programming}{Model/View Programming}, QItemDelegate,
+    \sa {model-view-programming}{Model/View Programming}, QStyledItemDelegate,
         {Pixelator Example}, QStyledItemDelegate, QStyle
 */
 
@@ -255,7 +255,7 @@ QWidget *QAbstractItemDelegate::createEditor(QWidget *,
                                              const QStyleOptionViewItem &,
                                              const QModelIndex &) const
 {
-    return 0;
+    return nullptr;
 }
 
 
@@ -345,6 +345,7 @@ bool QAbstractItemDelegate::editorEvent(QEvent *,
     return false;
 }
 
+#if QT_DEPRECATED_SINCE(5, 13)
 /*!
     \obsolete
 
@@ -364,6 +365,7 @@ QString QAbstractItemDelegate::elidedText(const QFontMetrics &fontMetrics, int w
 {
     return fontMetrics.elidedText(text, mode, width);
 }
+#endif
 
 /*!
     \since 4.3
@@ -385,42 +387,46 @@ bool QAbstractItemDelegate::helpEvent(QHelpEvent *event,
                                       const QStyleOptionViewItem &option,
                                       const QModelIndex &index)
 {
-    Q_D(QAbstractItemDelegate);
-    Q_UNUSED(option);
-
     if (!event || !view)
         return false;
+    Q_D(QAbstractItemDelegate);
     switch (event->type()) {
 #ifndef QT_NO_TOOLTIP
     case QEvent::ToolTip: {
         QHelpEvent *he = static_cast<QHelpEvent*>(event);
         const int precision = inherits("QItemDelegate") ? 10 : 6; // keep in sync with DBL_DIG in qitemdelegate.cpp
-        const QString tooltip = d->textForRole(Qt::ToolTipRole, index.data(Qt::ToolTipRole), option.locale, precision);
-        if (!tooltip.isEmpty()) {
-            QToolTip::showText(he->globalPos(), tooltip, view);
-            return true;
+        const QString tooltip = index.isValid() ?
+              d->textForRole(Qt::ToolTipRole, index.data(Qt::ToolTipRole), option.locale, precision) :
+              QString();
+        QRect rect;
+        if (index.isValid()) {
+            const QRect r = view->visualRect(index);
+            rect = QRect(view->mapToGlobal(r.topLeft()), r.size());
         }
-        break;}
+        QToolTip::showText(he->globalPos(), tooltip, view, rect);
+        event->setAccepted(!tooltip.isEmpty());
+        break;
+        }
 #endif
 #if QT_CONFIG(whatsthis)
-    case QEvent::QueryWhatsThis: {
-        if (index.data(Qt::WhatsThisRole).isValid())
-            return true;
-        break; }
+    case QEvent::QueryWhatsThis:
+        event->setAccepted(index.data(Qt::WhatsThisRole).isValid());
+        break;
     case QEvent::WhatsThis: {
         QHelpEvent *he = static_cast<QHelpEvent*>(event);
         const int precision = inherits("QItemDelegate") ? 10 : 6; // keep in sync with DBL_DIG in qitemdelegate.cpp
-        const QString whatsthis = d->textForRole(Qt::WhatsThisRole, index.data(Qt::WhatsThisRole), option.locale, precision);
-        if (!whatsthis.isEmpty()) {
-            QWhatsThis::showText(he->globalPos(), whatsthis, view);
-            return true;
+        const QString whatsthis = index.isValid() ?
+              d->textForRole(Qt::WhatsThisRole, index.data(Qt::WhatsThisRole), option.locale, precision) :
+              QString();
+        QWhatsThis::showText(he->globalPos(), whatsthis, view);
+        event->setAccepted(!whatsthis.isEmpty());
+        break;
         }
-        break ; }
 #endif
     default:
         break;
     }
-    return false;
+    return event->isAccepted();
 }
 
 /*!
@@ -579,27 +585,27 @@ QString QAbstractItemDelegatePrivate::textForRole(Qt::ItemDataRole role, const Q
     case QMetaType::Float:
         text = locale.toString(value.toFloat());
         break;
-    case QVariant::Double:
+    case QMetaType::Double:
         text = locale.toString(value.toDouble(), 'g', precision);
         break;
-    case QVariant::Int:
-    case QVariant::LongLong:
+    case QMetaType::Int:
+    case QMetaType::LongLong:
         text = locale.toString(value.toLongLong());
         break;
-    case QVariant::UInt:
-    case QVariant::ULongLong:
+    case QMetaType::UInt:
+    case QMetaType::ULongLong:
         text = locale.toString(value.toULongLong());
         break;
-    case QVariant::Date:
+    case QMetaType::QDate:
         text = locale.toString(value.toDate(), formatType);
         break;
-    case QVariant::Time:
+    case QMetaType::QTime:
         text = locale.toString(value.toTime(), formatType);
         break;
-    case QVariant::DateTime:
+    case QMetaType::QDateTime:
         text = locale.toString(value.toDateTime(), formatType);
         break;
-    case QVariant::Type(QMetaType::QJsonValue): {
+    case QMetaType::QJsonValue: {
         const QJsonValue val = value.toJsonValue();
         if (val.isBool()) {
             text = QVariant(val.toBool()).toString();

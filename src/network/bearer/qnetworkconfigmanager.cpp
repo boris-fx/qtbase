@@ -37,6 +37,8 @@
 **
 ****************************************************************************/
 
+#include <QtNetwork/private/qtnetworkglobal_p.h>
+
 #include "qnetworkconfigmanager.h"
 
 #include "qnetworkconfigmanager_p.h"
@@ -68,7 +70,7 @@ static void connManager_cleanup()
     int shutdown = appShutdown.fetchAndStoreAcquire(1);
     Q_ASSERT(shutdown == 0);
     Q_UNUSED(shutdown);
-    QNetworkConfigurationManagerPrivate *cmp = connManager_ptr.fetchAndStoreAcquire(0);
+    QNetworkConfigurationManagerPrivate *cmp = connManager_ptr.fetchAndStoreAcquire(nullptr);
     if (cmp)
         cmp->cleanup();
 }
@@ -110,6 +112,7 @@ QNetworkConfigurationManagerPrivate *qNetworkConfigurationManagerPrivate()
 
 /*!
     \class QNetworkConfigurationManager
+    \obsolete
 
     \brief The QNetworkConfigurationManager class manages the network configurations provided
     by the system.
@@ -233,19 +236,20 @@ QNetworkConfigurationManager::QNetworkConfigurationManager(QObject *parent)
     : QObject(parent)
 {
     QNetworkConfigurationManagerPrivate *priv = qNetworkConfigurationManagerPrivate();
+    if (priv) {
+        connect(priv, SIGNAL(configurationAdded(QNetworkConfiguration)),
+                this, SIGNAL(configurationAdded(QNetworkConfiguration)));
+        connect(priv, SIGNAL(configurationRemoved(QNetworkConfiguration)),
+                this, SIGNAL(configurationRemoved(QNetworkConfiguration)));
+        connect(priv, SIGNAL(configurationChanged(QNetworkConfiguration)),
+                this, SIGNAL(configurationChanged(QNetworkConfiguration)));
+        connect(priv, SIGNAL(onlineStateChanged(bool)),
+                this, SIGNAL(onlineStateChanged(bool)));
+        connect(priv, SIGNAL(configurationUpdateComplete()),
+                this, SIGNAL(updateCompleted()));
 
-    connect(priv, SIGNAL(configurationAdded(QNetworkConfiguration)),
-            this, SIGNAL(configurationAdded(QNetworkConfiguration)));
-    connect(priv, SIGNAL(configurationRemoved(QNetworkConfiguration)),
-            this, SIGNAL(configurationRemoved(QNetworkConfiguration)));
-    connect(priv, SIGNAL(configurationChanged(QNetworkConfiguration)),
-            this, SIGNAL(configurationChanged(QNetworkConfiguration)));
-    connect(priv, SIGNAL(onlineStateChanged(bool)),
-            this, SIGNAL(onlineStateChanged(bool)));
-    connect(priv, SIGNAL(configurationUpdateComplete()),
-            this, SIGNAL(updateCompleted()));
-
-    priv->enablePolling();
+        priv->enablePolling();
+    }
 }
 
 /*!
@@ -354,7 +358,7 @@ QNetworkConfigurationManager::Capabilities QNetworkConfigurationManager::capabil
     if (priv)
         return priv->capabilities();
 
-    return QNetworkConfigurationManager::Capabilities(0);
+    return {};
 }
 
 /*!

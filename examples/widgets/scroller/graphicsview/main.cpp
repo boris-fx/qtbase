@@ -64,7 +64,7 @@ class RectObject : public QGraphicsObject
 
 public:
 
-    RectObject(const QString &text, qreal x, qreal y, qreal width, qreal height, QBrush brush, QGraphicsItem *parent = 0)
+    RectObject(const QString &text, qreal x, qreal y, qreal width, qreal height, QBrush brush, QGraphicsItem *parent = nullptr)
         : QGraphicsObject(parent)
         , m_text(text)
         , m_rect(x, y, width, height)
@@ -117,7 +117,8 @@ public:
     QRectF boundingRect() const override
     {
         QRectF rect;
-        foreach (QGraphicsItem *item, childItems())
+        const auto items = childItems();
+        for (const QGraphicsItem *item : items)
             rect |= item->boundingRect().translated(item->pos());
         return rect;
     }

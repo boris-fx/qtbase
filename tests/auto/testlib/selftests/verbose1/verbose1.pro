@@ -4,7 +4,11 @@
 SOURCES += ../counting/tst_counting.cpp
 QT = core testlib
 
+DEFINES += TESTLIB_VERBOSITY_ARG="-v1"
+
 mac:CONFIG -= app_bundle
 CONFIG -= debug_and_release_target
 
 TARGET = verbose1
+
+include($$QT_SOURCE_TREE/src/testlib/selfcover.pri)

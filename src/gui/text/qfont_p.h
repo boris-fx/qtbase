@@ -78,6 +78,7 @@ struct QFontDef
     }
 
     QString family;
+    QStringList families;
     QString styleName;
 
     QStringList fallBackFamilies;
@@ -96,7 +97,7 @@ struct QFontDef
     uint hintingPreference : 2;
     uint ignorePitch : 1;
     uint fixedPitchComputed : 1; // for Mac OS X only
-    int reserved   : 14; // for future extensions
+    uint reserved   : 14; // for future extensions
 
     bool exactMatch(const QFontDef &other) const;
     bool operator==(const QFontDef &other) const
@@ -109,6 +110,7 @@ struct QFontDef
                     && styleStrategy == other.styleStrategy
                     && ignorePitch == other.ignorePitch && fixedPitch == other.fixedPitch
                     && family == other.family
+                    && families == other.families
                     && styleName == other.styleName
                     && hintingPreference == other.hintingPreference
                           ;
@@ -122,6 +124,7 @@ struct QFontDef
         if (styleHint != other.styleHint) return styleHint < other.styleHint;
         if (styleStrategy != other.styleStrategy) return styleStrategy < other.styleStrategy;
         if (family != other.family) return family < other.family;
+        if (families != other.families) return families < other.families;
         if (styleName != other.styleName)
             return styleName < other.styleName;
         if (hintingPreference != other.hintingPreference) return hintingPreference < other.hintingPreference;
@@ -133,20 +136,22 @@ struct QFontDef
     }
 };
 
-inline uint qHash(const QFontDef &fd, uint seed = 0) Q_DECL_NOTHROW
+inline uint qHash(const QFontDef &fd, uint seed = 0) noexcept
 {
-    return qHash(qRound64(fd.pixelSize*10000)) // use only 4 fractional digits
-        ^  qHash(fd.weight)
-        ^  qHash(fd.style)
-        ^  qHash(fd.stretch)
-        ^  qHash(fd.styleHint)
-        ^  qHash(fd.styleStrategy)
-        ^  qHash(fd.ignorePitch)
-        ^  qHash(fd.fixedPitch)
-        ^  qHash(fd.family, seed)
-        ^  qHash(fd.styleName)
-        ^  qHash(fd.hintingPreference)
-        ;
+    QtPrivate::QHashCombine hash;
+    seed = hash(seed, qRound64(fd.pixelSize*10000)); // use only 4 fractional digits
+    seed = hash(seed, fd.weight);
+    seed = hash(seed, fd.style);
+    seed = hash(seed, fd.stretch);
+    seed = hash(seed, fd.styleHint);
+    seed = hash(seed, fd.styleStrategy);
+    seed = hash(seed, fd.ignorePitch);
+    seed = hash(seed, fd.fixedPitch);
+    seed = hash(seed, fd.family);
+    seed = hash(seed, fd.families);
+    seed = hash(seed, fd.styleName);
+    seed = hash(seed, fd.hintingPreference);
+    return seed;
 }
 
 class QFontEngineData
@@ -161,7 +166,7 @@ public:
     QFontEngine *engines[QChar::ScriptCount];
 
 private:
-    Q_DISABLE_COPY(QFontEngineData)
+    Q_DISABLE_COPY_MOVE(QFontEngineData)
 };
 
 
@@ -180,7 +185,6 @@ public:
     QFontDef request;
     mutable QFontEngineData *engineData;
     int dpi;
-    int screen;
 
     uint underline  :  1;
     uint overline   :  1;
@@ -225,19 +229,17 @@ public:
     void clear();
 
     struct Key {
-        Key() : script(0), multi(0), screen(0) { }
-        Key(const QFontDef &d, uchar c, bool m = 0, uchar s = 0)
-            : def(d), script(c), multi(m), screen(s) { }
+        Key() : script(0), multi(0) { }
+        Key(const QFontDef &d, uchar c, bool m = 0)
+            : def(d), script(c), multi(m) { }
 
         QFontDef def;
         uchar script;
         uchar multi: 1;
-        uchar screen: 7;
 
         inline bool operator<(const Key &other) const
         {
             if (script != other.script) return script < other.script;
-            if (screen != other.screen) return screen < other.screen;
             if (multi != other.multi) return multi < other.multi;
             if (multi && def.fallBackFamilies.size() != other.def.fallBackFamilies.size())
                 return def.fallBackFamilies.size() < other.def.fallBackFamilies.size();
@@ -246,7 +248,6 @@ public:
         inline bool operator==(const Key &other) const
         {
             return script == other.script
-                    && screen == other.screen
                     && multi == other.multi
                     && (!multi || def.fallBackFamilies == other.def.fallBackFamilies)
                     && def == other.def;
@@ -262,7 +263,7 @@ public:
 
     // QFontEngine cache
     struct Engine {
-        Engine() : data(0), timestamp(0), hits(0) { }
+        Engine() : data(nullptr), timestamp(0), hits(0) { }
         Engine(QFontEngine *d) : data(d), timestamp(0), hits(0) { }
 
         QFontEngine *data;
@@ -270,7 +271,7 @@ public:
         uint hits;
     };
 
-    typedef QMap<Key,Engine> EngineCache;
+    typedef QMultiMap<Key,Engine> EngineCache;
     EngineCache engineCache;
     QHash<QFontEngine *, int> engineCacheCount;
 

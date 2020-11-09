@@ -48,6 +48,23 @@
 QT_BEGIN_NAMESPACE
 
 /*
+   ### Qt 5:
+   ### This needs to be removed for next releases of Qt. It is a workaround for vc++ because
+   ### Qt exports QPolygon and QPolygonF that inherit QVector<QPoint> and
+   ### QVector<QPointF> respectively.
+*/
+
+#if defined(Q_CC_MSVC) && defined(QT_BUILD_CORE_LIB)
+QT_BEGIN_INCLUDE_NAMESPACE
+#include <QtCore/qpoint.h>
+QT_END_INCLUDE_NAMESPACE
+
+template class Q_CORE_EXPORT QVector<QPointF>;
+template class Q_CORE_EXPORT QVector<QPoint>;
+#endif
+
+
+/*
     QList as an array-list combines the easy-of-use of a random
     access interface with fast list operations and the low memory
     management overhead of an array. Accessing elements by index,
@@ -58,7 +75,7 @@ QT_BEGIN_NAMESPACE
     the number of elements in the list.
 */
 
-const QListData::Data QListData::shared_null = { Q_REFCOUNT_INITIALIZE_STATIC, 0, 0, 0, { 0 } };
+const QListData::Data QListData::shared_null = { Q_REFCOUNT_INITIALIZE_STATIC, 0, 0, 0, { nullptr } };
 
 /*!
  *  Detaches the QListData by allocating new memory for a list which will be bigger
@@ -528,6 +545,14 @@ void **QListData::erase(void **xi)
     \since 5.2
 */
 
+/*! \fn template <class T> template<typename InputIterator> QList<T>::QList(InputIterator first, InputIterator last)
+    \since 5.14
+
+    Constructs a QList with the contents in the iterator range [\a first, \a last).
+
+    The value type of \c InputIterator must be convertible to \c T.
+*/
+
 /*!
     \fn template <class T> QList<T> QList<T>::mid(int pos, int length) const
 
@@ -822,9 +847,10 @@ void **QListData::erase(void **xi)
 
 /*! \fn template <class T> void QList<T>::insert(int i, const T &value)
 
-    Inserts \a value at index position \a i in the list. If \a i <= 0,
-    the value is prepended to the list. If \a i >= size(), the
-    value is appended to the list.
+    Inserts \a value at index position \a i in the list.
+
+    If \a i == 0, the value is prepended to the list. If \a i == size(),
+    the value is appended to the list.
 
     Example:
     \snippet code/src_corelib_tools_qlistdata.cpp 8
@@ -947,6 +973,14 @@ void **QListData::erase(void **xi)
 */
 
 /*! \fn template <class T> void QList<T>::swap(int i, int j)
+
+    \obsolete Use swapItemsAt()
+
+    \sa move(), swapItemsAt()
+*/
+
+/*! \fn template <class T> void QList<T>::swapItemsAt(int i, int j)
+    \since 5.13
 
     Exchange the item at index position \a i with the item at index
     position \a j. This function assumes that both \a i and \a j are
@@ -1981,6 +2015,8 @@ void **QListData::erase(void **xi)
 
     \snippet code/src_corelib_tools_qlistdata.cpp 21
 
+    \include containers-range-constructor.qdocinc
+
     \sa fromSet(), toVector(), QVector::toList()
 */
 
@@ -1991,6 +2027,8 @@ void **QListData::erase(void **xi)
     Example:
 
     \snippet code/src_corelib_tools_qlistdata.cpp 22
+
+    \include containers-range-constructor.qdocinc
 
     \sa toSet(), fromVector(), QVector::fromList()
 */
@@ -2003,6 +2041,8 @@ void **QListData::erase(void **xi)
     Example:
 
     \snippet code/src_corelib_tools_qlistdata.cpp 23
+
+    \include containers-range-constructor.qdocinc
 
     \sa fromVector(), toSet(), QSet::toList()
 */
@@ -2017,6 +2057,8 @@ void **QListData::erase(void **xi)
 
     \snippet code/src_corelib_tools_qlistdata.cpp 24
 
+    \include containers-range-constructor.qdocinc
+
     \sa toVector(), fromSet(), QSet::fromList()
 */
 
@@ -2029,6 +2071,8 @@ void **QListData::erase(void **xi)
 
     \snippet code/src_corelib_tools_qlistdata.cpp 25
 
+    \include containers-range-constructor.qdocinc
+
     \sa toStdList(), QVector::fromStdVector()
 */
 
@@ -2038,6 +2082,8 @@ void **QListData::erase(void **xi)
     Example:
 
     \snippet code/src_corelib_tools_qlistdata.cpp 26
+
+    \include containers-range-constructor.qdocinc
 
     \sa fromStdList(), QVector::toStdVector()
 */

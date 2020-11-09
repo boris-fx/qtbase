@@ -54,6 +54,8 @@
 #include "private/qmemrotate_p.h"
 #include "private/qdrawhelper_p.h"
 
+#include <memory>
+
 QT_BEGIN_NAMESPACE
 
 class QPixmapFilterPrivate : public QObjectPrivate
@@ -206,7 +208,7 @@ QRectF QPixmapFilter::boundingRectFor(const QRectF &rect) const
 class QPixmapConvolutionFilterPrivate : public QPixmapFilterPrivate
 {
 public:
-    QPixmapConvolutionFilterPrivate(): convolutionKernel(0), kernelWidth(0), kernelHeight(0), convoluteAlpha(false) {}
+    QPixmapConvolutionFilterPrivate(): convolutionKernel(nullptr), kernelWidth(0), kernelHeight(0), convoluteAlpha(false) {}
     ~QPixmapConvolutionFilterPrivate() {
         delete[] convolutionKernel;
     }
@@ -319,7 +321,7 @@ static void convolute(
     const QImage processImage = (srcImage.format() != QImage::Format_ARGB32_Premultiplied ) ?               srcImage.convertToFormat(QImage::Format_ARGB32_Premultiplied) : srcImage;
     // TODO: support also other formats directly without copying
 
-    int *fixedKernel = new int[kernelWidth*kernelHeight];
+    std::unique_ptr<int[]> fixedKernel(new int[kernelWidth * kernelHeight]);
     for(int i = 0; i < kernelWidth*kernelHeight; i++)
     {
         fixedKernel[i] = (int)(65536 * kernel[i]);
@@ -403,7 +405,6 @@ static void convolute(
         }
         yk++;
     }
-    delete[] fixedKernel;
 }
 
 /*!
@@ -423,7 +424,7 @@ void QPixmapConvolutionFilter::draw(QPainter *painter, const QPointF &p, const Q
 
     // raster implementation
 
-    QImage *target = 0;
+    QImage *target = nullptr;
     if (painter->paintEngine()->paintDevice()->devType() == QInternal::Image) {
         target = static_cast<QImage *>(painter->paintEngine()->paintDevice());
 
@@ -431,18 +432,18 @@ void QPixmapConvolutionFilter::draw(QPainter *painter, const QPointF &p, const Q
 
         if (mat.type() > QTransform::TxTranslate) {
             // Disabled because of transformation...
-            target = 0;
+            target = nullptr;
         } else {
             QRasterPaintEngine *pe = static_cast<QRasterPaintEngine *>(painter->paintEngine());
             if (pe->clipType() == QRasterPaintEngine::ComplexClip)
                 // disabled because of complex clipping...
-                target = 0;
+                target = nullptr;
             else {
                 QRectF clip = pe->clipBoundingRect();
                 QRectF rect = boundingRectFor(srcRect.isEmpty() ? src.rect() : srcRect);
                 QTransform x = painter->deviceTransform();
                 if (!clip.contains(rect.translated(x.dx() + p.x(), x.dy() + p.y()))) {
-                    target = 0;
+                    target = nullptr;
                 }
 
             }
@@ -1134,8 +1135,12 @@ void QPixmapColorizeFilter::draw(QPainter *painter, const QPointF &dest, const Q
         destImage = std::move(buffer);
     }
 
-    if (srcImage.hasAlphaChannel())
-        destImage.setAlphaChannel(srcImage.alphaChannel());
+    if (srcImage.hasAlphaChannel()) {
+        Q_ASSERT(destImage.format() == QImage::Format_ARGB32_Premultiplied);
+        QPainter maskPainter(&destImage);
+        maskPainter.setCompositionMode(QPainter::CompositionMode_DestinationIn);
+        maskPainter.drawImage(0, 0, srcImage);
+    }
 
     painter->drawImage(dest, destImage);
 }

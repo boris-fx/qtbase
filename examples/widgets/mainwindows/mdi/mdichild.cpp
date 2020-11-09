@@ -82,9 +82,9 @@ bool MdiChild::loadFile(const QString &fileName)
     }
 
     QTextStream in(&file);
-    QApplication::setOverrideCursor(Qt::WaitCursor);
+    QGuiApplication::setOverrideCursor(Qt::WaitCursor);
     setPlainText(in.readAll());
-    QApplication::restoreOverrideCursor();
+    QGuiApplication::restoreOverrideCursor();
 
     setCurrentFile(fileName);
 
@@ -115,18 +115,27 @@ bool MdiChild::saveAs()
 
 bool MdiChild::saveFile(const QString &fileName)
 {
-    QFile file(fileName);
-    if (!file.open(QFile::WriteOnly | QFile::Text)) {
-        QMessageBox::warning(this, tr("MDI"),
-                             tr("Cannot write file %1:\n%2.")
-                             .arg(QDir::toNativeSeparators(fileName), file.errorString()));
+    QString errorMessage;
+
+    QGuiApplication::setOverrideCursor(Qt::WaitCursor);
+    QSaveFile file(fileName);
+    if (file.open(QFile::WriteOnly | QFile::Text)) {
+        QTextStream out(&file);
+        out << toPlainText();
+        if (!file.commit()) {
+            errorMessage = tr("Cannot write file %1:\n%2.")
+                           .arg(QDir::toNativeSeparators(fileName), file.errorString());
+        }
+    } else {
+        errorMessage = tr("Cannot open file %1 for writing:\n%2.")
+                       .arg(QDir::toNativeSeparators(fileName), file.errorString());
+    }
+    QGuiApplication::restoreOverrideCursor();
+
+    if (!errorMessage.isEmpty()) {
+        QMessageBox::warning(this, tr("MDI"), errorMessage);
         return false;
     }
-
-    QTextStream out(&file);
-    QApplication::setOverrideCursor(Qt::WaitCursor);
-    out << toPlainText();
-    QApplication::restoreOverrideCursor();
 
     setCurrentFile(fileName);
     return true;

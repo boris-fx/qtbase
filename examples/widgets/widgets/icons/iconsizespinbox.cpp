@@ -48,9 +48,9 @@
 **
 ****************************************************************************/
 
-#include <QtWidgets>
-
 #include "iconsizespinbox.h"
+
+#include <QRegularExpression>
 
 //! [0]
 IconSizeSpinBox::IconSizeSpinBox(QWidget *parent)

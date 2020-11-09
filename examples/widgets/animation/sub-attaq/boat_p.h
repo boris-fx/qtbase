@@ -67,7 +67,9 @@
 #include "graphicsscene.h"
 
 // Qt
-#include <QtWidgets/QKeyEventTransition>
+#include <QGraphicsRotation>
+#include <QKeyEventTransition>
+#include <QState>
 
 static const int MAX_BOMB = 5;
 
@@ -88,7 +90,7 @@ protected:
         return (boat->currentSpeed() == 1);
     }
 private:
-    Boat * boat;
+    Boat *boat;
 };
 
 //These transtion test if we have to move the boat (i.e current speed was 0 or another value)
@@ -118,7 +120,7 @@ protected:
         boat->updateBoatMovement();
     }
 private:
-    Boat * boat;
+    Boat *boat;
     int key;
 };
 
@@ -139,14 +141,15 @@ protected:
         return (boat->bombsLaunched() < MAX_BOMB);
     }
 private:
-    Boat * boat;
+    Boat *boat;
 };
 
 //This state is describing when the boat is moving right
 class MoveStateRight : public QState
 {
 public:
-    explicit MoveStateRight(Boat *boat,QState *parent = 0) : QState(parent), boat(boat)
+    explicit MoveStateRight(Boat *boat, QState *parent = nullptr)
+        : QState(parent), boat(boat)
     {
     }
 protected:
@@ -156,14 +159,15 @@ protected:
         boat->updateBoatMovement();
     }
 private:
-    Boat * boat;
+    Boat *boat;
 };
 
  //This state is describing when the boat is moving left
 class MoveStateLeft : public QState
 {
 public:
-    explicit MoveStateLeft(Boat *boat,QState *parent = 0) : QState(parent), boat(boat)
+    explicit MoveStateLeft(Boat *boat, QState *parent = nullptr)
+        : QState(parent), boat(boat)
     {
     }
 protected:
@@ -173,14 +177,15 @@ protected:
         boat->updateBoatMovement();
     }
 private:
-    Boat * boat;
+    Boat *boat;
 };
 
 //This state is describing when the boat is in a stand by position
 class StopState : public QState
 {
 public:
-    explicit StopState(Boat *boat,QState *parent = 0) : QState(parent), boat(boat)
+    explicit StopState(Boat *boat, QState *parent = nullptr)
+        : QState(parent), boat(boat)
     {
     }
 protected:
@@ -191,20 +196,21 @@ protected:
         boat->updateBoatMovement();
     }
 private:
-    Boat * boat;
+    Boat *boat;
 };
 
 //This state is describing the launch of the torpedo on the right
 class LaunchStateRight : public QState
 {
 public:
-    explicit LaunchStateRight(Boat *boat,QState *parent = 0) : QState(parent), boat(boat)
+    explicit LaunchStateRight(Boat *boat, QState *parent = nullptr)
+        : QState(parent), boat(boat)
     {
     }
 protected:
     void onEntry(QEvent *) override
     {
-        Bomb *b = new Bomb();
+        Bomb *b = new Bomb;
         b->setPos(boat->x()+boat->size().width(),boat->y());
         GraphicsScene *scene = static_cast<GraphicsScene *>(boat->scene());
         scene->addItem(b);
@@ -212,20 +218,21 @@ protected:
         boat->setBombsLaunched(boat->bombsLaunched() + 1);
     }
 private:
-    Boat * boat;
+    Boat *boat;
 };
 
 //This state is describing the launch of the torpedo on the left
 class LaunchStateLeft : public QState
 {
 public:
-    explicit LaunchStateLeft(Boat *boat,QState *parent = 0) : QState(parent), boat(boat)
+    explicit LaunchStateLeft(Boat *boat, QState *parent = nullptr)
+        : QState(parent), boat(boat)
     {
     }
 protected:
     void onEntry(QEvent *) override
     {
-        Bomb *b = new Bomb();
+        Bomb *b = new Bomb;
         b->setPos(boat->x() - b->size().width(), boat->y());
         GraphicsScene *scene = static_cast<GraphicsScene *>(boat->scene());
         scene->addItem(b);
@@ -233,7 +240,7 @@ protected:
         boat->setBombsLaunched(boat->bombsLaunched() + 1);
     }
 private:
-    Boat * boat;
+    Boat *boat;
 };
 
 #endif // BOAT_P_H

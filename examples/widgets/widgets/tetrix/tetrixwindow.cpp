@@ -48,22 +48,24 @@
 **
 ****************************************************************************/
 
-#include <QtWidgets>
-
 #include "tetrixboard.h"
 #include "tetrixwindow.h"
 
-//! [0]
-TetrixWindow::TetrixWindow()
-{
-    board = new TetrixBoard;
-//! [0]
+#include <QCoreApplication>
+#include <QGridLayout>
+#include <QLabel>
+#include <QLCDNumber>
+#include <QPushButton>
 
+//! [0]
+TetrixWindow::TetrixWindow(QWidget *parent)
+    : QWidget(parent), board(new TetrixBoard)
+{
+//! [0]
     nextPieceLabel = new QLabel;
     nextPieceLabel->setFrameStyle(QFrame::Box | QFrame::Raised);
     nextPieceLabel->setAlignment(Qt::AlignCenter);
     board->setNextPieceLabel(nextPieceLabel);
-
 //! [1]
     scoreLcd = new QLCDNumber(5);
     scoreLcd->setSegmentStyle(QLCDNumber::Filled);
@@ -85,7 +87,7 @@ TetrixWindow::TetrixWindow()
 
     connect(startButton, &QPushButton::clicked, board, &TetrixBoard::start);
 //! [4] //! [5]
-    connect(quitButton , &QPushButton::clicked, qApp, &QApplication::quit);
+    connect(quitButton , &QPushButton::clicked, qApp, &QCoreApplication::quit);
     connect(pauseButton, &QPushButton::clicked, board, &TetrixBoard::pause);
 #if __cplusplus >= 201402L
     connect(board, &TetrixBoard::scoreChanged,

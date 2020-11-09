@@ -43,17 +43,12 @@ protected:
     void init() override;
     bool writeMakefile(QTextStream &) override;
 
-    QString escapeFilePath(const QString &path) const override { Q_ASSERT(false); return QString(); }
+    QString escapeFilePath(const QString &) const override { Q_ASSERT(false); return QString(); }
 
 public:
-    ProjectGenerator();
-    ~ProjectGenerator();
     bool supportsMetaBuild() override { return false; }
     bool openOutput(QFile &, const QString &) const override;
 };
-
-inline ProjectGenerator::~ProjectGenerator()
-{ }
 
 QT_END_NAMESPACE
 

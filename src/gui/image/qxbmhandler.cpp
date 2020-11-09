@@ -44,6 +44,7 @@
 
 #include <qimage.h>
 #include <qiodevice.h>
+#include <qregexp.h>
 #include <qvariant.h>
 
 #include <stdio.h>
@@ -158,7 +159,9 @@ static bool read_xbm_body(QIODevice *device, int w, int h, QImage *outImage)
     w = (w+7)/8;                                // byte width
 
     while (y < h) {                                // for all encoded bytes...
-        if (p) {                                // p = "0x.."
+        if (p && p < (buf + readBytes - 3)) {      // p = "0x.."
+            if (!isxdigit(p[2]) || !isxdigit(p[3]))
+                return false;
             *b++ = hex2byte(p+2);
             p += 2;
             if (++x == w && ++y < h) {
@@ -354,11 +357,6 @@ void QXbmHandler::setOption(ImageOption option, const QVariant &value)
 {
     if (option == Name)
         fileName = value.toString();
-}
-
-QByteArray QXbmHandler::name() const
-{
-    return "xbm";
 }
 
 QT_END_NAMESPACE

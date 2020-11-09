@@ -167,7 +167,7 @@ void MainWindow::tile(const QMainWindow *previous)
     if (!topFrameWidth)
         topFrameWidth = 40;
     const QPoint pos = previous->pos() + 2 * QPoint(topFrameWidth, topFrameWidth);
-    if (QApplication::desktop()->availableGeometry(this).contains(rect().bottomRight() + pos))
+    if (screen()->availableGeometry().contains(rect().bottomRight() + pos))
         move(pos);
 }
 
@@ -290,7 +290,7 @@ void MainWindow::readSettings()
     QSettings settings(QCoreApplication::organizationName(), QCoreApplication::applicationName());
     const QByteArray geometry = settings.value("geometry", QByteArray()).toByteArray();
     if (geometry.isEmpty()) {
-        const QRect availableGeometry = QApplication::desktop()->availableGeometry(this);
+        const QRect availableGeometry = screen()->availableGeometry();
         resize(availableGeometry.width() / 3, availableGeometry.height() / 2);
         move((availableGeometry.width() - width()) / 2,
              (availableGeometry.height() - height()) / 2);
@@ -338,9 +338,9 @@ void MainWindow::loadFile(const QString &fileName)
     }
 
     QTextStream in(&file);
-    QApplication::setOverrideCursor(Qt::WaitCursor);
+    QGuiApplication::setOverrideCursor(Qt::WaitCursor);
     textEdit->setPlainText(in.readAll());
-    QApplication::restoreOverrideCursor();
+    QGuiApplication::restoreOverrideCursor();
 
     setCurrentFile(fileName);
     statusBar()->showMessage(tr("File loaded"), 2000);
@@ -425,18 +425,27 @@ void MainWindow::openRecentFile()
 
 bool MainWindow::saveFile(const QString &fileName)
 {
-    QFile file(fileName);
-    if (!file.open(QFile::WriteOnly | QFile::Text)) {
-        QMessageBox::warning(this, tr("SDI"),
-                             tr("Cannot write file %1:\n%2.")
-                             .arg(QDir::toNativeSeparators(fileName), file.errorString()));
+    QString errorMessage;
+
+    QGuiApplication::setOverrideCursor(Qt::WaitCursor);
+    QSaveFile file(fileName);
+    if (file.open(QFile::WriteOnly | QFile::Text)) {
+        QTextStream out(&file);
+        out << textEdit->toPlainText();
+        if (!file.commit()) {
+            errorMessage = tr("Cannot write file %1:\n%2.")
+                           .arg(QDir::toNativeSeparators(fileName), file.errorString());
+        }
+    } else {
+        errorMessage = tr("Cannot open file %1 for writing:\n%2.")
+                       .arg(QDir::toNativeSeparators(fileName), file.errorString());
+    }
+    QGuiApplication::restoreOverrideCursor();
+
+    if (!errorMessage.isEmpty()) {
+        QMessageBox::warning(this, tr("SDI"), errorMessage);
         return false;
     }
-
-    QTextStream out(&file);
-    QApplication::setOverrideCursor(Qt::WaitCursor);
-    out << textEdit->toPlainText();
-    QApplication::restoreOverrideCursor();
 
     setCurrentFile(fileName);
     statusBar()->showMessage(tr("File saved"), 2000);
@@ -472,11 +481,12 @@ MainWindow *MainWindow::findMainWindow(const QString &fileName) const
 {
     QString canonicalFilePath = QFileInfo(fileName).canonicalFilePath();
 
-    foreach (QWidget *widget, QApplication::topLevelWidgets()) {
+    const QList<QWidget *> topLevelWidgets = QApplication::topLevelWidgets();
+    for (QWidget *widget : topLevelWidgets) {
         MainWindow *mainWin = qobject_cast<MainWindow *>(widget);
         if (mainWin && mainWin->curFile == canonicalFilePath)
             return mainWin;
     }
 
-    return 0;
+    return nullptr;
 }

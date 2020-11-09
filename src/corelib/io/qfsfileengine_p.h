@@ -61,6 +61,13 @@
 
 QT_BEGIN_NAMESPACE
 
+struct ProcessOpenModeResult {
+    bool ok;
+    QIODevice::OpenMode openMode;
+    QString error;
+};
+Q_CORE_EXPORT ProcessOpenModeResult processOpenModeFlags(QIODevice::OpenMode mode);
+
 class QFSFileEnginePrivate;
 
 class Q_CORE_EXPORT QFSFileEngine : public QAbstractFileEngine
@@ -115,7 +122,7 @@ public:
     virtual bool isUnnamedFile() const
     { return false; }
 
-    bool extension(Extension extension, const ExtensionOption *option = 0, ExtensionReturn *output = 0) override;
+    bool extension(Extension extension, const ExtensionOption *option = nullptr, ExtensionReturn *output = nullptr) override;
     bool supportsExtension(Extension extension) const override;
 
     //FS only!!
@@ -131,9 +138,6 @@ public:
 
 protected:
     QFSFileEngine(QFSFileEnginePrivate &dd);
-
-private:
-    inline bool processOpenModeFlags(QIODevice::OpenMode *mode);
 };
 
 class Q_AUTOTEST_EXPORT QFSFileEnginePrivate : public QAbstractFileEnginePrivate

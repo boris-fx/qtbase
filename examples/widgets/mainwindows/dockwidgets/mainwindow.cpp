@@ -128,7 +128,7 @@ void MainWindow::newLetter()
 //! [3]
 void MainWindow::print()
 {
-#if QT_CONFIG(printdialog)
+#if defined(QT_PRINTSUPPORT_LIB) && QT_CONFIG(printdialog)
     QTextDocument *document = textEdit->document();
     QPrinter printer;
 
@@ -161,9 +161,9 @@ void MainWindow::save()
     }
 
     QTextStream out(&file);
-    QApplication::setOverrideCursor(Qt::WaitCursor);
+    QGuiApplication::setOverrideCursor(Qt::WaitCursor);
     out << textEdit->toHtml();
-    QApplication::restoreOverrideCursor();
+    QGuiApplication::restoreOverrideCursor();
 
     statusBar()->showMessage(tr("Saved '%1'").arg(fileName), 2000);
 }

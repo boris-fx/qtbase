@@ -384,10 +384,10 @@ void Widget::renderWindowReady()
     m_output->append(tr("Qt OpenGL library handle: %1")
                      .arg(QString::number(qintptr(QOpenGLContext::openGLModuleHandle()), 16)));
 
-    QList<QByteArray> extensionList = context->extensions().toList();
+    QList<QByteArray> extensionList = context->extensions().values();
     std::sort(extensionList.begin(), extensionList.end());
     m_extensions->append(tr("Found %1 extensions:").arg(extensionList.count()));
-    Q_FOREACH (const QByteArray &ext, extensionList)
+    for (const QByteArray &ext : qAsConst(extensionList))
         m_extensions->append(QString::fromLatin1(ext));
 
     m_output->moveCursor(QTextCursor::Start);

@@ -48,18 +48,18 @@
 **
 ****************************************************************************/
 
-#include <QtWidgets>
-
 #include "tetrixboard.h"
+
+#include <QKeyEvent>
+#include <QLabel>
+#include <QPainter>
 
 //! [0]
 TetrixBoard::TetrixBoard(QWidget *parent)
-    : QFrame(parent)
+    : QFrame(parent), isStarted(false), isPaused(false)
 {
     setFrameStyle(QFrame::Panel | QFrame::Sunken);
     setFocusPolicy(Qt::StrongFocus);
-    isStarted = false;
-    isPaused = false;
     clearBoard();
 
     nextPiece.setRandomShape();
@@ -358,7 +358,7 @@ void TetrixBoard::showNextPiece()
 
     QPixmap pixmap(dx * squareWidth(), dy * squareHeight());
     QPainter painter(&pixmap);
-    painter.fillRect(pixmap.rect(), nextPieceLabel->palette().background());
+    painter.fillRect(pixmap.rect(), nextPieceLabel->palette().window());
 
     for (int i = 0; i < 4; ++i) {
         int x = nextPiece.x(i) - nextPiece.minX();
@@ -396,7 +396,7 @@ bool TetrixBoard::tryMove(const TetrixPiece &newPiece, int newX, int newY)
 //! [36]
 void TetrixBoard::drawSquare(QPainter &painter, int x, int y, TetrixShape shape)
 {
-    static const QRgb colorTable[8] = {
+    static constexpr QRgb colorTable[8] = {
         0x000000, 0xCC6666, 0x66CC66, 0x6666CC,
         0xCCCC66, 0xCC66CC, 0x66CCCC, 0xDAAA00
     };
@@ -405,11 +405,11 @@ void TetrixBoard::drawSquare(QPainter &painter, int x, int y, TetrixShape shape)
     painter.fillRect(x + 1, y + 1, squareWidth() - 2, squareHeight() - 2,
                      color);
 
-    painter.setPen(color.light());
+    painter.setPen(color.lighter());
     painter.drawLine(x, y + squareHeight() - 1, x, y);
     painter.drawLine(x, y, x + squareWidth() - 1, y);
 
-    painter.setPen(color.dark());
+    painter.setPen(color.darker());
     painter.drawLine(x + 1, y + squareHeight() - 1,
                      x + squareWidth() - 1, y + squareHeight() - 1);
     painter.drawLine(x + squareWidth() - 1, y + squareHeight() - 1,

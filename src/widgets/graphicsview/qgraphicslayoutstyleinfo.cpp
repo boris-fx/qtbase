@@ -48,17 +48,15 @@
 QT_BEGIN_NAMESPACE
 
 QGraphicsLayoutStyleInfo::QGraphicsLayoutStyleInfo(const QGraphicsLayoutPrivate *layout)
-    : m_layout(layout), m_style(0)
+    : m_layout(layout), m_style(nullptr)
 {
-    m_widget = new QWidget; // pixelMetric might need a widget ptr
-    if (m_widget)
-        m_styleOption.initFrom(m_widget);
+    m_widget.reset(new QWidget); // pixelMetric might need a widget ptr
+    m_styleOption.initFrom(m_widget.get());
     m_isWindow = m_styleOption.state & QStyle::State_Window;
 }
 
 QGraphicsLayoutStyleInfo::~QGraphicsLayoutStyleInfo()
 {
-    delete m_widget;
 }
 
 qreal QGraphicsLayoutStyleInfo::combinedLayoutSpacing(QLayoutPolicy::ControlTypes controls1,
@@ -82,7 +80,9 @@ qreal QGraphicsLayoutStyleInfo::perItemSpacing(QLayoutPolicy::ControlType contro
 qreal QGraphicsLayoutStyleInfo::spacing(Qt::Orientation orientation) const
 {
     Q_ASSERT(style());
-    return style()->pixelMetric(orientation == Qt::Horizontal ? QStyle::PM_LayoutHorizontalSpacing : QStyle::PM_LayoutVerticalSpacing);
+    return style()->pixelMetric(orientation == Qt::Horizontal
+        ? QStyle::PM_LayoutHorizontalSpacing : QStyle::PM_LayoutVerticalSpacing,
+        &m_styleOption);
 }
 
 qreal QGraphicsLayoutStyleInfo::windowMargin(Qt::Orientation orientation) const
@@ -93,7 +93,7 @@ qreal QGraphicsLayoutStyleInfo::windowMargin(Qt::Orientation orientation) const
                                 const_cast<QStyleOption*>(&m_styleOption), widget());
 }
 
-QWidget *QGraphicsLayoutStyleInfo::widget() const { return m_widget; }
+QWidget *QGraphicsLayoutStyleInfo::widget() const { return m_widget.get(); }
 
 QStyle *QGraphicsLayoutStyleInfo::style() const
 {

@@ -141,6 +141,43 @@ enum PropertyConditionFlags {
     PropertyConditionFlags_IgnoreCase  = 1
 };
 
+enum WindowVisualState {
+    WindowVisualState_Normal    = 0,
+    WindowVisualState_Maximized = 1,
+    WindowVisualState_Minimized = 2
+};
+
+enum WindowInteractionState {
+    WindowInteractionState_Running                 = 0,
+    WindowInteractionState_Closing                 = 1,
+    WindowInteractionState_ReadyForUserInteraction = 2,
+    WindowInteractionState_BlockedByModalWindow    = 3,
+    WindowInteractionState_NotResponding           = 4
+};
+
+enum ExpandCollapseState {
+    ExpandCollapseState_Collapsed         = 0,
+    ExpandCollapseState_Expanded          = 1,
+    ExpandCollapseState_PartiallyExpanded = 2,
+    ExpandCollapseState_LeafNode          = 3
+};
+
+enum NotificationKind {
+    NotificationKind_ItemAdded       = 0,
+    NotificationKind_ItemRemoved     = 1,
+    NotificationKind_ActionCompleted = 2,
+    NotificationKind_ActionAborted   = 3,
+    NotificationKind_Other           = 4
+};
+
+enum NotificationProcessing {
+    NotificationProcessing_ImportantAll          = 0,
+    NotificationProcessing_ImportantMostRecent   = 1,
+    NotificationProcessing_All                   = 2,
+    NotificationProcessing_MostRecent            = 3,
+    NotificationProcessing_CurrentThenMostRecent = 4
+};
+
 struct UiaRect {
     double left;
     double top;

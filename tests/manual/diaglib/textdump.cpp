@@ -44,6 +44,9 @@ static const EnumLookup specialCharactersEnumLookup[] =
 #if QT_VERSION >= 0x050000
     {QChar::Tabulation, "Tabulation"},
     {QChar::LineFeed, "LineFeed"},
+#  if QT_VERSION >= 0x050e00
+    {QChar::FormFeed, "FormFeed"},
+#  endif
     {QChar::CarriageReturn, "CarriageReturn"},
     {QChar::Space, "Space"},
 #endif
@@ -381,7 +384,7 @@ static const EnumLookup *enumLookup(int v, const EnumLookup *array, size_t size)
         if (p->value == v)
             return p;
     }
-    return 0;
+    return nullptr;
 }
 
 static const char *enumName(int v, const EnumLookup *array, size_t size)
@@ -394,22 +397,19 @@ static const char *enumName(int v, const EnumLookup *array, size_t size)
 // that change will be output.
 struct FormattingContext
 {
-    FormattingContext() : category(-1), direction(-1), joiningType(-1)
-      , decompositionTag(-1), script(-1), unicodeVersion(-1) {}
-
-    int category;
-    int direction;
-    int joiningType;
-    int decompositionTag;
-    int script;
-    int unicodeVersion;
+    int category = -1;
+    int direction = -1;
+    int joiningType = -1;
+    int decompositionTag = -1;
+    int script = -1;
+    int unicodeVersion = -1;
 };
 
 static void formatCharacter(QTextStream &str, const QChar &qc, FormattingContext &context)
 {
     const ushort unicode = qc.unicode();
-    str << "U+" << qSetFieldWidth(4) << qSetPadChar('0') << uppercasedigits << hex << unicode
-        << dec << qSetFieldWidth(0) << ' ';
+    str << "U+" << qSetFieldWidth(4) << qSetPadChar('0') << Qt::uppercasedigits
+        << Qt::hex << unicode << Qt::dec << qSetFieldWidth(0) << ' ';
 
     const EnumLookup *specialChar = enumLookup(unicode, specialCharactersEnumLookup, sizeof(specialCharactersEnumLookup) / sizeof(EnumLookup));
     if (specialChar)
@@ -477,9 +477,9 @@ QString dumpTextAsCode(const QString &text)
 {
     QString result;
     QTextStream str(&result);
-    str << "    QString result;\n" << hex << showbase;
-    for (int i = 0; i < text.size(); ++i)
-        str << "    result += QChar(" << text.at(i).unicode() << ");\n";
+    str << "    QString result;\n" << Qt::hex << Qt::showbase;
+    for (QChar c : text)
+        str << "    result += QChar(" << c.unicode() << ");\n";
     str << '\n';
     return result;
 }

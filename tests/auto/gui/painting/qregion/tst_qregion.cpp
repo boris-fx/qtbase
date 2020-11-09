@@ -32,10 +32,8 @@
 
 #include <qbitmap.h>
 #include <qpainter.h>
+#include <qpainterpath.h>
 #include <qpolygon.h>
-#if 0 // Used to be included in Qt4 for Q_WS_X11
-#include <private/qt_x11_p.h>
-#endif
 
 class tst_QRegion : public QObject
 {
@@ -79,11 +77,10 @@ private slots:
 
     void isEmpty_data();
     void isEmpty();
-#if 0 /* Used to be included in Qt4 for Q_WS_X11 */ && defined(QT_BUILD_INTERNAL)
-    void clipRectangles();
-#endif
 
     void regionFromPath();
+    void scaleRegions_data();
+    void scaleRegions();
 
 #ifdef QT_BUILD_INTERNAL
     void regionToPath_data();
@@ -908,24 +905,6 @@ void tst_QRegion::isEmpty()
 #endif
 }
 
-#if 0 /* Used to be included in Qt4 for Q_WS_X11 */ && defined(QT_BUILD_INTERNAL)
-void tst_QRegion::clipRectangles()
-{
-    QRegion region(30, 30, 30, 30);
-    int num = 0;
-    qt_getClipRects(region, num);
-    QCOMPARE(num, 1);
-
-    region += QRegion(10, 10, 10, 10);
-    XRectangle *rects2 = static_cast<XRectangle *>(qt_getClipRects(region, num));
-    QCOMPARE(num, 2);
-
-    // Here's the important part (Y-sorted):
-    QCOMPARE(int(rects2[0].y), 10);
-    QCOMPARE(int(rects2[1].y), 30);
-}
-#endif
-
 void tst_QRegion::regionFromPath()
 {
     {
@@ -971,6 +950,59 @@ void tst_QRegion::regionFromPath()
 
         QCOMPARE(rgn.boundingRect(), QRect(0, 0, 100, 100));
     }
+}
+
+void tst_QRegion::scaleRegions_data()
+{
+    QTest::addColumn<qreal>("scale");
+    QTest::addColumn<QVector<QRect>>("inputRects");
+    QTest::addColumn<QVector<QRect>>("expectedRects");
+
+    QTest::newRow("1.0 single")  << 1.0
+                                 << QVector<QRect>{ QRect(10, 10, 20, 20) }
+                                 << QVector<QRect>{ QRect(10, 10, 20, 20) };
+    QTest::newRow("1.0 multi")   << 1.0
+                                 << QVector<QRect>{ QRect(10, 10, 20, 20), QRect(40, 10, 20, 20) }
+                                 << QVector<QRect>{ QRect(10, 10, 20, 20), QRect(40, 10, 20, 20) };
+    QTest::newRow("2.0 single")  << 2.0
+                                 << QVector<QRect>{ QRect(10, 10, 20, 20) }
+                                 << QVector<QRect>{ QRect(20, 20, 40, 40) };
+    QTest::newRow("2.0 multi")   << 2.0
+                                 << QVector<QRect>{ QRect(10, 10, 20, 20), QRect(40, 10, 20, 20) }
+                                 << QVector<QRect>{ QRect(20, 20, 40, 40), QRect(80, 20, 40, 40) };
+    QTest::newRow("-1.0 single") << -1.0
+                                 << QVector<QRect>{ QRect(10, 10, 20, 20) }
+                                 << QVector<QRect>{ QRect(-30, -30, 20, 20) };
+    QTest::newRow("-1.0 multi")  << -1.0
+                                 << QVector<QRect>{ QRect(10, 10, 20, 20), QRect(40, 10, 20, 20) }
+                                 << QVector<QRect>{ QRect(-60, -30, 20, 20), QRect(-30, -30, 20, 20) };
+    QTest::newRow("-2.0 single") << -2.0
+                                 << QVector<QRect>{ QRect(10, 10, 20, 20) }
+                                 << QVector<QRect>{ QRect(-60, -60, 40, 40) };
+    QTest::newRow("-2.0 multi")  << -2.0
+                                 << QVector<QRect>{ QRect(10, 10, 20, 20), QRect(40, 10, 20, 20) }
+                                 << QVector<QRect>{ QRect(-120, -60, 40, 40), QRect(-60, -60, 40, 40) };
+}
+
+void tst_QRegion::scaleRegions()
+{
+    QFETCH(qreal, scale);
+    QFETCH(QVector<QRect>, inputRects);
+    QFETCH(QVector<QRect>, expectedRects);
+
+    QRegion region;
+    region.setRects(inputRects.constData(), inputRects.size());
+
+    QRegion expected(expectedRects.first());
+    expected.setRects(expectedRects.constData(), expectedRects.size());
+
+    QTransform t;
+    t.scale(scale, scale);
+
+    auto result = t.map(region);
+
+    QCOMPARE(result.rectCount(), expectedRects.size());
+    QCOMPARE(result, expected);
 }
 
 Q_DECLARE_METATYPE(QPainterPath)

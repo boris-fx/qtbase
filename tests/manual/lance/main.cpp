@@ -185,7 +185,7 @@ static void displayCommands()
            "  pixmap_load filename name_in_script\n"
            "  image_load filename name_in_script\n");
 }
-static InteractiveWidget *interactive_widget = 0;
+static InteractiveWidget *interactive_widget = nullptr;
 
 static void runInteractive()
 {
@@ -334,31 +334,18 @@ int main(int argc, char **argv)
                 checkers_background = false;
             }
         } else {
-#if 0 // Used to be included in Qt4 for Q_WS_WIN
-            QString input = QString::fromLocal8Bit(argv[i]);
-            if (input.indexOf('*') >= 0) {
-                QFileInfo info(input);
-                QDir dir = info.dir();
-                QFileInfoList infos = dir.entryInfoList(QStringList(info.fileName()));
-                for (int ii=0; ii<infos.size(); ++ii)
-                    files.append(infos.at(ii).absoluteFilePath());
-            } else {
-                files.append(input);
-            }
-#else
             files.append(QString(argv[i]));
-#endif
         }
     }
-    scaledWidth = width * scalefactor;
-    scaledHeight = height * scalefactor;
+    scaledWidth = int(width * scalefactor);
+    scaledHeight = int(height * scalefactor);
 
     PaintCommands pcmd(QStringList(), 800, 800, imageFormat);
     pcmd.setVerboseMode(verboseMode);
     pcmd.setType(type);
     pcmd.setCheckersBackground(checkers_background);
 
-    QWidget *activeWidget = 0;
+    QWidget *activeWidget = nullptr;
 
     if (interactive) {
         runInteractive();
@@ -377,7 +364,7 @@ int main(int argc, char **argv)
             if (file.open(QIODevice::ReadOnly)) {
                 QTextStream textFile(&file);
                 QString script = textFile.readAll();
-                content = script.split("\n", QString::SkipEmptyParts);
+                content = script.split("\n", Qt::SkipEmptyParts);
             } else {
                 printf("failed to read file: '%s'\n", qPrintable(fileinfo.absoluteFilePath()));
                 continue;
@@ -610,7 +597,7 @@ int main(int argc, char **argv)
 
                 QPrinter p(highres ? QPrinter::HighResolution : QPrinter::ScreenResolution);
                 if (printdlg) {
-                    QPrintDialog printDialog(&p, 0);
+                    QPrintDialog printDialog(&p, nullptr);
                     if (printDialog.exec() != QDialog::Accepted)
                         break;
                 } else {

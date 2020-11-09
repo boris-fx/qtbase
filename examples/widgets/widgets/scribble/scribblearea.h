@@ -62,7 +62,7 @@ class ScribbleArea : public QWidget
     Q_OBJECT
 
 public:
-    ScribbleArea(QWidget *parent = 0);
+    ScribbleArea(QWidget *parent = nullptr);
 
     bool openImage(const QString &fileName);
     bool saveImage(const QString &fileName, const char *fileFormat);
@@ -88,10 +88,10 @@ private:
     void drawLineTo(const QPoint &endPoint);
     void resizeImage(QImage *image, const QSize &newSize);
 
-    bool modified;
-    bool scribbling;
-    int myPenWidth;
-    QColor myPenColor;
+    bool modified = false;
+    bool scribbling = false;
+    int myPenWidth = 1;
+    QColor myPenColor = Qt::blue;
     QImage image;
     QPoint lastPoint;
 };

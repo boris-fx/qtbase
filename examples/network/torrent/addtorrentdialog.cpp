@@ -73,12 +73,12 @@ AddTorrentDialog::AddTorrentDialog(QWidget *parent)
 {
     ui.setupUi(this);
 
-    connect(ui.browseTorrents, SIGNAL(clicked()),
-            this, SLOT(selectTorrent()));
-    connect(ui.browseDestination, SIGNAL(clicked()),
-            this, SLOT(selectDestination()));
-    connect(ui.torrentFile, SIGNAL(textChanged(QString)),
-            this, SLOT(setTorrent(QString)));
+    connect(ui.browseTorrents, &QPushButton::clicked,
+            this, &AddTorrentDialog::selectTorrent);
+    connect(ui.browseDestination, &QPushButton::clicked,
+            this, &AddTorrentDialog::selectDestination);
+    connect(ui.torrentFile, &QLineEdit::textChanged,
+            this, &AddTorrentDialog::setTorrent);
 
     ui.destinationFolder->setText(destinationDirectory = QDir::current().path());
     ui.torrentFile->setFocus();
@@ -148,7 +148,8 @@ void AddTorrentDialog::setTorrent(const QString &torrentFile)
         ui.torrentContents->setHtml(metaInfo.singleFile().name);
     } else {
         QString html;
-        foreach (MetaInfoMultiFile file, metaInfo.multiFiles()) {
+        const QList<MetaInfoMultiFile> multiFiles = metaInfo.multiFiles();
+        for (const MetaInfoMultiFile &file : multiFiles) {
             QString name = metaInfo.name();
             if (!name.isEmpty()) {
                 html += name;

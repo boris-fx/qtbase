@@ -9,18 +9,18 @@ qtConfig(dbus-linked) {
 }
 
 win32 { 
-    LIBS_PRIVATE += \
-        -lws2_32 \
-        -ladvapi32 \
-        -lnetapi32 \
-        -luser32
+    QMAKE_USE_PRIVATE += \
+        advapi32 \
+        netapi32 \
+        user32 \
+        ws2_32
 }
 
 DEFINES += QT_NO_FOREACH
 
 QMAKE_DOCS = $$PWD/doc/qtdbus.qdocconf
 
-PUB_HEADERS = qtdbusglobal.h \
+HEADERS += qtdbusglobal.h \
     qdbusargument.h \
     qdbusconnectioninterface.h \
     qdbuserror.h \
@@ -38,8 +38,7 @@ PUB_HEADERS = qtdbusglobal.h \
     qdbuscontext.h \
     qdbusvirtualobject.h \
     qdbusservicewatcher.h \
-    qdbusunixfiledescriptor.h
-HEADERS += $$PUB_HEADERS \
+    qdbusunixfiledescriptor.h \
     qtdbusglobal_p.h \
     qdbusconnection_p.h \
     qdbusconnectionmanager_p.h \

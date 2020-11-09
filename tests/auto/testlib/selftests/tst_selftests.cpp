@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2016 The Qt Company Ltd.
+** Copyright (C) 2020 The Qt Company Ltd.
 ** Copyright (C) 2016 Intel Corporation.
 ** Contact: https://www.qt.io/licensing/
 **
@@ -76,8 +76,6 @@ private:
     QList<LoggerSet> allLoggerSets() const;
 
     QTemporaryDir tempDir;
-    QRegularExpression durationRegExp;
-    QRegularExpression teamcityLocRegExp;
 };
 
 struct BenchmarkResult
@@ -280,13 +278,17 @@ QList<LoggerSet> tst_Selftests::allLoggerSets() const
                      QStringList() << "xml",
                      QStringList() << "-xml" << "-o" << logName("xml")
                     )
-        << LoggerSet("old stdout xunitxml",
-                     QStringList() << "stdout xunitxml",
-                     QStringList() << "-xunitxml"
+        << LoggerSet("old stdout junitxml",
+                     QStringList() << "stdout junitxml",
+                     QStringList() << "-junitxml"
                     )
-        << LoggerSet("old xunitxml",
-                     QStringList() << "xunitxml",
-                     QStringList() << "-xunitxml" << "-o" << logName("xunitxml")
+        << LoggerSet("old junitxml",
+                     QStringList() << "junitxml",
+                     QStringList() << "-junitxml" << "-o" << logName("junitxml")
+                    )
+        << LoggerSet("old xunitxml compatibility",
+                     QStringList() << "junitxml",
+                     QStringList() << "-xunitxml" << "-o" << logName("junitxml")
                     )
         << LoggerSet("old stdout lightxml",
                      QStringList() << "stdout lightxml",
@@ -335,13 +337,17 @@ QList<LoggerSet> tst_Selftests::allLoggerSets() const
                      QStringList() << "xml",
                      QStringList() << "-o" << logName("xml")+",xml"
                     )
-        << LoggerSet("new stdout xunitxml",
-                     QStringList() << "stdout xunitxml",
+        << LoggerSet("new stdout junitxml",
+                     QStringList() << "stdout junitxml",
+                     QStringList() << "-o" << "-,junitxml"
+                    )
+        << LoggerSet("new stdout xunitxml compatibility",
+                     QStringList() << "stdout junitxml",
                      QStringList() << "-o" << "-,xunitxml"
                     )
-        << LoggerSet("new xunitxml",
-                     QStringList() << "xunitxml",
-                     QStringList() << "-o" << logName("xunitxml")+",xunitxml"
+        << LoggerSet("new junitxml",
+                     QStringList() << "junitxml",
+                     QStringList() << "-o" << logName("junitxml")+",junitxml"
                     )
         << LoggerSet("new stdout lightxml",
                      QStringList() << "stdout lightxml",
@@ -384,24 +390,24 @@ QList<LoggerSet> tst_Selftests::allLoggerSets() const
                      QStringList() << "-o" << logName("xml")+",xml"
                                    << "-o" << "-,txt"
                     )
-        << LoggerSet("txt + xunitxml",
-                     QStringList() << "txt" << "xunitxml",
+        << LoggerSet("txt + junitxml",
+                     QStringList() << "txt" << "junitxml",
                      QStringList() << "-o" << logName("txt")+",txt"
-                                   << "-o" << logName("xunitxml")+",xunitxml"
+                                   << "-o" << logName("junitxml")+",junitxml"
                     )
-        << LoggerSet("lightxml + stdout xunitxml",
-                     QStringList() << "lightxml" << "stdout xunitxml",
+        << LoggerSet("lightxml + stdout junitxml",
+                     QStringList() << "lightxml" << "stdout junitxml",
                      QStringList() << "-o" << logName("lightxml")+",lightxml"
-                                   << "-o" << "-,xunitxml"
+                                   << "-o" << "-,junitxml"
                     )
         // All loggers at the same time (except csv)
         << LoggerSet("all loggers",
-                     QStringList() << "txt" << "xml" << "lightxml" << "stdout txt" << "xunitxml" << "tap",
+                     QStringList() << "txt" << "xml" << "lightxml" << "stdout txt" << "junitxml" << "tap",
                      QStringList() << "-o" << logName("txt")+",txt"
                                    << "-o" << logName("xml")+",xml"
                                    << "-o" << logName("lightxml")+",lightxml"
                                    << "-o" << "-,txt"
-                                   << "-o" << logName("xunitxml")+",xunitxml"
+                                   << "-o" << logName("junitxml")+",junitxml"
                                    << "-o" << logName("teamcity")+",teamcity"
                                    << "-o" << logName("tap")+",tap"
                     )
@@ -410,17 +416,15 @@ QList<LoggerSet> tst_Selftests::allLoggerSets() const
 
 tst_Selftests::tst_Selftests()
     : tempDir(QDir::tempPath() + "/tst_selftests.XXXXXX")
-    , durationRegExp("<Duration msecs=\"[\\d\\.]+\"/>")
-    , teamcityLocRegExp("\\|\\[Loc: .*\\(\\d*\\)\\|\\]")
 {}
 
 void tst_Selftests::initTestCase()
 {
     QVERIFY2(tempDir.isValid(), qPrintable(tempDir.errorString()));
     //Detect the location of the sub programs
-    QString subProgram = QLatin1String("float/float");
+    QString subProgram = QLatin1String("pass/pass");
 #if defined(Q_OS_WIN)
-    subProgram = QLatin1String("float/float.exe");
+    subProgram = QLatin1String("pass/pass.exe");
 #endif
     QString testdataDir = QFINDTESTDATA(subProgram);
     if (testdataDir.lastIndexOf(subProgram) > 0)
@@ -439,7 +443,6 @@ void tst_Selftests::runSubTest_data()
     QTest::addColumn<bool>("crashes");
 
     QStringList tests = QStringList()
-//        << "alive"    // timer dependent
 #if !defined(Q_OS_WIN)
         // On windows, assert does nothing in release mode and blocks execution
         // with a popup window in debug mode.
@@ -468,10 +471,13 @@ void tst_Selftests::runSubTest_data()
 #endif
         << "expectfail"
         << "failcleanup"
+#ifndef Q_OS_WIN // these assert, by design; so same problem as "assert"
+        << "faildatatype"
+        << "failfetchtype"
+#endif
         << "failinit"
         << "failinitdata"
-#if !defined(Q_OS_WIN)
-        // Disable this test on Windows, as the run-time will popup dialogs with warnings
+#ifndef Q_OS_WIN // asserts, by design; so same problem as "assert"
         << "fetchbogus"
 #endif
         << "findtestdata"
@@ -481,10 +487,12 @@ void tst_Selftests::runSubTest_data()
         << "longstring"
         << "maxwarnings"
         << "multiexec"
+        << "pass"
         << "pairdiagnostics"
         << "printdatatags"
         << "printdatatagswithglobaltags"
         << "qexecstringlist"
+        << "signaldumper"
         << "silent"
         << "singleskip"
         << "skip"
@@ -494,6 +502,7 @@ void tst_Selftests::runSubTest_data()
         << "sleep"
         << "strcmp"
         << "subtest"
+        << "testlib"
         << "tuplediagnostics"
         << "verbose1"
         << "verbose2"
@@ -502,6 +511,7 @@ void tst_Selftests::runSubTest_data()
         << "verifyexceptionthrown"
 #endif //!QT_NO_EXCEPTIONS
         << "warnings"
+        << "watchdog"
         << "xunit"
     ;
 
@@ -519,45 +529,6 @@ void tst_Selftests::runSubTest_data()
         QStringList loggers = loggerSet.loggers;
 
         foreach (QString const& subtest, tests) {
-            QStringList arguments = loggerSet.arguments;
-            if (subtest == "commandlinedata") {
-                arguments << QString("fiveTablePasses fiveTablePasses:fiveTablePasses_data1 -v2").split(' ');
-            }
-            else if (subtest == "benchlibcallgrind") {
-                arguments << "-callgrind";
-            }
-            else if (subtest == "benchlibeventcounter") {
-                arguments << "-eventcounter";
-            }
-            else if (subtest == "benchliboptions") {
-                arguments << "-eventcounter";
-            }
-            else if (subtest == "benchlibtickcounter") {
-                arguments << "-tickcounter";
-            }
-            else if (subtest == "badxml") {
-                arguments << "-eventcounter";
-            }
-            else if (subtest == "benchlibcounting") {
-                arguments << "-eventcounter";
-            }
-            else if (subtest == "printdatatags") {
-                arguments << "-datatags";
-            }
-            else if (subtest == "printdatatagswithglobaltags") {
-                arguments << "-datatags";
-            }
-            else if (subtest == "silent") {
-                arguments << "-silent";
-            }
-            else if (subtest == "verbose1") {
-                arguments << "-v1";
-            }
-            else if (subtest == "verbose2") {
-                arguments << "-v2";
-            }
-
-
             // These tests don't work right unless logging plain text to
             // standard output, either because they execute multiple test
             // objects or because they internally supply arguments to
@@ -612,14 +583,16 @@ void tst_Selftests::runSubTest_data()
             if (loggerSet.name.contains("teamcity") && subtest.startsWith("benchlib"))
                 continue;   // Skip benchmark for TeamCity logger
 
+            // Keep in sync with generateTestData()'s crashers in generate_expected_output.py:
             const bool crashes = subtest == QLatin1String("assert") || subtest == QLatin1String("exceptionthrow")
                 || subtest == QLatin1String("fetchbogus") || subtest == QLatin1String("crashedterminate")
+                || subtest == QLatin1String("faildatatype") || subtest == QLatin1String("failfetchtype")
                 || subtest == QLatin1String("crashes") || subtest == QLatin1String("silent")
-                || subtest == QLatin1String("blacklisted");
+                || subtest == QLatin1String("blacklisted") || subtest == QLatin1String("watchdog");
             QTest::newRow(qPrintable(QString("%1 %2").arg(subtest).arg(loggerSet.name)))
                 << subtest
                 << loggers
-                << arguments
+                << loggerSet.arguments
                 << crashes
             ;
         }
@@ -674,11 +647,8 @@ static inline QByteArray msgProcessError(const QString &binary, const QStringLis
 
 void tst_Selftests::doRunSubTest(QString const& subdir, QStringList const& loggers, QStringList const& arguments, bool crashes)
 {
-    if (EmulationDetector::isRunningArmOnX86() && (subdir == "crashes"))
-        QSKIP("Skipping \"crashes\" due to QTBUG-71915");
-
 #if defined(__GNUC__) && defined(__i386) && defined(Q_OS_LINUX)
-    if (arguments.contains("-callgrind")) {
+    if (subdir == "benchlibcallgrind") {
         QProcess checkProcess;
         QStringList args;
         args << QLatin1String("--version");
@@ -690,9 +660,12 @@ void tst_Selftests::doRunSubTest(QString const& subdir, QStringList const& logge
 
     QProcess proc;
     QProcessEnvironment environment = processEnvironment();
+    // Keep in sync with generateTestData()'s extraEnv in generate_expected_output.py:
     if (crashes) {
         environment.insert("QTEST_DISABLE_CORE_DUMP", "1");
         environment.insert("QTEST_DISABLE_STACK_DUMP", "1");
+        if (subdir == QLatin1String("watchdog"))
+            environment.insert("QTEST_FUNCTION_TIMEOUT", "100");
     }
     proc.setProcessEnvironment(environment);
     const QString path = subdir + QLatin1Char('/') + subdir;
@@ -735,6 +708,7 @@ void tst_Selftests::doRunSubTest(QString const& subdir, QStringList const& logge
     if (subdir != QLatin1String("exceptionthrow")
         && subdir != QLatin1String("cmptest") // QImage comparison requires QGuiApplication
         && subdir != QLatin1String("fetchbogus")
+        && subdir != QLatin1String("watchdog")
         && subdir != QLatin1String("xunit")
 #ifdef Q_CC_MINGW
         && subdir != QLatin1String("blacklisted") // calls qFatal()
@@ -742,11 +716,13 @@ void tst_Selftests::doRunSubTest(QString const& subdir, QStringList const& logge
 #endif
 #ifdef Q_OS_LINUX
         // QEMU outputs to stderr about uncaught signals
-        && (!EmulationDetector::isRunningArmOnX86() ||
-                (subdir != QLatin1String("blacklisted")
-                 && subdir != QLatin1String("silent")
-                 && subdir != QLatin1String("assert")
-                 && subdir != QLatin1String("crashes")
+        && !(EmulationDetector::isRunningArmOnX86() &&
+                (subdir == QLatin1String("assert")
+                 || subdir == QLatin1String("blacklisted")
+                 || subdir == QLatin1String("crashes")
+                 || subdir == QLatin1String("faildatatype")
+                 || subdir == QLatin1String("failfetchtype")
+                 || subdir == QLatin1String("silent")
                 )
             )
 #endif
@@ -759,7 +735,7 @@ void tst_Selftests::doRunSubTest(QString const& subdir, QStringList const& logge
             QByteArray &actual = actualOutputs[0];
 #ifndef Q_OS_WIN
              // Remove digits of times to match the expected file.
-            const QLatin1String timePattern("Function time:");
+            const QByteArray timePattern("Function time:");
             int timePos = actual.indexOf(timePattern);
             if (timePos >= 0) {
                 timePos += timePattern.size();
@@ -825,8 +801,8 @@ bool tst_Selftests::compareOutput(const QString &logger, const QString &subdir,
 {
 
     if (actual.size() != expected.size()) {
-        *errorMessage = QString::fromLatin1("Mismatch in line count: %1 != %2.")
-                        .arg(actual.size()).arg(expected.size());
+        *errorMessage = QString::fromLatin1("Mismatch in line count. Expected %1 but got %2.")
+                        .arg(expected.size()).arg(actual.size());
         return false;
     }
 
@@ -859,6 +835,7 @@ bool tst_Selftests::compareOutput(const QString &logger, const QString &subdir,
 
         // Special handling for ignoring _FILE_ and _LINE_ if logger is teamcity
         if (logger.endsWith(QLatin1String("teamcity"))) {
+            static QRegularExpression teamcityLocRegExp("\\|\\[Loc: .*\\(\\d*\\)\\|\\]");
             actualLine.replace(teamcityLocRegExp, teamCityLocation());
             expectedLine.replace(teamcityLocRegExp, teamCityLocation());
         }
@@ -887,16 +864,20 @@ bool tst_Selftests::compareLine(const QString &logger, const QString &subdir,
                                 const QString &actualLine, const QString &expectedLine,
                                 QString *errorMessage) const
 {
-    if (subdir == QLatin1String("assert") && actualLine.contains(QLatin1String("ASSERT: "))
-        && expectedLine.contains(QLatin1String("ASSERT: ")) && actualLine != expectedLine) {
+    if (actualLine == expectedLine)
+        return true;
+
+    if ((subdir == QLatin1String("assert")
+         || subdir == QLatin1String("faildatatype") || subdir == QLatin1String("failfetchtype"))
+        && actualLine.contains(QLatin1String("ASSERT: "))
+        && expectedLine.contains(QLatin1String("ASSERT: "))) {
         // Q_ASSERT uses __FILE__, the exact contents of which are
         // undefined. If have we something that looks like a Q_ASSERT and we
         // were expecting to see a Q_ASSERT, we'll skip the line.
         return true;
     }
 
-    if (expectedLine.startsWith(QLatin1String("FAIL!  : tst_Exception::throwException() Caught unhandled exce"))
-        && actualLine != expectedLine) {
+    if (expectedLine.startsWith(QLatin1String("FAIL!  : tst_Exception::throwException() Caught unhandled exce"))) {
         // On some platforms we compile without RTTI, and as a result we never throw an exception
         if (actualLine.simplified() != QLatin1String("tst_Exception::throwException()")) {
             *errorMessage = QString::fromLatin1("'%1' != 'tst_Exception::throwException()'").arg(actualLine);
@@ -925,6 +906,7 @@ bool tst_Selftests::compareLine(const QString &logger, const QString &subdir,
 
     if (actualLine.startsWith(QLatin1String("    <Duration msecs="))
         || actualLine.startsWith(QLatin1String("<Duration msecs="))) {
+        static QRegularExpression durationRegExp("<Duration msecs=\"[\\d\\.]+\"/>");
         QRegularExpressionMatch match = durationRegExp.match(actualLine);
         if (match.hasMatch())
             return true;
@@ -935,8 +917,36 @@ bool tst_Selftests::compareLine(const QString &logger, const QString &subdir,
     if (actualLine.startsWith(QLatin1String("Totals:")) && expectedLine.startsWith(QLatin1String("Totals:")))
         return true;
 
-    if (actualLine == expectedLine)
+    const QLatin1String pointerPlaceholder("_POINTER_");
+    if (expectedLine.contains(pointerPlaceholder)
+        && (expectedLine.contains(QLatin1String("Signal: "))
+            || expectedLine.contains(QLatin1String("Slot: ")))) {
+        QString actual = actualLine;
+        // We don't care about the pointer of the object to whom the signal belongs, so we
+        // replace it with _POINTER_, e.g.:
+        // Signal: SignalSlotClass(7ffd72245410) signalWithoutParameters ()
+        // Signal: QThread(7ffd72245410) started ()
+        // After this instance pointer we may have further pointers and
+        // references (with an @ prefix) as parameters of the signal or
+        // slot being invoked.
+        // Signal: SignalSlotClass(_POINTER_) qStringRefSignal ((QString&)@55f5fbb8dd40)
+        actual.replace(QRegularExpression("\\b[a-f0-9]{8,}\\b"), pointerPlaceholder);
+        // Also change QEventDispatcher{Glib,Win32,etc.} to QEventDispatcherPlatform
+        actual.replace(QRegularExpression("\\b(QEventDispatcher)\\w+\\b"), QLatin1String("\\1Platform"));
+        if (actual != expectedLine) {
+          *errorMessage = msgMismatch(actual, expectedLine);
+          return false;
+        }
         return true;
+    }
+
+    if (EmulationDetector::isRunningArmOnX86() && subdir == QLatin1String("float")) {
+        // QEMU cheats at qfloat16, so outputs it as if it were a float.
+        if (actualLine.endsWith(QLatin1String("Actual   (operandLeft) : 0.001"))
+            && expectedLine.endsWith(QLatin1String("Actual   (operandLeft) : 0.000999"))) {
+            return true;
+        }
+    }
 
     *errorMessage = msgMismatch(actualLine, expectedLine);
     return false;

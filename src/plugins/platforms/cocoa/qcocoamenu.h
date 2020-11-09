@@ -44,8 +44,7 @@
 #include <QtCore/QList>
 #include <qpa/qplatformmenu.h>
 #include "qcocoamenuitem.h"
-
-Q_FORWARD_DECLARE_OBJC_CLASS(QT_MANGLE_NAMESPACE(QCocoaNSMenu));
+#include "qcocoansmenu.h"
 
 QT_BEGIN_NAMESPACE
 
@@ -92,6 +91,9 @@ public:
     bool isOpen() const;
     void setIsOpen(bool isOpen);
 
+    bool isAboutToShow() const;
+    void setIsAboutToShow(bool isAbout);
+
     void timerEvent(QTimerEvent *e) override;
 
     void syncMenuItem_helper(QPlatformMenuItem *menuItem, bool menubarUpdate);
@@ -104,13 +106,14 @@ private:
     void scheduleUpdate();
 
     QList<QCocoaMenuItem *> m_menuItems;
-    QT_MANGLE_NAMESPACE(QCocoaNSMenu) *m_nativeMenu;
+    QCocoaNSMenu *m_nativeMenu;
     NSMenuItem *m_attachedItem;
     int m_updateTimer;
     bool m_enabled:1;
     bool m_parentEnabled:1;
     bool m_visible:1;
     bool m_isOpen:1;
+    bool m_isAboutToShow:1;
 };
 
 QT_END_NAMESPACE

@@ -102,6 +102,7 @@ struct QWindowsUser32DLL
     typedef BOOL (WINAPI *RemoveClipboardFormatListener)(HWND);
     typedef BOOL (WINAPI *GetDisplayAutoRotationPreferences)(DWORD *);
     typedef BOOL (WINAPI *SetDisplayAutoRotationPreferences)(DWORD);
+    typedef BOOL (WINAPI *AdjustWindowRectExForDpi)(LPRECT,DWORD,BOOL,DWORD,UINT);
     typedef BOOL (WINAPI *EnableNonClientDpiScaling)(HWND);
     typedef int  (WINAPI *GetWindowDpiAwarenessContext)(HWND);
     typedef int  (WINAPI *GetAwarenessFromDpiAwarenessContext)(int);
@@ -131,6 +132,7 @@ struct QWindowsUser32DLL
     GetDisplayAutoRotationPreferences getDisplayAutoRotationPreferences = nullptr;
     SetDisplayAutoRotationPreferences setDisplayAutoRotationPreferences = nullptr;
 
+    AdjustWindowRectExForDpi adjustWindowRectExForDpi = nullptr;
     EnableNonClientDpiScaling enableNonClientDpiScaling = nullptr;
     GetWindowDpiAwarenessContext getWindowDpiAwarenessContext = nullptr;
     GetAwarenessFromDpiAwarenessContext getAwarenessFromDpiAwarenessContext = nullptr;
@@ -153,7 +155,7 @@ struct QWindowsShcoreDLL {
 
 class QWindowsContext
 {
-    Q_DISABLE_COPY(QWindowsContext)
+    Q_DISABLE_COPY_MOVE(QWindowsContext)
 public:
 
     enum SystemInfoFlags
@@ -174,15 +176,18 @@ public:
     bool initTablet(unsigned integrationOptions);
     bool initPointer(unsigned integrationOptions);
 
+    bool initPowerNotificationHandler();
+
     int defaultDPI() const;
 
+    static QString classNamePrefix();
     QString registerWindowClass(const QWindow *w);
     QString registerWindowClass(QString cname, WNDPROC proc,
-                                unsigned style = 0, HBRUSH brush = 0,
+                                unsigned style = 0, HBRUSH brush = nullptr,
                                 bool icon = false);
     HWND createDummyWindow(const QString &classNameIn,
                            const wchar_t *windowName,
-                           WNDPROC wndProc = 0, DWORD style = WS_OVERLAPPED);
+                           WNDPROC wndProc = nullptr, DWORD style = WS_OVERLAPPED);
 
     HDC displayContext() const;
     int screenDepth() const;
@@ -201,6 +206,8 @@ public:
     QWindowsWindow *findPlatformWindowAt(HWND parent, const QPoint &screenPoint,
                                              unsigned cwex_flags) const;
 
+    static bool shouldHaveNonClientDpiScaling(const QWindow *window);
+
     QWindow *windowUnderMouse() const;
     void clearWindowUnderMouse();
 
@@ -218,6 +225,8 @@ public:
     void setTabletAbsoluteRange(int a);
     void setProcessDpiAwareness(QtWindows::ProcessDpiAwareness dpiAwareness);
     static int processDpiAwareness();
+
+    static bool isDarkMode();
 
     void setDetectAltGrModifier(bool a);
 
@@ -239,6 +248,8 @@ public:
     static QByteArray comErrorString(HRESULT hr);
     bool asyncExpose() const;
     void setAsyncExpose(bool value);
+
+    static void forceNcCalcSize(HWND hwnd);
 
     static bool systemParametersInfo(unsigned action, unsigned param, void *out, unsigned dpi = 0);
     static bool systemParametersInfoForScreen(unsigned action, unsigned param, void *out,

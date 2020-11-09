@@ -45,10 +45,6 @@
 #  include <QtCore/qt_windows.h>
 #endif
 
-// For QSignalSpy slot connections.
-Q_DECLARE_METATYPE(Qt::ScreenOrientation)
-Q_DECLARE_METATYPE(QWindow::Visibility)
-
 static bool isPlatformWinRT()
 {
     static const bool isWinRT = !QGuiApplication::platformName().compare(QLatin1String("winrt"), Qt::CaseInsensitive);
@@ -185,7 +181,7 @@ void tst_QWindow::setParent()
     QVERIFY2(c.children().contains(&d), "Parent should have child in list of children");
 
     a.create();
-    b.setParent(0);
+    b.setParent(nullptr);
     QVERIFY2(!b.handle(), "Making window top level shouild not automatically create it");
 
     QWindow e;
@@ -228,7 +224,7 @@ void tst_QWindow::setVisible()
     f.setVisible(true);
     QVERIFY(!f.handle());
     QVERIFY(!e.handle());
-    f.setParent(0);
+    f.setParent(nullptr);
     QVERIFY2(f.handle(), "Making a visible but not created child window top level should create it");
     QVERIFY(QTest::qWaitForWindowExposed(&f));
 
@@ -304,7 +300,7 @@ public:
         m_framePositionsOnMove.clear();
     }
 
-    bool event(QEvent *event)
+    bool event(QEvent *event) override
     {
         m_received[event->type()]++;
         m_order << event->type();
@@ -323,6 +319,7 @@ public:
 
         case QEvent::WindowStateChange:
             lastReceivedWindowState = windowState();
+            break;
 
         default:
             break;
@@ -363,7 +360,7 @@ private:
 
 class ColoredWindow : public QRasterWindow {
 public:
-    explicit ColoredWindow(const QColor &color, QWindow *parent = 0) : QRasterWindow(parent), m_color(color) {}
+    explicit ColoredWindow(const QColor &color, QWindow *parent = nullptr) : QRasterWindow(parent), m_color(color) {}
     void paintEvent(QPaintEvent *) override
     {
         QPainter p(this);
@@ -381,6 +378,7 @@ void tst_QWindow::eventOrderOnShow()
     QRect geometry(m_availableTopLeft + QPoint(80, 80), m_testWindowSize);
 
     Window window;
+    window.setTitle(QLatin1String(QTest::currentTestFunction()));
     window.setGeometry(geometry);
     window.show();
     QCoreApplication::processEvents();
@@ -440,12 +438,12 @@ void tst_QWindow::exposeEventOnShrink_QTBUG54040()
 
 void tst_QWindow::positioning_data()
 {
-    QTest::addColumn<int>("windowflags");
+    QTest::addColumn<Qt::WindowFlags>("windowflags");
 
-    QTest::newRow("default") << int(Qt::Window | Qt::WindowTitleHint | Qt::WindowMinMaxButtonsHint | Qt::WindowCloseButtonHint | Qt::WindowFullscreenButtonHint);
+    QTest::newRow("default") << (Qt::Window | Qt::WindowTitleHint | Qt::WindowMinMaxButtonsHint | Qt::WindowCloseButtonHint | Qt::WindowFullscreenButtonHint);
 
-#ifdef Q_OS_OSX
-    QTest::newRow("fake") << int(Qt::Window | Qt::WindowTitleHint | Qt::WindowMinMaxButtonsHint | Qt::WindowCloseButtonHint);
+#ifdef Q_OS_MACOS
+    QTest::newRow("fake") << (Qt::Window | Qt::WindowTitleHint | Qt::WindowMinMaxButtonsHint | Qt::WindowCloseButtonHint);
 #endif
 }
 
@@ -500,8 +498,8 @@ void tst_QWindow::positioning()
     // events, so set the width to suitably large value to avoid those.
     const QRect geometry(m_availableTopLeft + QPoint(80, 80), m_testWindowSize);
 
-    QFETCH(int, windowflags);
-    Window window((Qt::WindowFlags)windowflags);
+    QFETCH(Qt::WindowFlags, windowflags);
+    Window window(windowflags);
     window.setGeometry(QRect(m_availableTopLeft + QPoint(20, 20), m_testWindowSize));
     window.setFramePosition(m_availableTopLeft + QPoint(40, 40)); // Move window around before show, size must not change.
     QCOMPARE(window.geometry().size(), m_testWindowSize);
@@ -628,14 +626,12 @@ void tst_QWindow::childWindowPositioning()
 
     QFETCH(bool, showInsteadOfCreate);
 
-    QWindow* windows[] = { &topLevelWindowFirst, &childWindowAfter, &childWindowFirst, &topLevelWindowAfter, 0 };
-    for (int i = 0; windows[i]; ++i) {
-        QWindow *window = windows[i];
-        if (showInsteadOfCreate) {
+    QWindow *windows[] = {&topLevelWindowFirst, &childWindowAfter, &childWindowFirst, &topLevelWindowAfter};
+    for (QWindow *window : windows) {
+        if (showInsteadOfCreate)
             window->showNormal();
-        } else {
+        else
             window->create();
-        }
     }
 
     if (showInsteadOfCreate) {
@@ -712,7 +708,7 @@ void tst_QWindow::stateChange()
     //  explicitly use non-fullscreen show. show() can be fullscreen on some platforms
     window.showNormal();
     QVERIFY(QTest::qWaitForWindowExposed(&window));
-    foreach (Qt::WindowState state, stateSequence) {
+    for (Qt::WindowState state : qAsConst(stateSequence)) {
         window.setWindowState(state);
         QCoreApplication::processEvents();
     }
@@ -726,15 +722,9 @@ class PlatformWindowFilter : public QObject
 {
     Q_OBJECT
 public:
-    PlatformWindowFilter(QObject *parent = 0)
-        : QObject(parent)
-        , m_window(nullptr)
-        , m_alwaysExisted(true)
-    {}
+    explicit PlatformWindowFilter(Window *window) : m_window(window) {}
 
-    void setWindow(Window *window) { m_window = window; }
-
-    bool eventFilter(QObject *o, QEvent *e)
+    bool eventFilter(QObject *o, QEvent *e) override
     {
         // Check that the platform surface events are delivered synchronously.
         // If they are, the native platform surface should always exist when we
@@ -749,7 +739,7 @@ public:
 
 private:
     Window *m_window;
-    bool m_alwaysExisted;
+    bool m_alwaysExisted = true;
 };
 
 void tst_QWindow::platformSurface()
@@ -757,8 +747,7 @@ void tst_QWindow::platformSurface()
     QRect geometry(m_availableTopLeft + QPoint(80, 80), m_testWindowSize);
 
     Window window;
-    PlatformWindowFilter filter;
-    filter.setWindow(&window);
+    PlatformWindowFilter filter(&window);
     window.installEventFilter(&filter);
 
     window.setGeometry(geometry);
@@ -784,6 +773,7 @@ void tst_QWindow::isExposed()
     QRect geometry(m_availableTopLeft + QPoint(80, 80), m_testWindowSize);
 
     Window window;
+    window.setTitle(QLatin1String(QTest::currentTestFunction()));
     window.setGeometry(geometry);
     QCOMPARE(window.geometry(), geometry);
     window.show();
@@ -818,6 +808,7 @@ void tst_QWindow::isActive()
         QSKIP("QWindow::requestActivate() is not supported.");
 
     Window window;
+    window.setTitle(QLatin1String(QTest::currentTestFunction()));
     // Some platforms enforce minimum widths for windows, which can cause extra resize
     // events, so set the width to suitably large value to avoid those.
     window.setGeometry(QRect(m_availableTopLeft + QPoint(80, 80), m_testWindowSize));
@@ -902,7 +893,13 @@ void tst_QWindow::isActive()
     QTRY_COMPARE(QGuiApplication::focusWindow(), &window);
     QCoreApplication::processEvents();
     QTRY_COMPARE(dialog.received(QEvent::FocusOut), 1);
-    QTRY_COMPARE(window.received(QEvent::FocusIn), 3);
+    // We should be checking for exactly three, but since this is a try-compare _loop_, we might
+    // loose and regain focus multiple times in the event of a system popup. This has been observed
+    // to fail on Windows, see QTBUG-77769.
+    QTRY_VERIFY2(window.received(QEvent::FocusIn) >= 3,
+                 qPrintable(
+                 QStringLiteral("Expected more than three focus in events, received: %1")
+                 .arg(window.received(QEvent::FocusIn))));
 
     QVERIFY(window.isActive());
 
@@ -916,13 +913,16 @@ void tst_QWindow::isActive()
 class InputTestWindow : public ColoredWindow
 {
 public:
-    void keyPressEvent(QKeyEvent *event) {
+    void keyPressEvent(QKeyEvent *event) override
+    {
         keyPressCode = event->key();
     }
-    void keyReleaseEvent(QKeyEvent *event) {
+    void keyReleaseEvent(QKeyEvent *event) override
+    {
         keyReleaseCode = event->key();
     }
-    void mousePressEvent(QMouseEvent *event) {
+    void mousePressEvent(QMouseEvent *event) override
+    {
         if (ignoreMouse) {
             event->ignore();
         } else {
@@ -935,7 +935,8 @@ public:
                 QCoreApplication::processEvents();
         }
     }
-    void mouseReleaseEvent(QMouseEvent *event) {
+    void mouseReleaseEvent(QMouseEvent *event) override
+    {
         if (ignoreMouse) {
             event->ignore();
         } else {
@@ -944,7 +945,8 @@ public:
             mouseReleaseButton = event->button();
         }
     }
-    void mouseMoveEvent(QMouseEvent *event) {
+    void mouseMoveEvent(QMouseEvent *event) override
+    {
         buttonStateInGeneratedMove = event->buttons();
         if (ignoreMouse) {
             event->ignore();
@@ -954,7 +956,8 @@ public:
             mouseMoveScreenPos = event->screenPos();
         }
     }
-    void mouseDoubleClickEvent(QMouseEvent *event) {
+    void mouseDoubleClickEvent(QMouseEvent *event) override
+    {
         if (ignoreMouse) {
             event->ignore();
         } else {
@@ -962,7 +965,8 @@ public:
             mouseSequenceSignature += 'd';
         }
     }
-    void touchEvent(QTouchEvent *event) {
+    void touchEvent(QTouchEvent *event) override
+    {
         if (ignoreTouch) {
             event->ignore();
             return;
@@ -987,7 +991,8 @@ public:
             }
         }
     }
-    bool event(QEvent *e) {
+    bool event(QEvent *e) override
+    {
         switch (e->type()) {
         case QEvent::Enter:
             ++enterEventCount;
@@ -998,39 +1003,50 @@ public:
         default:
             break;
         }
-        return QWindow::event(e);
+        return ColoredWindow::event(e);
     }
-    void resetCounters() {
+    void resetCounters()
+    {
         mousePressedCount = mouseReleasedCount = mouseMovedCount = mouseDoubleClickedCount = 0;
-        mouseSequenceSignature = QString();
+        mouseSequenceSignature.clear();
         touchPressedCount = touchReleasedCount = touchMovedCount = 0;
         enterEventCount = leaveEventCount = 0;
     }
 
     explicit InputTestWindow(const QColor &color = Qt::white, QWindow *parent = nullptr)
-        : ColoredWindow(color, parent)
-    {
-        keyPressCode = keyReleaseCode = 0;
-        mousePressButton = mouseReleaseButton = mouseMoveButton = 0;
-        ignoreMouse = ignoreTouch = false;
-        spinLoopWhenPressed = false;
-        resetCounters();
-    }
+        : ColoredWindow(color, parent) {}
 
-    int keyPressCode, keyReleaseCode;
-    int mousePressButton, mouseReleaseButton, mouseMoveButton;
-    int mousePressedCount, mouseReleasedCount, mouseMovedCount, mouseDoubleClickedCount;
+    int keyPressCode = 0, keyReleaseCode = 0;
+    int mousePressButton = 0, mouseReleaseButton = 0, mouseMoveButton = 0;
+    int mousePressedCount = 0, mouseReleasedCount = 0, mouseMovedCount = 0, mouseDoubleClickedCount = 0;
     QString mouseSequenceSignature;
     QPointF mousePressScreenPos, mouseMoveScreenPos, mousePressLocalPos;
-    int touchPressedCount, touchReleasedCount, touchMovedCount;
-    QEvent::Type touchEventType;
-    int enterEventCount, leaveEventCount;
+    int touchPressedCount = 0, touchReleasedCount = 0, touchMovedCount = 0;
+    QEvent::Type touchEventType = QEvent::None;
+    int enterEventCount = 0, leaveEventCount = 0;
 
-    bool ignoreMouse, ignoreTouch;
+    bool ignoreMouse = false, ignoreTouch = false;
 
-    bool spinLoopWhenPressed;
+    bool spinLoopWhenPressed = false;
     Qt::MouseButtons buttonStateInGeneratedMove;
 };
+
+static void simulateMouseClick(QWindow *target, const QPointF &local, const QPointF &global)
+{
+    QWindowSystemInterface::handleMouseEvent(target, local, global,
+                                             {}, Qt::LeftButton, QEvent::MouseButtonPress);
+    QWindowSystemInterface::handleMouseEvent(target, local, global,
+                                             Qt::LeftButton, Qt::LeftButton, QEvent::MouseButtonRelease);
+}
+
+static void simulateMouseClick(QWindow *target, ulong &timeStamp,
+                               const QPointF &local, const QPointF &global)
+{
+    QWindowSystemInterface::handleMouseEvent(target, timeStamp++, local, global,
+                                             {}, Qt::LeftButton, QEvent::MouseButtonPress);
+    QWindowSystemInterface::handleMouseEvent(target, timeStamp++, local, global,
+                                             Qt::LeftButton, Qt::LeftButton, QEvent::MouseButtonRelease);
+}
 
 void tst_QWindow::testInputEvents()
 {
@@ -1073,15 +1089,13 @@ void tst_QWindow::testInputEvents()
     window.mousePressButton = window.mouseReleaseButton = 0;
     const QPointF nonWindowGlobal(window.geometry().topRight() + QPoint(200, 50)); // not inside the window
     const QPointF deviceNonWindowGlobal = QHighDpi::toNativePixels(nonWindowGlobal, window.screen());
-    QWindowSystemInterface::handleMouseEvent(0, deviceNonWindowGlobal, deviceNonWindowGlobal, Qt::LeftButton);
-    QWindowSystemInterface::handleMouseEvent(0, deviceNonWindowGlobal, deviceNonWindowGlobal, Qt::NoButton);
+    simulateMouseClick(nullptr, deviceNonWindowGlobal, deviceNonWindowGlobal);
     QCoreApplication::processEvents();
     QCOMPARE(window.mousePressButton, 0);
     QCOMPARE(window.mouseReleaseButton, 0);
     const QPointF windowGlobal = window.mapToGlobal(local.toPoint());
     const QPointF deviceWindowGlobal = QHighDpi::toNativePixels(windowGlobal, window.screen());
-    QWindowSystemInterface::handleMouseEvent(0, deviceWindowGlobal, deviceWindowGlobal, Qt::LeftButton);
-    QWindowSystemInterface::handleMouseEvent(0, deviceWindowGlobal, deviceWindowGlobal, Qt::NoButton);
+    simulateMouseClick(nullptr, deviceWindowGlobal, deviceWindowGlobal);
     QCoreApplication::processEvents();
     QCOMPARE(window.mousePressButton, int(Qt::LeftButton));
     QCOMPARE(window.mouseReleaseButton, int(Qt::LeftButton));
@@ -1092,6 +1106,7 @@ void tst_QWindow::testInputEvents()
 void tst_QWindow::touchToMouseTranslation()
 {
     InputTestWindow window;
+    window.setTitle(QLatin1String(QTest::currentTestFunction()));
     window.ignoreTouch = true;
     window.setGeometry(QRect(m_availableTopLeft + QPoint(80, 80), m_testWindowSize));
     window.show();
@@ -1145,7 +1160,7 @@ void tst_QWindow::touchToMouseTranslation()
     QTRY_COMPARE(window.mousePressButton, 0);
     QTRY_COMPARE(window.mouseReleaseButton, 0);
 
-    qApp->setAttribute(Qt::AA_SynthesizeMouseForUnhandledTouchEvents, false);
+    QCoreApplication::setAttribute(Qt::AA_SynthesizeMouseForUnhandledTouchEvents, false);
 
     window.ignoreTouch = true;
     points[0].state = Qt::TouchPointPressed;
@@ -1156,7 +1171,7 @@ void tst_QWindow::touchToMouseTranslation()
     QWindowSystemInterface::handleTouchEvent(&window, touchDevice, points);
     QCoreApplication::processEvents();
 
-    qApp->setAttribute(Qt::AA_SynthesizeMouseForUnhandledTouchEvents, true);
+    QCoreApplication::setAttribute(Qt::AA_SynthesizeMouseForUnhandledTouchEvents, true);
 
     // mouse event synthesizing disabled
     QTRY_COMPARE(window.mousePressButton, 0);
@@ -1166,6 +1181,7 @@ void tst_QWindow::touchToMouseTranslation()
 void tst_QWindow::touchToMouseTranslationForDevices()
 {
     InputTestWindow window;
+    window.setTitle(QLatin1String(QTest::currentTestFunction()));
     window.ignoreTouch = true;
     window.setGeometry(QRect(m_availableTopLeft + QPoint(80, 80), m_testWindowSize));
     window.show();
@@ -1194,32 +1210,31 @@ void tst_QWindow::touchToMouseTranslationForDevices()
 
 void tst_QWindow::mouseToTouchTranslation()
 {
-    qApp->setAttribute(Qt::AA_SynthesizeTouchForUnhandledMouseEvents, true);
+    QCoreApplication::setAttribute(Qt::AA_SynthesizeTouchForUnhandledMouseEvents, true);
 
     InputTestWindow window;
+    window.setTitle(QLatin1String(QTest::currentTestFunction()));
     window.ignoreMouse = true;
     window.setGeometry(QRect(m_availableTopLeft + QPoint(80, 80), m_testWindowSize));
     window.show();
     QVERIFY(QTest::qWaitForWindowExposed(&window));
 
-    QWindowSystemInterface::handleMouseEvent(&window, QPoint(10, 10), window.mapToGlobal(QPoint(10, 10)), Qt::LeftButton);
-    QWindowSystemInterface::handleMouseEvent(&window, QPoint(10, 10), window.mapToGlobal(QPoint(10, 10)), Qt::NoButton);
+    QTest::mouseClick(&window, Qt::LeftButton, {}, QPoint(10, 10));
     QCoreApplication::processEvents();
 
-    qApp->setAttribute(Qt::AA_SynthesizeTouchForUnhandledMouseEvents, false);
+    QCoreApplication::setAttribute(Qt::AA_SynthesizeTouchForUnhandledMouseEvents, false);
 
     QTRY_COMPARE(window.touchPressedCount, 1);
     QTRY_COMPARE(window.touchReleasedCount, 1);
 
-    qApp->setAttribute(Qt::AA_SynthesizeTouchForUnhandledMouseEvents, true);
+    QCoreApplication::setAttribute(Qt::AA_SynthesizeTouchForUnhandledMouseEvents, true);
 
     window.ignoreMouse = false;
 
-    QWindowSystemInterface::handleMouseEvent(&window, QPoint(10, 10), window.mapToGlobal(QPoint(10, 10)), Qt::LeftButton);
-    QWindowSystemInterface::handleMouseEvent(&window, QPoint(10, 10), window.mapToGlobal(QPoint(10, 10)), Qt::NoButton);
+    QTest::mouseClick(&window, Qt::LeftButton, {}, QPoint(10, 10));
     QCoreApplication::processEvents();
 
-    qApp->setAttribute(Qt::AA_SynthesizeTouchForUnhandledMouseEvents, false);
+    QCoreApplication::setAttribute(Qt::AA_SynthesizeTouchForUnhandledMouseEvents, false);
 
     // no new touch events should be generated since the input window handles the mouse events
     QTRY_COMPARE(window.touchPressedCount, 1);
@@ -1227,8 +1242,7 @@ void tst_QWindow::mouseToTouchTranslation()
 
     window.ignoreMouse = true;
 
-    QWindowSystemInterface::handleMouseEvent(&window, QPoint(10, 10), window.mapToGlobal(QPoint(10, 10)), Qt::LeftButton);
-    QWindowSystemInterface::handleMouseEvent(&window, QPoint(10, 10), window.mapToGlobal(QPoint(10, 10)), Qt::NoButton);
+    QTest::mouseClick(&window, Qt::LeftButton, {}, QPoint(10, 10));
     QCoreApplication::processEvents();
 
     // touch event synthesis disabled
@@ -1241,27 +1255,29 @@ void tst_QWindow::mouseToTouchTranslation()
 void tst_QWindow::mouseToTouchLoop()
 {
     // make sure there's no infinite loop when synthesizing both ways
-    qApp->setAttribute(Qt::AA_SynthesizeTouchForUnhandledMouseEvents, true);
-    qApp->setAttribute(Qt::AA_SynthesizeMouseForUnhandledTouchEvents, true);
+    QCoreApplication::setAttribute(Qt::AA_SynthesizeTouchForUnhandledMouseEvents, true);
+    QCoreApplication::setAttribute(Qt::AA_SynthesizeMouseForUnhandledTouchEvents, true);
 
     InputTestWindow window;
+    window.setTitle(QLatin1String(QTest::currentTestFunction()));
+
     window.ignoreMouse = true;
     window.ignoreTouch = true;
     window.setGeometry(QRect(m_availableTopLeft + QPoint(80, 80), m_testWindowSize));
     window.show();
     QVERIFY(QTest::qWaitForWindowExposed(&window));
 
-    QWindowSystemInterface::handleMouseEvent(&window, QPoint(10, 10), window.mapToGlobal(QPoint(10, 10)), Qt::LeftButton);
-    QWindowSystemInterface::handleMouseEvent(&window, QPoint(10, 10), window.mapToGlobal(QPoint(10, 10)), Qt::NoButton);
+    QTest::mouseClick(&window, Qt::LeftButton, {}, QPoint(10, 10));
     QCoreApplication::processEvents();
 
-    qApp->setAttribute(Qt::AA_SynthesizeTouchForUnhandledMouseEvents, false);
-    qApp->setAttribute(Qt::AA_SynthesizeMouseForUnhandledTouchEvents, true);
+    QCoreApplication::setAttribute(Qt::AA_SynthesizeTouchForUnhandledMouseEvents, false);
+    QCoreApplication::setAttribute(Qt::AA_SynthesizeMouseForUnhandledTouchEvents, true);
 }
 
 void tst_QWindow::touchCancel()
 {
     InputTestWindow window;
+    window.setTitle(QLatin1String(QTest::currentTestFunction()));
     window.setGeometry(QRect(m_availableTopLeft + QPoint(80, 80), m_testWindowSize));
     window.show();
     QVERIFY(QTest::qWaitForWindowExposed(&window));
@@ -1321,6 +1337,7 @@ void tst_QWindow::touchCancel()
 void tst_QWindow::touchCancelWithTouchToMouse()
 {
     InputTestWindow window;
+    window.setTitle(QLatin1String(QTest::currentTestFunction()));
     window.ignoreTouch = true;
     window.setGeometry(QRect(m_availableTopLeft + QPoint(80, 80), m_testWindowSize));
     window.show();
@@ -1343,7 +1360,7 @@ void tst_QWindow::touchCancelWithTouchToMouse()
 
     // Cancel the touch. Should result in a mouse release for windows that have
     // have an active touch-to-mouse sequence.
-    QWindowSystemInterface::handleTouchCancelEvent(0, touchDevice);
+    QWindowSystemInterface::handleTouchCancelEvent(nullptr, touchDevice);
     QCoreApplication::processEvents();
 
     QTRY_COMPARE(window.mouseReleaseButton, int(Qt::LeftButton));
@@ -1358,7 +1375,7 @@ void tst_QWindow::touchCancelWithTouchToMouse()
     QTRY_COMPARE(window.mousePressButton, 0);
 
     // Cancel the touch. It should not result in a mouse release with this window.
-    QWindowSystemInterface::handleTouchCancelEvent(0, touchDevice);
+    QWindowSystemInterface::handleTouchCancelEvent(nullptr, touchDevice);
     QCoreApplication::processEvents();
     QTRY_COMPARE(window.mouseReleaseButton, 0);
 }
@@ -1369,6 +1386,7 @@ void tst_QWindow::touchInterruptedByPopup()
         QSKIP("Wayland: This test crashes with xdg-shell unstable v6");
 
     InputTestWindow window;
+    window.setTitle(QLatin1String(QTest::currentTestFunction()));
     window.setGeometry(QRect(m_availableTopLeft + QPoint(80, 80), m_testWindowSize));
     window.show();
     QVERIFY(QTest::qWaitForWindowExposed(&window));
@@ -1489,6 +1507,7 @@ void tst_QWindow::sizes()
 void tst_QWindow::close()
 {
     QWindow a;
+    a.setTitle(QLatin1String(QTest::currentTestFunction()));
     QWindow b;
     QWindow c(&a);
 
@@ -1506,8 +1525,9 @@ void tst_QWindow::activateAndClose()
     if (!QGuiApplicationPrivate::platformIntegration()->hasCapability(QPlatformIntegration::WindowActivation))
         QSKIP("QWindow::requestActivate() is not supported.");
 
-    for (int i = 0; i < 10; ++i)  {
+    for (int i = 0; i < 10; ++i) {
        QWindow window;
+       window.setTitle(QLatin1String(QTest::currentTestFunction()) + QString::number(i));
 #if defined(Q_OS_QNX)
        window.setSurfaceType(QSurface::OpenGLSurface);
 #endif
@@ -1525,15 +1545,16 @@ void tst_QWindow::activateAndClose()
 #endif
        window.requestActivate();
        QVERIFY(QTest::qWaitForWindowActive(&window));
-       QCOMPARE(qGuiApp->focusWindow(), &window);
+       QCOMPARE(QGuiApplication::focusWindow(), &window);
     }
 }
 
 void tst_QWindow::mouseEventSequence()
 {
-    int doubleClickInterval = qGuiApp->styleHints()->mouseDoubleClickInterval();
+    const auto doubleClickInterval = ulong(QGuiApplication::styleHints()->mouseDoubleClickInterval());
 
     InputTestWindow window;
+    window.setTitle(QLatin1String(QTest::currentTestFunction()));
     window.setGeometry(QRect(m_availableTopLeft + QPoint(80, 80), m_testWindowSize));
     window.show();
     QVERIFY(QTest::qWaitForWindowExposed(&window));
@@ -1541,8 +1562,8 @@ void tst_QWindow::mouseEventSequence()
     ulong timestamp = 0;
     QPointF local(12, 34);
     const QPointF deviceLocal = QHighDpi::toNativePixels(local, &window);
-    QWindowSystemInterface::handleMouseEvent(&window, timestamp++, deviceLocal, deviceLocal, Qt::LeftButton);
-    QWindowSystemInterface::handleMouseEvent(&window, timestamp++, deviceLocal, deviceLocal, Qt::NoButton);
+
+    simulateMouseClick(&window, timestamp, deviceLocal, deviceLocal);
     QCoreApplication::processEvents();
     QCOMPARE(window.mousePressedCount, 1);
     QCOMPARE(window.mouseReleasedCount, 1);
@@ -1554,10 +1575,8 @@ void tst_QWindow::mouseEventSequence()
 
     // A double click must result in press, release, press, doubleclick, release.
     // Check that no unexpected event suppression occurs and that the order is correct.
-    QWindowSystemInterface::handleMouseEvent(&window, timestamp++, local, local, Qt::LeftButton);
-    QWindowSystemInterface::handleMouseEvent(&window, timestamp++, local, local, Qt::NoButton);
-    QWindowSystemInterface::handleMouseEvent(&window, timestamp++, local, local, Qt::LeftButton);
-    QWindowSystemInterface::handleMouseEvent(&window, timestamp++, local, local, Qt::NoButton);
+    simulateMouseClick(&window, timestamp, local, local);
+    simulateMouseClick(&window, timestamp, local, local);
     QCoreApplication::processEvents();
     QCOMPARE(window.mousePressedCount, 2);
     QCOMPARE(window.mouseReleasedCount, 2);
@@ -1568,12 +1587,9 @@ void tst_QWindow::mouseEventSequence()
     window.resetCounters();
 
     // Triple click = double + single click
-    QWindowSystemInterface::handleMouseEvent(&window, timestamp++, local, local, Qt::LeftButton);
-    QWindowSystemInterface::handleMouseEvent(&window, timestamp++, local, local, Qt::NoButton);
-    QWindowSystemInterface::handleMouseEvent(&window, timestamp++, local, local, Qt::LeftButton);
-    QWindowSystemInterface::handleMouseEvent(&window, timestamp++, local, local, Qt::NoButton);
-    QWindowSystemInterface::handleMouseEvent(&window, timestamp++, local, local, Qt::LeftButton);
-    QWindowSystemInterface::handleMouseEvent(&window, timestamp++, local, local, Qt::NoButton);
+    simulateMouseClick(&window, timestamp, local, local);
+    simulateMouseClick(&window, timestamp, local, local);
+    simulateMouseClick(&window, timestamp, local, local);
     QCoreApplication::processEvents();
     QCOMPARE(window.mousePressedCount, 3);
     QCOMPARE(window.mouseReleasedCount, 3);
@@ -1584,14 +1600,10 @@ void tst_QWindow::mouseEventSequence()
     window.resetCounters();
 
     // Two double clicks.
-    QWindowSystemInterface::handleMouseEvent(&window, timestamp++, local, local, Qt::LeftButton);
-    QWindowSystemInterface::handleMouseEvent(&window, timestamp++, local, local, Qt::NoButton);
-    QWindowSystemInterface::handleMouseEvent(&window, timestamp++, local, local, Qt::LeftButton);
-    QWindowSystemInterface::handleMouseEvent(&window, timestamp++, local, local, Qt::NoButton);
-    QWindowSystemInterface::handleMouseEvent(&window, timestamp++, local, local, Qt::LeftButton);
-    QWindowSystemInterface::handleMouseEvent(&window, timestamp++, local, local, Qt::NoButton);
-    QWindowSystemInterface::handleMouseEvent(&window, timestamp++, local, local, Qt::LeftButton);
-    QWindowSystemInterface::handleMouseEvent(&window, timestamp++, local, local, Qt::NoButton);
+    simulateMouseClick(&window, timestamp, local, local);
+    simulateMouseClick(&window, timestamp, local, local);
+    simulateMouseClick(&window, timestamp, local, local);
+    simulateMouseClick(&window, timestamp, local, local);
     QCoreApplication::processEvents();
     QCOMPARE(window.mousePressedCount, 4);
     QCOMPARE(window.mouseReleasedCount, 4);
@@ -1602,17 +1614,13 @@ void tst_QWindow::mouseEventSequence()
     window.resetCounters();
 
     // Four clicks, none of which qualifies as a double click.
-    QWindowSystemInterface::handleMouseEvent(&window, timestamp++, local, local, Qt::LeftButton);
-    QWindowSystemInterface::handleMouseEvent(&window, timestamp++, local, local, Qt::NoButton);
+    simulateMouseClick(&window, timestamp, local, local);
     timestamp += doubleClickInterval;
-    QWindowSystemInterface::handleMouseEvent(&window, timestamp++, local, local, Qt::LeftButton);
-    QWindowSystemInterface::handleMouseEvent(&window, timestamp++, local, local, Qt::NoButton);
+    simulateMouseClick(&window, timestamp, local, local);
     timestamp += doubleClickInterval;
-    QWindowSystemInterface::handleMouseEvent(&window, timestamp++, local, local, Qt::LeftButton);
-    QWindowSystemInterface::handleMouseEvent(&window, timestamp++, local, local, Qt::NoButton);
+    simulateMouseClick(&window, timestamp, local, local);
     timestamp += doubleClickInterval;
-    QWindowSystemInterface::handleMouseEvent(&window, timestamp++, local, local, Qt::LeftButton);
-    QWindowSystemInterface::handleMouseEvent(&window, timestamp++, local, local, Qt::NoButton);
+    simulateMouseClick(&window, timestamp, local, local);
     timestamp += doubleClickInterval;
     QCoreApplication::processEvents();
     QCOMPARE(window.mousePressedCount, 4);
@@ -1655,6 +1663,7 @@ void tst_QWindow::windowModality()
 void tst_QWindow::inputReentrancy()
 {
     InputTestWindow window;
+    window.setTitle(QLatin1String(QTest::currentTestFunction()));
     window.spinLoopWhenPressed = true;
 
     window.setGeometry(QRect(m_availableTopLeft + QPoint(80, 80), m_testWindowSize));
@@ -1663,10 +1672,13 @@ void tst_QWindow::inputReentrancy()
 
     // Queue three events.
     QPointF local(12, 34);
-    QWindowSystemInterface::handleMouseEvent(&window, local, local, Qt::LeftButton);
+    QWindowSystemInterface::handleMouseEvent(&window, local, local, {},
+                                             Qt::LeftButton, QEvent::MouseButtonPress);
     local += QPointF(2, 2);
-    QWindowSystemInterface::handleMouseEvent(&window, local, local, Qt::LeftButton);
-    QWindowSystemInterface::handleMouseEvent(&window, local, local, Qt::NoButton);
+    QWindowSystemInterface::handleMouseEvent(&window, local, local,
+                                             Qt::LeftButton, Qt::LeftButton, QEvent::MouseMove);
+    QWindowSystemInterface::handleMouseEvent(&window, local, local, Qt::LeftButton,
+                                             Qt::LeftButton, QEvent::MouseButtonRelease);
     // Process them. However, the event handler for the press will also call
     // processEvents() so the move and release will be delivered before returning
     // from mousePressEvent(). The point is that no events should get lost.
@@ -1700,17 +1712,20 @@ void tst_QWindow::inputReentrancy()
 class TabletTestWindow : public QWindow
 {
 public:
-    TabletTestWindow() : eventType(QEvent::None) { }
-    void tabletEvent(QTabletEvent *ev) {
+    void tabletEvent(QTabletEvent *ev) override
+    {
         eventType = ev->type();
         eventGlobal = ev->globalPosF();
         eventLocal = ev->posF();
         eventDevice = ev->device();
     }
-    QEvent::Type eventType;
+
+    QEvent::Type eventType = QEvent::None;
     QPointF eventGlobal, eventLocal;
-    int eventDevice;
-    bool eventFilter(QObject *obj, QEvent *ev) {
+    int eventDevice = -1;
+
+    bool eventFilter(QObject *obj, QEvent *ev) override
+    {
         if (ev->type() == QEvent::TabletEnterProximity
                 || ev->type() == QEvent::TabletLeaveProximity) {
             eventType = ev->type();
@@ -1733,12 +1748,14 @@ void tst_QWindow::tabletEvents()
     const QPoint global = window.mapToGlobal(local);
     const QPoint deviceLocal = QHighDpi::toNativeLocalPosition(local, &window);
     const QPoint deviceGlobal = QHighDpi::toNativePixels(global, window.screen());
-    QWindowSystemInterface::handleTabletEvent(&window, true, deviceLocal, deviceGlobal, 1, 2, 0.5, 1, 2, 0.1, 0, 0, 0);
+    QWindowSystemInterface::handleTabletEvent(&window, deviceLocal, deviceGlobal,
+                                              1, 2, Qt::LeftButton, 0.5, 1, 2, 0.1, 0, 0, 0);
     QCoreApplication::processEvents();
     QTRY_VERIFY(window.eventType == QEvent::TabletPress);
     QTRY_COMPARE(window.eventGlobal.toPoint(), global);
     QTRY_COMPARE(window.eventLocal.toPoint(), local);
-    QWindowSystemInterface::handleTabletEvent(&window, false, deviceLocal, deviceGlobal, 1, 2, 0.5, 1, 2, 0.1, 0, 0, 0);
+    QWindowSystemInterface::handleTabletEvent(&window, deviceLocal, deviceGlobal, 1, 2,
+                                              {}, 0.5, 1, 2, 0.1, 0, 0, 0);
     QCoreApplication::processEvents();
     QTRY_COMPARE(window.eventType, QEvent::TabletRelease);
 
@@ -1758,6 +1775,7 @@ void tst_QWindow::tabletEvents()
 void tst_QWindow::windowModality_QTBUG27039()
 {
     QWindow parent;
+    parent.setTitle(QLatin1String(QTest::currentTestFunction()));
     parent.setGeometry(QRect(m_availableTopLeft + QPoint(10, 10), m_testWindowSize));
     parent.show();
 
@@ -1773,11 +1791,9 @@ void tst_QWindow::windowModality_QTBUG27039()
     modalB.setModality(Qt::ApplicationModal);
     modalB.show();
 
-    QPointF local(5, 5);
-    QWindowSystemInterface::handleMouseEvent(&modalA, local, local, Qt::LeftButton);
-    QWindowSystemInterface::handleMouseEvent(&modalA, local, local, Qt::NoButton);
-    QWindowSystemInterface::handleMouseEvent(&modalB, local, local, Qt::LeftButton);
-    QWindowSystemInterface::handleMouseEvent(&modalB, local, local, Qt::NoButton);
+    QPoint local(5, 5);
+    QTest::mouseClick(&modalA, Qt::LeftButton, {}, local);
+    QTest::mouseClick(&modalB, Qt::LeftButton, {}, local);
     QCoreApplication::processEvents();
 
     // modal A should be blocked since it was shown first, but modal B should not be blocked
@@ -1785,8 +1801,7 @@ void tst_QWindow::windowModality_QTBUG27039()
     QCOMPARE(modalA.mousePressedCount, 0);
 
     modalB.hide();
-    QWindowSystemInterface::handleMouseEvent(&modalA, local, local, Qt::LeftButton);
-    QWindowSystemInterface::handleMouseEvent(&modalA, local, local, Qt::NoButton);
+    QTest::mouseClick(&modalA, Qt::LeftButton, {}, local);
     QCoreApplication::processEvents();
 
     // modal B has been hidden, modal A should be unblocked again
@@ -1868,6 +1883,7 @@ void tst_QWindow::initialSize()
     QSize defaultSize(0,0);
     {
     Window w;
+    w.setTitle(QLatin1String(QTest::currentTestFunction()));
     w.showNormal();
     QTRY_VERIFY(w.width() > 0);
     QTRY_VERIFY(w.height() > 0);
@@ -1875,6 +1891,7 @@ void tst_QWindow::initialSize()
     }
     {
     Window w;
+    w.setTitle(QLatin1String(QTest::currentTestFunction()));
     w.setWidth(m_testWindowSize.width());
     w.showNormal();
     if (isPlatformWinRT())
@@ -1884,6 +1901,7 @@ void tst_QWindow::initialSize()
     }
     {
     Window w;
+    w.setTitle(QLatin1String(QTest::currentTestFunction()));
     const QSize testSize(m_testWindowSize.width(), 42);
     w.resize(testSize);
     w.showNormal();
@@ -1910,6 +1928,7 @@ void tst_QWindow::modalDialog()
         QSKIP("Test fails due to QTBUG-61965, and is slow due to QTBUG-61964");
 
     QWindow normalWindow;
+    normalWindow.setTitle(QLatin1String(QTest::currentTestFunction()));
     normalWindow.setFramePosition(m_availableTopLeft + QPoint(80, 80));
     normalWindow.resize(m_testWindowSize);
     normalWindow.show();
@@ -1945,6 +1964,7 @@ void tst_QWindow::modalDialogClosingOneOfTwoModal()
         QSKIP("QWindow::requestActivate() is not supported.");
 
     QWindow normalWindow;
+    normalWindow.setTitle(QLatin1String(QTest::currentTestFunction()));
     normalWindow.setFramePosition(m_availableTopLeft + QPoint(80, 80));
     normalWindow.resize(m_testWindowSize);
     normalWindow.show();
@@ -1992,6 +2012,7 @@ void tst_QWindow::modalWithChildWindow()
         QSKIP("QWindow::requestActivate() is not supported.");
 
     QWindow normalWindow;
+    normalWindow.setTitle(QLatin1String(QTest::currentTestFunction()));
     normalWindow.setFramePosition(m_availableTopLeft + QPoint(80, 80));
     normalWindow.resize(m_testWindowSize);
     normalWindow.show();
@@ -2028,6 +2049,7 @@ void tst_QWindow::modalWindowModallity()
         QSKIP("QWindow::requestActivate() is not supported.");
 
     QWindow normal_window;
+    normal_window.setTitle(QLatin1String(QTest::currentTestFunction()));
     normal_window.setFramePosition(m_availableTopLeft + QPoint(80, 80));
     normal_window.resize(m_testWindowSize);
     normal_window.show();
@@ -2058,6 +2080,7 @@ void tst_QWindow::modalWindowModallity()
 void tst_QWindow::modalWindowPosition()
 {
     QWindow window;
+    window.setTitle(QLatin1String(QTest::currentTestFunction()));
     window.setGeometry(QRect(m_availableTopLeft + QPoint(100, 100), m_testWindowSize));
     // Allow for any potential resizing due to constraints
     QRect origGeo = window.geometry();
@@ -2341,6 +2364,7 @@ void tst_QWindow::requestUpdate()
     QRect geometry(m_availableTopLeft + QPoint(80, 80), m_testWindowSize);
 
     Window window;
+    window.setTitle(QLatin1String(QTest::currentTestFunction()));
     window.setGeometry(geometry);
     window.show();
     QCoreApplication::processEvents();
@@ -2370,10 +2394,10 @@ void tst_QWindow::flags()
 class EventWindow : public QWindow
 {
 public:
-    EventWindow() : QWindow(), gotBlocked(false) {}
-    bool gotBlocked;
+    bool gotBlocked = false;
+
 protected:
-    bool event(QEvent *e)
+    bool event(QEvent *e) override
     {
         if (e->type() == QEvent::WindowBlocked)
             gotBlocked = true;
@@ -2384,6 +2408,7 @@ protected:
 void tst_QWindow::testBlockingWindowShownAfterModalDialog()
 {
     EventWindow normalWindow;
+    normalWindow.setTitle(QLatin1String(QTest::currentTestFunction()));
     normalWindow.setFramePosition(m_availableTopLeft + QPoint(80, 80));
     normalWindow.resize(m_testWindowSize);
     normalWindow.show();
@@ -2411,6 +2436,7 @@ void tst_QWindow::testBlockingWindowShownAfterModalDialog()
 void tst_QWindow::generatedMouseMove()
 {
     InputTestWindow w;
+    w.setTitle(QLatin1String(QTest::currentTestFunction()));
     w.setGeometry(QRect(m_availableTopLeft + QPoint(100, 100), m_testWindowSize));
     w.setFlags(w.flags() | Qt::FramelessWindowHint); // ### FIXME: QTBUG-63542
     w.show();
@@ -2422,34 +2448,34 @@ void tst_QWindow::generatedMouseMove()
     QTest::mouseMove(&w, point);
     QVERIFY(w.mouseMovedCount == 1);
     // A press event that does not change position should not generate mouse move
-    QTest::mousePress(&w, Qt::LeftButton, 0, point);
-    QTest::mousePress(&w, Qt::RightButton, 0, point);
+    QTest::mousePress(&w, Qt::LeftButton, Qt::KeyboardModifiers(), point);
+    QTest::mousePress(&w, Qt::RightButton, Qt::KeyboardModifiers(), point);
 
     QVERIFY(w.mouseMovedCount == 1);
 
     // Verify that a move event is generated for a mouse release event that changes position
     point += step;
-    QTest::mouseRelease(&w, Qt::LeftButton, 0, point);
+    QTest::mouseRelease(&w, Qt::LeftButton,Qt::KeyboardModifiers(), point);
     QVERIFY(w.mouseMovedCount == 2);
     QVERIFY(w.buttonStateInGeneratedMove == (Qt::LeftButton | Qt::RightButton));
     point += step;
-    QTest::mouseRelease(&w, Qt::RightButton, 0, point);
+    QTest::mouseRelease(&w, Qt::RightButton, Qt::KeyboardModifiers(), point);
     QVERIFY(w.mouseMovedCount == 3);
     QVERIFY(w.buttonStateInGeneratedMove == Qt::RightButton);
 
     // Verify that a move event is generated for a mouse press event that changes position
     point += step;
-    QTest::mousePress(&w, Qt::LeftButton, 0, point);
+    QTest::mousePress(&w, Qt::LeftButton, Qt::KeyboardModifiers(), point);
     QVERIFY(w.mouseMovedCount == 4);
     QVERIFY(w.buttonStateInGeneratedMove == Qt::NoButton);
     point += step;
-    QTest::mousePress(&w, Qt::RightButton, 0, point);
+    QTest::mousePress(&w, Qt::RightButton, Qt::KeyboardModifiers(), point);
     QVERIFY(w.mouseMovedCount == 5);
     QVERIFY(w.buttonStateInGeneratedMove == Qt::LeftButton);
 
     // A release event that does not change position should not generate mouse move
-    QTest::mouseRelease(&w, Qt::RightButton, 0, point);
-    QTest::mouseRelease(&w, Qt::LeftButton, 0, point);
+    QTest::mouseRelease(&w, Qt::RightButton, Qt::KeyboardModifiers(), point);
+    QTest::mouseRelease(&w, Qt::LeftButton, Qt::KeyboardModifiers(), point);
     QVERIFY(w.mouseMovedCount == 5);
 }
 
@@ -2458,6 +2484,7 @@ void tst_QWindow::keepPendingUpdateRequests()
     QRect geometry(m_availableTopLeft + QPoint(80, 80), m_testWindowSize);
 
     Window window;
+    window.setTitle(QLatin1String(QTest::currentTestFunction()));
     window.setGeometry(geometry);
     window.show();
     QCoreApplication::processEvents();

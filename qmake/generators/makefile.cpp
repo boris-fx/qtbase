@@ -94,13 +94,6 @@ bool MakefileGenerator::mkdir(const QString &in_path) const
     return QDir().mkpath(path);
 }
 
-// ** base makefile generator
-MakefileGenerator::MakefileGenerator() :
-    no_io(false), project(nullptr)
-{
-}
-
-
 void
 MakefileGenerator::verifyCompilers()
 {
@@ -174,14 +167,8 @@ MakefileGenerator::initOutPaths()
         ProString &pathRef = v[dkey].first();
         pathRef = fileFixify(pathRef.toQString(), FileFixifyFromOutdir);
 
-#ifdef Q_OS_WIN
-        // We don't want to add a separator for DLLDESTDIR on Windows (###why?)
-        if (dkey != "DLLDESTDIR")
-#endif
-        {
-            if(!pathRef.endsWith(Option::dir_sep))
-                pathRef += Option::dir_sep;
-        }
+        if (!pathRef.endsWith(Option::dir_sep))
+            pathRef += Option::dir_sep;
 
         if (noIO() || (project->first("TEMPLATE") == "subdirs"))
             continue;
@@ -206,7 +193,6 @@ MakefileGenerator::initOutPaths()
             ProStringList &inputs = project->values((*it2).toKey());
             for (ProStringList::Iterator input = inputs.begin(); input != inputs.end(); ++input) {
                 QString finp = fileFixify((*input).toQString(), FileFixifyFromOutdir);
-                *input = ProString(finp);
                 QString path = replaceExtraCompilerVariables(tmp_out, finp, QString(), NoShell);
                 path = Option::normalizePath(path);
                 int slash = path.lastIndexOf('/');
@@ -627,7 +613,7 @@ MakefileGenerator::init()
                 compiler.flags |= Compiler::CompilerNoCheckDeps;
             compilers.append(compiler);
         }
-        for (ProStringList::ConstIterator it = quc.begin(); it != quc.end(); ++it) {
+        for (ProStringList::ConstIterator it = quc.cbegin(); it != quc.cend(); ++it) {
             const ProStringList &inputs = v[ProKey(*it + ".input")];
             for(x = 0; x < inputs.size(); ++x) {
                 Compiler compiler;
@@ -778,27 +764,13 @@ MakefileGenerator::init()
         ProStringList incDirs = v["DEPENDPATH"] + v["QMAKE_ABSOLUTE_SOURCE_PATH"];
         if(project->isActiveConfig("depend_includepath"))
             incDirs += v["INCLUDEPATH"];
-        QList<QMakeLocalFileName> deplist;
+        QVector<QMakeLocalFileName> deplist;
         deplist.reserve(incDirs.size());
         for (ProStringList::Iterator it = incDirs.begin(); it != incDirs.end(); ++it)
             deplist.append(QMakeLocalFileName((*it).toQString()));
         QMakeSourceFileInfo::setDependencyPaths(deplist);
         debug_msg(1, "Dependency Directories: %s",
                   incDirs.join(QString(" :: ")).toLatin1().constData());
-        //cache info
-        if(project->isActiveConfig("qmake_cache")) {
-            QString cache_file;
-            if(!project->isEmpty("QMAKE_INTERNAL_CACHE_FILE")) {
-                cache_file = QDir::fromNativeSeparators(project->first("QMAKE_INTERNAL_CACHE_FILE").toQString());
-            } else {
-                cache_file = ".qmake.internal.cache";
-                if(project->isActiveConfig("build_pass"))
-                    cache_file += ".BUILD." + project->first("BUILD_PASS");
-            }
-            if(cache_file.indexOf('/') == -1)
-                cache_file.prepend(Option::output_dir + '/');
-            QMakeSourceFileInfo::setCacheFile(cache_file);
-        }
 
         //add to dependency engine
         for(x = 0; x < compilers.count(); ++x) {
@@ -900,7 +872,7 @@ MakefileGenerator::processPrlFile(QString &file, bool baseOnly)
 
 bool
 MakefileGenerator::processPrlFileBase(QString &origFile, const QStringRef &origName,
-                                      const QStringRef &fixedBase, int slashOff)
+                                      const QStringRef &fixedBase, int /*slashOff*/)
 {
     return processPrlFileCore(origFile, origName, fixedBase + Option::prl_ext);
 }
@@ -912,7 +884,7 @@ MakefileGenerator::processPrlFileCore(QString &origFile, const QStringRef &origN
     const QString meta_file = QMakeMetaInfo::checkLib(fixedFile);
     if (meta_file.isEmpty())
         return false;
-    QMakeMetaInfo libinfo(project);
+    QMakeMetaInfo libinfo;
     debug_msg(1, "Processing PRL file: %s", meta_file.toLatin1().constData());
     if (!libinfo.readLib(meta_file)) {
         fprintf(stderr, "Error processing meta file %s\n", meta_file.toLatin1().constData());
@@ -994,25 +966,25 @@ MakefileGenerator::writePrlFile(QTextStream &t)
     QString bdir = Option::output_dir;
     if(bdir.isEmpty())
         bdir = qmake_getpwd();
-    t << "QMAKE_PRL_BUILD_DIR =" << qv(bdir) << endl;
+    t << "QMAKE_PRL_BUILD_DIR =" << qv(bdir) << Qt::endl;
 
-    t << "QMAKE_PRO_INPUT =" << qv(project->projectFile().section('/', -1)) << endl;
+    t << "QMAKE_PRO_INPUT =" << qv(project->projectFile().section('/', -1)) << Qt::endl;
 
     if(!project->isEmpty("QMAKE_ABSOLUTE_SOURCE_PATH"))
-        t << "QMAKE_PRL_SOURCE_DIR =" << qv(project->first("QMAKE_ABSOLUTE_SOURCE_PATH")) << endl;
-    t << "QMAKE_PRL_TARGET =" << qv(project->first("LIB_TARGET")) << endl;
+        t << "QMAKE_PRL_SOURCE_DIR =" << qv(project->first("QMAKE_ABSOLUTE_SOURCE_PATH")) << Qt::endl;
+    t << "QMAKE_PRL_TARGET =" << qv(project->first("LIB_TARGET")) << Qt::endl;
     if(!project->isEmpty("PRL_EXPORT_DEFINES"))
-        t << "QMAKE_PRL_DEFINES =" << qv(project->values("PRL_EXPORT_DEFINES")) << endl;
+        t << "QMAKE_PRL_DEFINES =" << qv(project->values("PRL_EXPORT_DEFINES")) << Qt::endl;
     if(!project->isEmpty("PRL_EXPORT_CFLAGS"))
-        t << "QMAKE_PRL_CFLAGS =" << qv(project->values("PRL_EXPORT_CFLAGS")) << endl;
+        t << "QMAKE_PRL_CFLAGS =" << qv(project->values("PRL_EXPORT_CFLAGS")) << Qt::endl;
     if(!project->isEmpty("PRL_EXPORT_CXXFLAGS"))
-        t << "QMAKE_PRL_CXXFLAGS =" << qv(project->values("PRL_EXPORT_CXXFLAGS")) << endl;
+        t << "QMAKE_PRL_CXXFLAGS =" << qv(project->values("PRL_EXPORT_CXXFLAGS")) << Qt::endl;
     if(!project->isEmpty("CONFIG"))
-        t << "QMAKE_PRL_CONFIG =" << qv(project->values("CONFIG")) << endl;
+        t << "QMAKE_PRL_CONFIG =" << qv(project->values("CONFIG")) << Qt::endl;
     if(!project->isEmpty("TARGET_VERSION_EXT"))
-        t << "QMAKE_PRL_VERSION = " << project->first("TARGET_VERSION_EXT") << endl;
+        t << "QMAKE_PRL_VERSION = " << project->first("TARGET_VERSION_EXT") << Qt::endl;
     else if(!project->isEmpty("VERSION"))
-        t << "QMAKE_PRL_VERSION = " << project->first("VERSION") << endl;
+        t << "QMAKE_PRL_VERSION = " << project->first("VERSION") << Qt::endl;
     if(project->isActiveConfig("staticlib") || project->isActiveConfig("explicitlib")) {
         ProStringList libs;
         if (!project->isActiveConfig("staticlib"))
@@ -1022,7 +994,15 @@ MakefileGenerator::writePrlFile(QTextStream &t)
         t << "QMAKE_PRL_LIBS =";
         for (ProStringList::Iterator it = libs.begin(); it != libs.end(); ++it)
             t << qv(project->values((*it).toKey()));
-        t << endl;
+        t << Qt::endl;
+
+        t << "QMAKE_PRL_LIBS_FOR_CMAKE = ";
+        QString sep;
+        for (ProStringList::Iterator it = libs.begin(); it != libs.end(); ++it) {
+            t << sep << project->values((*it).toKey()).join(';').replace('\\', "\\\\");
+            sep = ';';
+        }
+        t << Qt::endl;
     }
 }
 
@@ -1053,17 +1033,17 @@ MakefileGenerator::writeProjectMakefile()
 
         //install
         t << "install: ";
-        for(it = targets.begin(); it != targets.end(); ++it)
-            t << (*it)->target << "-install ";
-        t << endl;
+        for (SubTarget *s : qAsConst(targets))
+            t << s->target << '-';
+        t << "install " << Qt::endl;
 
         //uninstall
         t << "uninstall: ";
         for(it = targets.begin(); it != targets.end(); ++it)
             t << (*it)->target << "-uninstall ";
-        t << endl;
+        t << Qt::endl;
     } else {
-        t << "first: " << targets.first()->target << endl
+        t << "first: " << targets.first()->target << Qt::endl
           << "install: " << targets.first()->target << "-install\n"
           << "uninstall: " << targets.first()->target << "-uninstall\n";
     }
@@ -1072,7 +1052,7 @@ MakefileGenerator::writeProjectMakefile()
     if(!project->isActiveConfig("no_autoqmake")) {
         QString mkf = escapeDependencyPath(fileFixify(Option::output.fileName()));
         for(QList<SubTarget*>::Iterator it = targets.begin(); it != targets.end(); ++it)
-            t << escapeDependencyPath((*it)->makefile) << ": " << mkf << endl;
+            t << escapeDependencyPath((*it)->makefile) << ": " << mkf << Qt::endl;
     }
     qDeleteAll(targets);
     return true;
@@ -1120,7 +1100,8 @@ MakefileGenerator::writePrlFile()
        && project->values("QMAKE_FAILED_REQUIREMENTS").isEmpty()
        && project->isActiveConfig("create_prl")
        && (project->first("TEMPLATE") == "lib"
-       || project->first("TEMPLATE") == "vclib")
+       || project->first("TEMPLATE") == "vclib"
+       || project->first("TEMPLATE") == "aux")
        && (!project->isActiveConfig("plugin") || project->isActiveConfig("static"))) { //write prl file
         QString local_prl = prlFileName();
         QString prl = fileFixify(local_prl);
@@ -1186,7 +1167,7 @@ MakefileGenerator::writeObj(QTextStream &t, const char *src)
             p.replace(stringObj, escapeFilePath(dstf));
             t << "\n\t" << p;
         }
-        t << endl << endl;
+        t << Qt::endl << Qt::endl;
     }
 }
 
@@ -1301,9 +1282,9 @@ MakefileGenerator::writeInstalls(QTextStream &t, bool noBuild)
                     dst_file += fi.fileName();
                     QString cmd;
                     if (is_target || (!fi.isDir() && fi.isExecutable()))
-                       cmd = QLatin1String("-$(QINSTALL_PROGRAM)");
+                       cmd = QLatin1String("$(QINSTALL_PROGRAM)");
                     else
-                       cmd = QLatin1String("-$(QINSTALL)");
+                       cmd = QLatin1String("$(QINSTALL)");
                     cmd += " " + escapeFilePath(wild) + " " + escapeFilePath(dst_file);
                     inst << cmd;
                     if (!noStrip && !project->isActiveConfig("debug_info") && !project->isActiveConfig("nostrip") &&
@@ -1323,9 +1304,9 @@ MakefileGenerator::writeInstalls(QTextStream &t, bool noBuild)
                     dst_file += filestr;
                     QString cmd;
                     if (installConfigValues.contains("executable"))
-                        cmd = QLatin1String("-$(QINSTALL_PROGRAM)");
+                        cmd = QLatin1String("$(QINSTALL_PROGRAM)");
                     else
-                        cmd = QLatin1String("-$(QINSTALL)");
+                        cmd = QLatin1String("$(QINSTALL)");
                     cmd += " " + escapeFilePath(wild) + " " + escapeFilePath(dst_file);
                     inst << cmd;
                     uninst.append(rm_dir_contents + " " + escapeFilePath(filePrefixRoot(root, fileFixify(dst_dir + filestr, FileFixifyAbsolute, false))));
@@ -1338,7 +1319,7 @@ MakefileGenerator::writeInstalls(QTextStream &t, bool noBuild)
                     if (!dst_file.endsWith(Option::dir_sep))
                         dst_file += Option::dir_sep;
                     dst_file += fi.fileName();
-                    QString cmd = QLatin1String("-$(QINSTALL) ") +
+                    QString cmd = QLatin1String("$(QINSTALL) ") +
                                   escapeFilePath(dirstr + file) + " " + escapeFilePath(dst_file);
                     inst << cmd;
                     if (!noStrip && !project->isActiveConfig("debug_info") && !project->isActiveConfig("nostrip") &&
@@ -1380,14 +1361,14 @@ MakefileGenerator::writeInstalls(QTextStream &t, bool noBuild)
                 QString tmp_dst = fileFixify((*pit).toQString(), FileFixifyAbsolute, false);
                 t << mkdir_p_asstring(filePrefixRoot(root, tmp_dst)) << "\n\t";
             }
-            t << target << endl << endl;
+            t << target << Qt::endl << Qt::endl;
             if(!uninst.isEmpty()) {
                 t << "uninstall_" << (*it) << ": FORCE";
                 for (int i = uninst.size(); --i >= 0; )
                     t << "\n\t" << uninst.at(i);
                 t << "\n\t-$(DEL_DIR) " << escapeFilePath(filePrefixRoot(root, dst)) << " \n\n";
             }
-            t << endl;
+            t << Qt::endl;
 
             if (installConfigValues.indexOf("no_default_install") == -1) {
                 all_installs += QString("install_") + (*it) + " ";
@@ -1539,7 +1520,7 @@ MakefileGenerator::createObjectList(const ProStringList &sources)
             if (!noIO()) {
                 // Ensure that the final output directory of each object exists
                 QString outRelativePath = fileFixify(dir, FileFixifyBackwards);
-                if (!mkdir(outRelativePath))
+                if (!outRelativePath.isEmpty() && !mkdir(outRelativePath))
                     warn_msg(WarnLogic, "Cannot create directory '%s'", outRelativePath.toLatin1().constData());
             }
         } else {
@@ -1824,7 +1805,7 @@ MakefileGenerator::writeExtraTargets(QTextStream &t)
         t << escapeDependencyPath(targ) << ":" << deps;
         if(!cmd.isEmpty())
             t << "\n\t" << cmd;
-        t << endl << endl;
+        t << Qt::endl << Qt::endl;
     }
 }
 
@@ -1832,7 +1813,7 @@ static QStringList splitDeps(const QString &indeps, bool lineMode)
 {
     if (!lineMode)
         return indeps.simplified().split(' ');
-    QStringList deps = indeps.split('\n', QString::SkipEmptyParts);
+    QStringList deps = indeps.split('\n', Qt::SkipEmptyParts);
 #ifdef Q_OS_WIN
     for (auto &dep : deps) {
         if (dep.endsWith(QLatin1Char('\r')))
@@ -1844,7 +1825,7 @@ static QStringList splitDeps(const QString &indeps, bool lineMode)
 
 QString MakefileGenerator::resolveDependency(const QDir &outDir, const QString &file)
 {
-    const QList<QMakeLocalFileName> &depdirs = QMakeSourceFileInfo::dependencyPaths();
+    const QVector<QMakeLocalFileName> &depdirs = QMakeSourceFileInfo::dependencyPaths();
     for (const auto &depdir : depdirs) {
         const QString &local = depdir.local();
         QString lf = outDir.absoluteFilePath(local + '/' + file);
@@ -1869,6 +1850,63 @@ QString MakefileGenerator::resolveDependency(const QDir &outDir, const QString &
     return {};
 }
 
+void MakefileGenerator::callExtraCompilerDependCommand(const ProString &extraCompiler,
+                                                       const QString &tmp_dep_cmd,
+                                                       const QString &inpf,
+                                                       const QString &tmp_out,
+                                                       bool dep_lines,
+                                                       QStringList *deps,
+                                                       bool existingDepsOnly,
+                                                       bool checkCommandAvailability)
+{
+    char buff[256];
+    QString dep_cmd = replaceExtraCompilerVariables(tmp_dep_cmd, inpf, tmp_out, LocalShell);
+    if (checkCommandAvailability && !canExecute(dep_cmd))
+        return;
+    dep_cmd = QLatin1String("cd ")
+            + IoUtils::shellQuote(Option::fixPathToLocalOS(Option::output_dir, false))
+            + QLatin1String(" && ")
+            + fixEnvVariables(dep_cmd);
+    if (FILE *proc = QT_POPEN(dep_cmd.toLatin1().constData(), QT_POPEN_READ)) {
+        QByteArray depData;
+        while (int read_in = feof(proc) ? 0 : (int)fread(buff, 1, 255, proc))
+            depData.append(buff, read_in);
+        QT_PCLOSE(proc);
+        const QString indeps = QString::fromLocal8Bit(depData);
+        if (indeps.isEmpty())
+            return;
+        QDir outDir(Option::output_dir);
+        QStringList dep_cmd_deps = splitDeps(indeps, dep_lines);
+        for (int i = 0; i < dep_cmd_deps.count(); ++i) {
+            QString &file = dep_cmd_deps[i];
+            const QString absFile = outDir.absoluteFilePath(file);
+            if (absFile == file) {
+                // already absolute; don't do any checks.
+            } else if (exists(absFile)) {
+                file = absFile;
+            } else {
+                const QString localFile = resolveDependency(outDir, file);
+                if (localFile.isEmpty()) {
+                    if (exists(file)) {
+                        warn_msg(WarnDeprecated, ".depend_command for extra compiler %s"
+                                 " prints paths relative to source directory",
+                                 extraCompiler.toLatin1().constData());
+                    } else if (existingDepsOnly) {
+                        file.clear();
+                    } else {
+                        file = absFile;  // fallback for generated resources
+                    }
+                } else {
+                    file = localFile;
+                }
+            }
+            if (!file.isEmpty())
+                file = fileFixify(file);
+        }
+        deps->append(dep_cmd_deps);
+    }
+}
+
 void
 MakefileGenerator::writeExtraCompilerTargets(QTextStream &t)
 {
@@ -1880,12 +1918,6 @@ MakefileGenerator::writeExtraCompilerTargets(QTextStream &t)
                                      FileFixifyFromOutdir);
         const QString tmp_cmd = project->values(ProKey(*it + ".commands")).join(' ');
         const QString tmp_dep_cmd = project->values(ProKey(*it + ".depend_command")).join(' ');
-        QString dep_cd_cmd;
-        if (!tmp_dep_cmd.isEmpty()) {
-            dep_cd_cmd = QLatin1String("cd ")
-                 + IoUtils::shellQuote(Option::fixPathToLocalOS(Option::output_dir, false))
-                 + QLatin1String(" && ");
-        }
         const bool dep_lines = (config.indexOf("dep_lines") != -1);
         const ProStringList &vars = project->values(ProKey(*it + ".variables"));
         if(tmp_out.isEmpty() || tmp_cmd.isEmpty())
@@ -1910,13 +1942,13 @@ MakefileGenerator::writeExtraCompilerTargets(QTextStream &t)
                     replaceExtraCompilerVariables(tmp_out, input, QString(), NoShell),
                     FileFixifyFromOutdir));
         } else {
-            for (ProStringList::ConstIterator input = tmp_inputs.begin(); input != tmp_inputs.end(); ++input) {
+            for (ProStringList::ConstIterator input = tmp_inputs.cbegin(); input != tmp_inputs.cend(); ++input) {
                 t << ' ' << escapeDependencyPath(fileFixify(
                         replaceExtraCompilerVariables(tmp_out, (*input).toQString(), QString(), NoShell),
                         FileFixifyFromOutdir));
             }
         }
-        t << endl;
+        t << Qt::endl;
 
         if (config.indexOf("no_clean") == -1) {
             QStringList raw_clean = project->values(ProKey(*it + ".clean")).toQStringList();
@@ -1945,7 +1977,7 @@ MakefileGenerator::writeExtraCompilerTargets(QTextStream &t)
                 const QString del_statement("-$(DEL_FILE)");
                 if(!wrote_clean) {
                     QStringList dels;
-                    for (ProStringList::ConstIterator input = tmp_inputs.begin(); input != tmp_inputs.end(); ++input) {
+                    for (ProStringList::ConstIterator input = tmp_inputs.cbegin(); input != tmp_inputs.cend(); ++input) {
                         QString tinp = (*input).toQString();
                         QString out = replaceExtraCompilerVariables(tmp_out, tinp, QString(), NoShell);
                         for (const QString &rc : qAsConst(raw_clean)) {
@@ -1974,15 +2006,16 @@ MakefileGenerator::writeExtraCompilerTargets(QTextStream &t)
                 if(!cleans.isEmpty())
                     t << valGlue(cleans, "\n\t" + del_statement, "\n\t" + del_statement, "");
                 if(!wrote_clean_cmds) {
-                    for (ProStringList::ConstIterator input = tmp_inputs.begin(); input != tmp_inputs.end(); ++input) {
+                    for (ProStringList::ConstIterator input = tmp_inputs.cbegin(); input != tmp_inputs.cend(); ++input) {
                         QString tinp = (*input).toQString();
                         t << "\n\t" << replaceExtraCompilerVariables(tmp_clean_cmds, tinp,
                                          replaceExtraCompilerVariables(tmp_out, tinp, QString(), NoShell), TargetShell);
                     }
                 }
             }
-            t << endl;
+            t << Qt::endl;
         }
+        const bool existingDepsOnly = config.contains("dep_existing_only");
         QStringList tmp_dep = project->values(ProKey(*it + ".depends")).toQStringList();
         if (config.indexOf("combine") != -1) {
             if (tmp_out.contains(QRegExp("(^|[^$])\\$\\{QMAKE_(?!VAR_)"))) {
@@ -1993,56 +2026,13 @@ MakefileGenerator::writeExtraCompilerTargets(QTextStream &t)
             QStringList deps, inputs;
             if(!tmp_dep.isEmpty())
                 deps += fileFixify(tmp_dep, FileFixifyFromOutdir);
-            for (ProStringList::ConstIterator input = tmp_inputs.begin(); input != tmp_inputs.end(); ++input) {
+            for (ProStringList::ConstIterator input = tmp_inputs.cbegin(); input != tmp_inputs.cend(); ++input) {
                 QString inpf = (*input).toQString();
                 deps += findDependencies(inpf);
                 inputs += Option::fixPathToTargetOS(inpf, false);
                 if(!tmp_dep_cmd.isEmpty() && doDepends()) {
-                    char buff[256];
-                    QString dep_cmd = replaceExtraCompilerVariables(tmp_dep_cmd, inpf, tmp_out, LocalShell);
-                    dep_cmd = dep_cd_cmd + fixEnvVariables(dep_cmd);
-                    if (FILE *proc = QT_POPEN(dep_cmd.toLatin1().constData(), QT_POPEN_READ)) {
-                        QString indeps;
-                        while(!feof(proc)) {
-                            int read_in = (int)fread(buff, 1, 255, proc);
-                            if(!read_in)
-                                break;
-                            indeps += QByteArray(buff, read_in);
-                        }
-                        QT_PCLOSE(proc);
-                        if(!indeps.isEmpty()) {
-                            QDir outDir(Option::output_dir);
-                            QStringList dep_cmd_deps = splitDeps(indeps, dep_lines);
-                            for(int i = 0; i < dep_cmd_deps.count(); ++i) {
-                                QString &file = dep_cmd_deps[i];
-                                QString absFile = outDir.absoluteFilePath(file);
-                                if (!exists(absFile)) {
-                                   file = "";
-                                   continue;
-                                }
-                                if (absFile == file) {
-                                    // already absolute; don't do any checks.
-                                } else if (exists(absFile)) {
-                                    file = absFile;
-                                } else {
-                                    QString localFile = resolveDependency(outDir, file);
-                                    if (localFile.isEmpty()) {
-                                        if (exists(file))
-                                            warn_msg(WarnDeprecated, ".depend_command for extra compiler %s"
-                                                                     " prints paths relative to source directory",
-                                                                     (*it).toLatin1().constData());
-                                        else
-                                            file = absFile;  // fallback for generated resources
-                                    } else {
-                                        file = localFile;
-                                    }
-                                }
-                                if(!file.isEmpty())
-                                    file = fileFixify(file);
-                            }
-                            deps += dep_cmd_deps;
-                        }
-                    }
+                    callExtraCompilerDependCommand(*it, tmp_dep_cmd, inpf,
+                                                   tmp_out, dep_lines, &deps, existingDepsOnly);
                 }
             }
             for(int i = 0; i < inputs.size(); ) {
@@ -2069,10 +2059,10 @@ MakefileGenerator::writeExtraCompilerTargets(QTextStream &t)
             } else {
                 t << " " << valList(escapeDependencyPaths(inputs)) << " " << valList(finalizeDependencyPaths(deps));
             }
-            t << "\n\t" << cmd << endl << endl;
+            t << "\n\t" << cmd << Qt::endl << Qt::endl;
             continue;
         }
-        for (ProStringList::ConstIterator input = tmp_inputs.begin(); input != tmp_inputs.end(); ++input) {
+        for (ProStringList::ConstIterator input = tmp_inputs.cbegin(); input != tmp_inputs.cend(); ++input) {
             QString inpf = (*input).toQString();
             QStringList deps;
             deps << fileFixify(inpf, FileFixifyFromOutdir);
@@ -2090,51 +2080,8 @@ MakefileGenerator::writeExtraCompilerTargets(QTextStream &t)
             for (ProStringList::ConstIterator it3 = vars.constBegin(); it3 != vars.constEnd(); ++it3)
                 cmd.replace("$(" + (*it3) + ")", "$(QMAKE_COMP_" + (*it3)+")");
             if(!tmp_dep_cmd.isEmpty() && doDepends()) {
-                char buff[256];
-                QString dep_cmd = replaceExtraCompilerVariables(tmp_dep_cmd, inpf, out, LocalShell);
-                dep_cmd = dep_cd_cmd + fixEnvVariables(dep_cmd);
-                if (FILE *proc = QT_POPEN(dep_cmd.toLatin1().constData(), QT_POPEN_READ)) {
-                    QString indeps;
-                    while(!feof(proc)) {
-                        int read_in = (int)fread(buff, 1, 255, proc);
-                        if(!read_in)
-                            break;
-                        indeps += QByteArray(buff, read_in);
-                    }
-                    QT_PCLOSE(proc);
-                    if(!indeps.isEmpty()) {
-                        QDir outDir(Option::output_dir);
-                        QStringList dep_cmd_deps = splitDeps(indeps, dep_lines);
-                        for(int i = 0; i < dep_cmd_deps.count(); ++i) {
-                            QString &file = dep_cmd_deps[i];
-                            QString absFile = outDir.absoluteFilePath(file);
-                            if (!exists(absFile)) {
-                                file = "";
-                                continue;
-                            }
-                            if (absFile == file) {
-                                // already absolute; don't do any checks.
-                            } else if (exists(absFile)) {
-                                file = absFile;
-                            } else {
-                                QString localFile = resolveDependency(outDir, file);
-                                if (localFile.isEmpty()) {
-                                    if (exists(file))
-                                        warn_msg(WarnDeprecated, ".depend_command for extra compiler %s"
-                                                                 " prints paths relative to source directory",
-                                                                 (*it).toLatin1().constData());
-                                    else
-                                        file = absFile;  // fallback for generated resources
-                                } else {
-                                    file = localFile;
-                                }
-                            }
-                            if(!file.isEmpty())
-                                file = fileFixify(file);
-                        }
-                        deps += dep_cmd_deps;
-                    }
-                }
+                callExtraCompilerDependCommand(*it, tmp_dep_cmd, inpf,
+                                               tmp_out, dep_lines, &deps, existingDepsOnly);
                 //use the depend system to find includes of these included files
                 QStringList inc_deps;
                 for(int i = 0; i < deps.size(); ++i) {
@@ -2185,10 +2132,10 @@ MakefileGenerator::writeExtraCompilerTargets(QTextStream &t)
                     ++i;
             }
             t << escapeDependencyPath(out) << ": " << valList(finalizeDependencyPaths(deps)) << "\n\t"
-              << cmd << endl << endl;
+              << cmd << Qt::endl << Qt::endl;
         }
     }
-    t << "compiler_clean: " << clean_targets << endl << endl;
+    t << "compiler_clean: " << clean_targets << Qt::endl << Qt::endl;
 }
 
 void
@@ -2204,17 +2151,17 @@ MakefileGenerator::writeExtraCompilerVariables(QTextStream &t)
                 first = false;
             }
             t << "QMAKE_COMP_" << (*varit) << " = "
-              << valList(project->values((*varit).toKey())) << endl;
+              << valList(project->values((*varit).toKey())) << Qt::endl;
         }
     }
     if(!first)
-        t << endl;
+        t << Qt::endl;
 }
 
 void
 MakefileGenerator::writeExtraVariables(QTextStream &t)
 {
-    t << endl;
+    t << Qt::endl;
 
     ProStringList outlist;
     const ProValueMap &vars = project->variables();
@@ -2228,7 +2175,7 @@ MakefileGenerator::writeExtraVariables(QTextStream &t)
     }
     if (!outlist.isEmpty()) {
         t << "####### Custom Variables\n";
-        t << outlist.join('\n') << endl << endl;
+        t << outlist.join('\n') << Qt::endl << Qt::endl;
     }
 }
 
@@ -2244,11 +2191,11 @@ MakefileGenerator::writeExportedVariables(QTextStream &t)
         const ProString &name = project->first(ProKey(exp + ".name"));
         const ProString &value = project->first(ProKey(exp + ".value"));
         if (!value.isEmpty())
-            t << name << " = " << value << endl;
+            t << name << " = " << value << Qt::endl;
         else
             t << name << " =\n";
     }
-    t << endl;
+    t << Qt::endl;
 }
 
 bool
@@ -2256,7 +2203,7 @@ MakefileGenerator::writeDummyMakefile(QTextStream &t)
 {
     if (project->values("QMAKE_FAILED_REQUIREMENTS").isEmpty())
         return false;
-    t << "QMAKE    = " << var("QMAKE_QMAKE") << endl;
+    t << "QMAKE    = " << var("QMAKE_QMAKE") << Qt::endl;
     const ProStringList &qut = project->values("QMAKE_EXTRA_TARGETS");
     for (ProStringList::ConstIterator it = qut.begin(); it != qut.end(); ++it)
         t << *it << " ";
@@ -2264,21 +2211,6 @@ MakefileGenerator::writeDummyMakefile(QTextStream &t)
       << "@echo \"Some of the required modules ("
       << var("QMAKE_FAILED_REQUIREMENTS") << ") are not available.\"\n\t"
       << "@echo \"Skipped.\"\n\n";
-    writeMakeQmake(t);
-    t << "FORCE:\n\n";
-    return true;
-}
-
-bool
-MakefileGenerator::writeStubMakefile(QTextStream &t)
-{
-    t << "QMAKE    = " << var("QMAKE_QMAKE") << endl;
-    const ProStringList &qut = project->values("QMAKE_EXTRA_TARGETS");
-    for (ProStringList::ConstIterator it = qut.begin(); it != qut.end(); ++it)
-        t << *it << " ";
-    //const QString ofile = Option::fixPathToTargetOS(fileFixify(Option::output.fileName()));
-    t << "first all clean install distclean uninstall: qmake\n"
-      << "qmake_all:\n";
     writeMakeQmake(t);
     t << "FORCE:\n\n";
     return true;
@@ -2301,22 +2233,22 @@ MakefileGenerator::writeMakefile(QTextStream &t)
 void
 MakefileGenerator::writeDefaultVariables(QTextStream &t)
 {
-    t << "QMAKE         = " << var("QMAKE_QMAKE") << endl;
-    t << "DEL_FILE      = " << var("QMAKE_DEL_FILE") << endl;
-    t << "CHK_DIR_EXISTS= " << var("QMAKE_CHK_DIR_EXISTS") << endl;
-    t << "MKDIR         = " << var("QMAKE_MKDIR") << endl;
-    t << "COPY          = " << var("QMAKE_COPY") << endl;
-    t << "COPY_FILE     = " << var("QMAKE_COPY_FILE") << endl;
-    t << "COPY_DIR      = " << var("QMAKE_COPY_DIR") << endl;
-    t << "INSTALL_FILE  = " << var("QMAKE_INSTALL_FILE") << endl;
-    t << "INSTALL_PROGRAM = " << var("QMAKE_INSTALL_PROGRAM") << endl;
-    t << "INSTALL_DIR   = " << var("QMAKE_INSTALL_DIR") << endl;
-    t << "QINSTALL      = " << var("QMAKE_QMAKE") << " -install qinstall" << endl;
-    t << "QINSTALL_PROGRAM = " << var("QMAKE_QMAKE") << " -install qinstall -exe" << endl;
-    t << "DEL_FILE      = " << var("QMAKE_DEL_FILE") << endl;
-    t << "SYMLINK       = " << var("QMAKE_SYMBOLIC_LINK") << endl;
-    t << "DEL_DIR       = " << var("QMAKE_DEL_DIR") << endl;
-    t << "MOVE          = " << var("QMAKE_MOVE") << endl;
+    t << "QMAKE         = " << var("QMAKE_QMAKE") << Qt::endl;
+    t << "DEL_FILE      = " << var("QMAKE_DEL_FILE") << Qt::endl;
+    t << "CHK_DIR_EXISTS= " << var("QMAKE_CHK_DIR_EXISTS") << Qt::endl;
+    t << "MKDIR         = " << var("QMAKE_MKDIR") << Qt::endl;
+    t << "COPY          = " << var("QMAKE_COPY") << Qt::endl;
+    t << "COPY_FILE     = " << var("QMAKE_COPY_FILE") << Qt::endl;
+    t << "COPY_DIR      = " << var("QMAKE_COPY_DIR") << Qt::endl;
+    t << "INSTALL_FILE  = " << var("QMAKE_INSTALL_FILE") << Qt::endl;
+    t << "INSTALL_PROGRAM = " << var("QMAKE_INSTALL_PROGRAM") << Qt::endl;
+    t << "INSTALL_DIR   = " << var("QMAKE_INSTALL_DIR") << Qt::endl;
+    t << "QINSTALL      = " << var("QMAKE_QMAKE") << " -install qinstall" << Qt::endl;
+    t << "QINSTALL_PROGRAM = " << var("QMAKE_QMAKE") << " -install qinstall -exe" << Qt::endl;
+    t << "DEL_FILE      = " << var("QMAKE_DEL_FILE") << Qt::endl;
+    t << "SYMLINK       = " << var("QMAKE_SYMBOLIC_LINK") << Qt::endl;
+    t << "DEL_DIR       = " << var("QMAKE_DEL_DIR") << Qt::endl;
+    t << "MOVE          = " << var("QMAKE_MOVE") << Qt::endl;
 }
 
 QString MakefileGenerator::buildArgs(bool withExtra)
@@ -2335,9 +2267,9 @@ QString MakefileGenerator::buildArgs(bool withExtra)
 
 //could get stored argv, but then it would have more options than are
 //probably necesary this will try to guess the bare minimum..
-QString MakefileGenerator::build_args()
+QString MakefileGenerator::fullBuildArgs()
 {
-    QString ret = "$(QMAKE)";
+    QString ret;
 
     //output
     QString ofile = fileFixify(Option::output.fileName());
@@ -2357,18 +2289,18 @@ void
 MakefileGenerator::writeHeader(QTextStream &t)
 {
     t << "#############################################################################\n";
-    t << "# Makefile for building: " << escapeFilePath(var("TARGET")) << endl;
+    t << "# Makefile for building: " << escapeFilePath(var("TARGET")) << Qt::endl;
     t << "# Generated by qmake (" QMAKE_VERSION_STR ") (Qt " QT_VERSION_STR ")\n";
-    t << "# Project:  " << fileFixify(project->projectFile()) << endl;
-    t << "# Template: " << var("TEMPLATE") << endl;
+    t << "# Project:  " << fileFixify(project->projectFile()) << Qt::endl;
+    t << "# Template: " << var("TEMPLATE") << Qt::endl;
     if(!project->isActiveConfig("build_pass"))
-        t << "# Command: " << build_args().replace(QLatin1String("$(QMAKE)"), var("QMAKE_QMAKE")) << endl;
+        t << "# Command: " << var("QMAKE_QMAKE") << fullBuildArgs() << Qt::endl;
     t << "#############################################################################\n";
-    t << endl;
+    t << Qt::endl;
     QString ofile = Option::fixPathToTargetOS(Option::output.fileName());
     if (ofile.lastIndexOf(Option::dir_sep) != -1)
         ofile.remove(0, ofile.lastIndexOf(Option::dir_sep) +1);
-    t << "MAKEFILE      = " << escapeFilePath(ofile) << endl << endl;
+    t << "MAKEFILE      = " << escapeFilePath(ofile) << Qt::endl << Qt::endl;
     t << "EQ            = =\n\n";
 }
 
@@ -2414,8 +2346,15 @@ MakefileGenerator::findSubDirsSubTargets() const
                     st->profile = file;
                 }
             } else {
-                if(!file.isEmpty() && !project->isActiveConfig("subdir_first_pro"))
-                    st->profile = file.section(Option::dir_sep, -1) + Option::pro_ext;
+                if (!file.isEmpty() && !project->isActiveConfig("subdir_first_pro")) {
+                    const QString baseName = file.section(Option::dir_sep, -1);
+                    if (baseName.isEmpty()) {
+                        warn_msg(WarnLogic, "Ignoring invalid SUBDIRS entry %s",
+                                 subdirs[subdir].toLatin1().constData());
+                        continue;
+                    }
+                    st->profile = baseName + Option::pro_ext;
+                }
                 st->in_directory = file;
             }
             while(st->in_directory.endsWith(Option::dir_sep))
@@ -2500,7 +2439,7 @@ MakefileGenerator::writeSubDirs(QTextStream &t)
 void MakefileGenerator::writeSubMakeCall(QTextStream &t, const QString &callPrefix,
                                          const QString &makeArguments)
 {
-    t << callPrefix << "$(MAKE)" << makeArguments << endl;
+    t << callPrefix << "$(MAKE)" << makeArguments << Qt::endl;
 }
 
 void
@@ -2519,20 +2458,30 @@ MakefileGenerator::writeSubTargetCall(QTextStream &t,
     writeSubMakeCall(t, out_directory_cdin + pfx, makefilein);
 }
 
+static void chopEndLines(QString *s)
+{
+    while (!s->isEmpty()) {
+        const ushort c = s->at(s->size() - 1).unicode();
+        if (c != '\n' && c != '\r')
+            break;
+        s->chop(1);
+    }
+}
+
 void
 MakefileGenerator::writeSubTargets(QTextStream &t, QList<MakefileGenerator::SubTarget*> targets, int flags)
 {
     // blasted includes
     const ProStringList &qeui = project->values("QMAKE_EXTRA_INCLUDES");
     for (ProStringList::ConstIterator qeui_it = qeui.begin(); qeui_it != qeui.end(); ++qeui_it)
-        t << "include " << (*qeui_it) << endl;
+        t << "include " << (*qeui_it) << Qt::endl;
 
     if (!(flags & SubTargetSkipDefaultVariables)) {
         writeDefaultVariables(t);
         t << "SUBTARGETS    = ";     // subtargets are sub-directory
         for(int target = 0; target < targets.size(); ++target)
             t << " \\\n\t\t" << targets.at(target)->target;
-        t << endl << endl;
+        t << Qt::endl << Qt::endl;
     }
     writeExtraVariables(t);
 
@@ -2544,6 +2493,14 @@ MakefileGenerator::writeSubTargets(QTextStream &t, QList<MakefileGenerator::SubT
                        << QString((flags & SubTargetInstalls) ? "uninstall_subtargets" : "uninstall");
     }
 
+    struct SequentialInstallData
+    {
+        QString targetPrefix;
+        QString commands;
+        QTextStream commandsStream;
+        SequentialInstallData() : commandsStream(&commands) {}
+    };
+    std::unique_ptr<SequentialInstallData> sequentialInstallData;
     bool dont_recurse = project->isActiveConfig("dont_recurse");
 
     // generate target rules
@@ -2588,7 +2545,7 @@ MakefileGenerator::writeSubTargets(QTextStream &t, QList<MakefileGenerator::SubT
             if (!dont_recurse)
                 writeSubMakeCall(t, out_directory_cdin, makefilein + " qmake_all");
             else
-                t << endl;
+                t << Qt::endl;
         }
 
         { //actually compile
@@ -2612,6 +2569,16 @@ MakefileGenerator::writeSubTargets(QTextStream &t, QList<MakefileGenerator::SubT
             else if(s == "make_first")
                 s = QString();
 
+            if (project->isActiveConfig("build_all") && s == "install") {
+                if (!sequentialInstallData)
+                    sequentialInstallData.reset(new SequentialInstallData);
+                sequentialInstallData->targetPrefix += subtarget->target + '-';
+                writeSubTargetCall(sequentialInstallData->commandsStream, in_directory, in,
+                                   out_directory, out, out_directory_cdin,
+                                   makefilein + " " + s);
+                chopEndLines(&sequentialInstallData->commands);
+            }
+
             if(flags & SubTargetOrdered) {
                 t << subtarget->target << "-" << targetSuffixes.at(suffix) << "-ordered:";
                 if(target)
@@ -2629,7 +2596,12 @@ MakefileGenerator::writeSubTargets(QTextStream &t, QList<MakefileGenerator::SubT
                                out_directory_cdin, makefilein + " " + s);
         }
     }
-    t << endl;
+    t << Qt::endl;
+
+    if (sequentialInstallData) {
+        t << sequentialInstallData->targetPrefix << "install: FORCE"
+          << sequentialInstallData->commands << Qt::endl << Qt::endl;
+    }
 
     if (!(flags & SubTargetSkipDefaultTargets)) {
         writeMakeQmake(t, true);
@@ -2678,7 +2650,7 @@ MakefileGenerator::writeSubTargets(QTextStream &t, QList<MakefileGenerator::SubT
         } else if(suffix == "distclean") {
             QString ofile = fileFixify(Option::output.fileName());
             if(!ofile.isEmpty())
-                t << "\t-$(DEL_FILE) " << escapeFilePath(ofile) << endl;
+                t << "\t-$(DEL_FILE) " << escapeFilePath(ofile) << Qt::endl;
             t << fixFileVarGlue("QMAKE_DISTCLEAN", "\t-$(DEL_FILE) ", " ", "\n");
         }
     }
@@ -2691,7 +2663,7 @@ MakefileGenerator::writeSubTargets(QTextStream &t, QList<MakefileGenerator::SubT
                  cmd = var(ProKey(*qut_it + ".commands")), deps;
         if(targ.isEmpty())
             targ = (*qut_it).toQString();
-        t << endl;
+        t << Qt::endl;
 
         const ProStringList &deplist = project->values(ProKey(*qut_it + ".depends"));
         for (ProStringList::ConstIterator dep_it = deplist.begin(); dep_it != deplist.end(); ++dep_it) {
@@ -2704,7 +2676,8 @@ MakefileGenerator::writeSubTargets(QTextStream &t, QList<MakefileGenerator::SubT
             QSet<QString> recurse;
             const ProKey rkey(*qut_it + ".recurse");
             if (project->isSet(rkey)) {
-                recurse = project->values(rkey).toQStringList().toSet();
+                const QStringList values = project->values(rkey).toQStringList();
+                recurse = QSet<QString>(values.begin(), values.end());
             } else {
                 for(int target = 0; target < targets.size(); ++target)
                     recurse.insert(targets.at(target)->name);
@@ -2766,7 +2739,7 @@ MakefileGenerator::writeSubTargets(QTextStream &t, QList<MakefileGenerator::SubT
             deps += " FORCE";
         t << escapeDependencyPath(Option::fixPathToTargetOS(targ, false)) << ":" << deps << "\n";
         if(!cmd.isEmpty())
-            t << "\t" << cmd << endl;
+            t << "\t" << cmd << Qt::endl;
     }
 
     if(flags & SubTargetInstalls) {
@@ -2784,10 +2757,10 @@ MakefileGenerator::writeMakeQmake(QTextStream &t, bool noDummyQmakeAll)
     if(project->isEmpty("QMAKE_FAILED_REQUIREMENTS") && !project->isEmpty("QMAKE_INTERNAL_PRL_FILE")) {
         QStringList files = escapeFilePaths(fileFixify(Option::mkfile::project_files));
         t << escapeDependencyPath(project->first("QMAKE_INTERNAL_PRL_FILE").toQString()) << ": \n\t"
-          << "@$(QMAKE) -prl " << files.join(' ') << ' ' << buildArgs(true) << endl;
+          << "@$(QMAKE) -prl " << files.join(' ') << ' ' << buildArgs(true) << Qt::endl;
     }
 
-        QString qmake = build_args();
+        QString qmake = "$(QMAKE)" + fullBuildArgs();
         if(!ofile.isEmpty() && !project->isActiveConfig("no_autoqmake")) {
             t << escapeDependencyPath(ofile) << ": "
               << escapeDependencyPath(fileFixify(project->projectFile())) << " ";
@@ -2803,10 +2776,10 @@ MakefileGenerator::writeMakeQmake(QTextStream &t, bool noDummyQmakeAll)
             }
             const ProStringList &included = escapeDependencyPaths(project->values("QMAKE_INTERNAL_INCLUDED_FILES"));
             t << included.join(QString(" \\\n\t\t")) << "\n\t"
-              << qmake << endl;
+              << qmake << Qt::endl;
             const ProStringList &extraCommands = project->values("QMAKE_MAKE_QMAKE_EXTRA_COMMANDS");
             if (!extraCommands.isEmpty())
-                t << "\t" << extraCommands.join(QString("\n\t")) << endl;
+                t << "\t" << extraCommands.join(QString("\n\t")) << Qt::endl;
             for(int include = 0; include < included.size(); ++include) {
                 const ProString &i = included.at(include);
                 if(!i.isEmpty())
@@ -2814,7 +2787,7 @@ MakefileGenerator::writeMakeQmake(QTextStream &t, bool noDummyQmakeAll)
             }
         }
         if(project->first("QMAKE_ORIG_TARGET") != "qmake") {
-            t << "qmake: FORCE\n\t@" << qmake << endl << endl;
+            t << "qmake: FORCE\n\t@" << qmake << Qt::endl << Qt::endl;
             if (!noDummyQmakeAll)
                 t << "qmake_all: FORCE\n\n";
         }
@@ -3121,7 +3094,7 @@ MakefileGenerator::findFileForDep(const QMakeLocalFileName &dep, const QMakeLoca
 
         if(Option::output_dir != qmake_getpwd()
            && QDir::isRelativePath(dep.real())) { //is it from the shadow tree
-            QList<QMakeLocalFileName> depdirs = QMakeSourceFileInfo::dependencyPaths();
+            QVector<QMakeLocalFileName> depdirs = QMakeSourceFileInfo::dependencyPaths();
             depdirs.prepend(fileInfo(file.real()).absoluteDir().path());
             QString pwd = qmake_getpwd();
             if(pwd.at(pwd.length()-1) != '/')
@@ -3306,11 +3279,11 @@ MakefileGenerator::writePkgConfigFile()
     if(includeDir.isEmpty())
         includeDir = prefix + "/include";
 
-    t << "prefix=" << prefix << endl;
+    t << "prefix=" << prefix << Qt::endl;
     t << "exec_prefix=${prefix}\n"
       << "libdir=" << pkgConfigFixPath(libDir) << "\n"
-      << "includedir=" << pkgConfigFixPath(includeDir) << endl;
-    t << endl;
+      << "includedir=" << pkgConfigFixPath(includeDir) << Qt::endl;
+    t << Qt::endl;
 
     //extra PKGCONFIG variables
     const ProStringList &pkgconfig_vars = project->values("QMAKE_PKGCONFIG_VARIABLES");
@@ -3331,17 +3304,17 @@ MakefileGenerator::writePkgConfigFile()
             }
         }
         if (!val.isEmpty())
-            t << var << "=" << val << endl;
+            t << var << "=" << val << Qt::endl;
     }
 
-    t << endl;
+    t << Qt::endl;
 
     QString name = project->first("QMAKE_PKGCONFIG_NAME").toQString();
     if(name.isEmpty()) {
         name = project->first("QMAKE_ORIG_TARGET").toQString().toLower();
         name.replace(0, 1, name[0].toUpper());
     }
-    t << "Name: " << name << endl;
+    t << "Name: " << name << Qt::endl;
     QString desc = project->values("QMAKE_PKGCONFIG_DESCRIPTION").join(' ');
     if(desc.isEmpty()) {
         if(name.isEmpty()) {
@@ -3359,49 +3332,51 @@ MakefileGenerator::writePkgConfigFile()
             desc += " Application";
         }
     }
-    t << "Description: " << desc << endl;
+    t << "Description: " << desc << Qt::endl;
     ProString version = project->first("QMAKE_PKGCONFIG_VERSION");
     if (version.isEmpty())
         version = project->first("VERSION");
     if (!version.isEmpty())
-        t << "Version: " << version << endl;
+        t << "Version: " << version << Qt::endl;
 
-    // libs
-    t << "Libs: ";
-    QString pkgConfiglibName;
-    if (target_mode == TARG_MAC_MODE && project->isActiveConfig("lib_bundle")) {
-        if (libDir != QLatin1String("/Library/Frameworks"))
-            t << "-F${libdir} ";
-        ProString bundle;
-        if (!project->isEmpty("QMAKE_FRAMEWORK_BUNDLE_NAME"))
-            bundle = project->first("QMAKE_FRAMEWORK_BUNDLE_NAME");
-        else
-            bundle = project->first("TARGET");
-        int suffix = bundle.lastIndexOf(".framework");
-        if (suffix != -1)
-            bundle = bundle.left(suffix);
-        t << "-framework ";
-        pkgConfiglibName = bundle.toQString();
-    } else {
-        if (!project->values("QMAKE_DEFAULT_LIBDIRS").contains(libDir))
-            t << "-L${libdir} ";
-        pkgConfiglibName = "-l" + project->first("QMAKE_ORIG_TARGET");
-        if (project->isActiveConfig("shared"))
-            pkgConfiglibName += project->first("TARGET_VERSION_EXT").toQString();
-    }
-    t << shellQuote(pkgConfiglibName) << " \n";
+    if (project->first("TEMPLATE") == "lib") {
+        // libs
+        t << "Libs: ";
+        QString pkgConfiglibName;
+        if (target_mode == TARG_MAC_MODE && project->isActiveConfig("lib_bundle")) {
+            if (libDir != QLatin1String("/Library/Frameworks"))
+                t << "-F${libdir} ";
+            ProString bundle;
+            if (!project->isEmpty("QMAKE_FRAMEWORK_BUNDLE_NAME"))
+                bundle = project->first("QMAKE_FRAMEWORK_BUNDLE_NAME");
+            else
+                bundle = project->first("TARGET");
+            int suffix = bundle.lastIndexOf(".framework");
+            if (suffix != -1)
+                bundle = bundle.left(suffix);
+            t << "-framework ";
+            pkgConfiglibName = bundle.toQString();
+        } else {
+            if (!project->values("QMAKE_DEFAULT_LIBDIRS").contains(libDir))
+                t << "-L${libdir} ";
+            pkgConfiglibName = "-l" + project->first("QMAKE_ORIG_TARGET");
+            if (project->isActiveConfig("shared"))
+                pkgConfiglibName += project->first("TARGET_VERSION_EXT").toQString();
+        }
+        t << shellQuote(pkgConfiglibName) << " \n";
 
-    if (project->isActiveConfig("staticlib")) {
-        ProStringList libs;
-        libs << "LIBS";  // FIXME: this should not be conditional on staticlib
-        libs << "LIBS_PRIVATE";
-        libs << "QMAKE_LIBS";  // FIXME: this should not be conditional on staticlib
-        libs << "QMAKE_LIBS_PRIVATE";
-        libs << "QMAKE_LFLAGS_THREAD"; //not sure about this one, but what about things like -pthread?
-        t << "Libs.private:";
-        for (ProStringList::ConstIterator it = libs.begin(); it != libs.end(); ++it)
-            t << ' ' << fixLibFlags((*it).toKey()).join(' ');
-        t << endl;
+        if (project->isActiveConfig("staticlib")) {
+            ProStringList libs;
+            libs << "LIBS";  // FIXME: this should not be conditional on staticlib
+            libs << "LIBS_PRIVATE";
+            libs << "QMAKE_LIBS";  // FIXME: this should not be conditional on staticlib
+            libs << "QMAKE_LIBS_PRIVATE";
+            libs << "QMAKE_LFLAGS_THREAD"; //not sure about this one, but what about things like -pthread?
+            t << "Libs.private:";
+            for (ProStringList::ConstIterator it = libs.cbegin(); it != libs.cend(); ++it)
+                t << ' ' << fixLibFlags((*it).toKey()).join(' ');
+            t << Qt::endl;
+        }
     }
 
     // flags
@@ -3419,15 +3394,15 @@ MakefileGenerator::writePkgConfigFile()
         && libDir != QLatin1String("/Library/Frameworks")) {
             t << " -F${libdir}";
     }
-    t << endl;
+    t << Qt::endl;
 
     // requires
-    const QString requires = project->values("QMAKE_PKGCONFIG_REQUIRES").join(' ');
-    if (!requires.isEmpty()) {
-        t << "Requires: " << requires << endl;
+    const QString requiresString = project->values("QMAKE_PKGCONFIG_REQUIRES").join(' ');
+    if (!requiresString.isEmpty()) {
+        t << "Requires: " << requiresString << Qt::endl;
     }
 
-    t << endl;
+    t << Qt::endl;
 }
 
 static QString windowsifyPath(const QString &str)
@@ -3442,21 +3417,25 @@ QString MakefileGenerator::installMetaFile(const ProKey &replace_rule, const QSt
     QString ret;
     if (project->isEmpty(replace_rule)
         || project->isActiveConfig("no_sed_meta_install")) {
-        ret += "-$(INSTALL_FILE) " + escapeFilePath(src) + ' ' + escapeFilePath(dst);
+        ret += "$(INSTALL_FILE) " + escapeFilePath(src) + ' ' + escapeFilePath(dst);
     } else {
-        ret += "-$(SED)";
+        QString sedargs;
         const ProStringList &replace_rules = project->values(replace_rule);
         for (int r = 0; r < replace_rules.size(); ++r) {
             const ProString match = project->first(ProKey(replace_rules.at(r) + ".match")),
                         replace = project->first(ProKey(replace_rules.at(r) + ".replace"));
             if (!match.isEmpty() /*&& match != replace*/) {
-                ret += " -e " + shellQuote("s," + match + "," + replace + ",g");
+                sedargs += " -e " + shellQuote("s," + match + "," + replace + ",g");
                 if (isWindowsShell() && project->first(ProKey(replace_rules.at(r) + ".CONFIG")).contains("path"))
-                    ret += " -e " + shellQuote("s," + windowsifyPath(match.toQString())
+                    sedargs += " -e " + shellQuote("s," + windowsifyPath(match.toQString())
                                                + "," + windowsifyPath(replace.toQString()) + ",gi");
             }
         }
-        ret += ' ' + escapeFilePath(src) + " > " + escapeFilePath(dst);
+        if (sedargs.isEmpty()) {
+            ret += "$(INSTALL_FILE) " + escapeFilePath(src) + ' ' + escapeFilePath(dst);
+        } else {
+            ret += "$(SED) " + sedargs + ' ' + escapeFilePath(src) + " > " + escapeFilePath(dst);
+        }
     }
     return ret;
 }
@@ -3464,6 +3443,39 @@ QString MakefileGenerator::installMetaFile(const ProKey &replace_rule, const QSt
 QString MakefileGenerator::shellQuote(const QString &str)
 {
     return isWindowsShell() ? IoUtils::shellQuoteWin(str) : IoUtils::shellQuoteUnix(str);
+}
+
+/*
+ * Returns the name of the variable that contains the fully resolved target
+ * (including DESTDIR) of this generator.
+ */
+ProKey MakefileGenerator::fullTargetVariable() const
+{
+    return "TARGET";
+}
+
+void MakefileGenerator::createResponseFile(const QString &fileName, const ProStringList &objList)
+{
+    QString filePath = Option::output_dir + QDir::separator() + fileName;
+    QFile file(filePath);
+    if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        QTextStream t(&file);
+        for (ProStringList::ConstIterator it = objList.constBegin(); it != objList.constEnd(); ++it) {
+            QString path = (*it).toQString();
+            // In response files, whitespace and special characters are
+            // escaped with a backslash; backslashes themselves can either
+            // be escaped into double backslashes, or, as this is a list of
+            // path names, converted to forward slashes.
+            path.replace(QLatin1Char('\\'), QLatin1String("/"))
+                .replace(QLatin1Char(' '), QLatin1String("\\ "))
+                .replace(QLatin1Char('\t'), QLatin1String("\\\t"))
+                .replace(QLatin1Char('"'), QLatin1String("\\\""))
+                .replace(QLatin1Char('\''), QLatin1String("\\'"));
+            t << path << Qt::endl;
+        }
+        t.flush();
+        file.close();
+    }
 }
 
 QT_END_NAMESPACE

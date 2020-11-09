@@ -58,7 +58,7 @@ QT_BEGIN_NAMESPACE
     \ingroup basicwidgets
     \inmodule QtWidgets
 
-    The command link is a new control that was introduced by Windows Vista. It's
+    The command link is a new control that was introduced by Windows Vista. Its
     intended use is similar to that of a radio button in that it is used to choose
     between a set of mutually exclusive options. Command link buttons should not
     be used by themselves but rather as an alternative to radio buttons in
@@ -208,7 +208,7 @@ bool QCommandLinkButtonPrivate::usingVistaStyle() const
     //### This is a hack to detect if we are indeed running Vista style themed and not in classic
     // When we add api to query for this, we should change this implementation to use it.
     return q->style()->inherits("QWindowsVistaStyle")
-        && !q->style()->pixelMetric(QStyle::PM_ButtonShiftHorizontal);
+        && q->style()->pixelMetric(QStyle::PM_ButtonShiftHorizontal, nullptr) == 0;
 }
 
 void QCommandLinkButtonPrivate::init()
@@ -355,8 +355,10 @@ void QCommandLinkButton::paintEvent(QPaintEvent *)
     option.icon = QIcon(); //we draw this ourselves
     QSize pixmapSize = icon().actualSize(iconSize());
 
-    int vOffset = isDown() ? style()->pixelMetric(QStyle::PM_ButtonShiftVertical) : 0;
-    int hOffset = isDown() ? style()->pixelMetric(QStyle::PM_ButtonShiftHorizontal) : 0;
+    const int vOffset = isDown()
+        ? style()->pixelMetric(QStyle::PM_ButtonShiftVertical, &option) : 0;
+    const int hOffset = isDown()
+        ? style()->pixelMetric(QStyle::PM_ButtonShiftHorizontal, &option) : 0;
 
     //Draw icon
     p.drawControl(QStyle::CE_PushButton, option);

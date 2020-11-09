@@ -294,7 +294,7 @@ public:
     {
         QPrinterPrivate *pd = QPrinterPrivate::get(m_printer);
 
-        return pd->printEngine->property(QPrintEngine::PPK_QPageLayout).value<QPageLayout>();
+        return qvariant_cast<QPageLayout>(pd->printEngine->property(QPrintEngine::PPK_QPageLayout));
     }
 
     QPrinter *m_printer;
@@ -1848,7 +1848,7 @@ QList<int> QPrinter::supportedResolutions() const
         = d->printEngine->property(QPrintEngine::PPK_SupportedResolutions).toList();
     QList<int> intlist;
     intlist.reserve(varlist.size());
-    for (auto var : varlist)
+    for (const auto &var : varlist)
         intlist << var.toInt();
     return intlist;
 }

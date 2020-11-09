@@ -48,14 +48,19 @@
 **
 ****************************************************************************/
 
-#include <QtWidgets>
-
-#include <stdlib.h>
-
 #include "sortingbox.h"
 
+#include <QMouseEvent>
+#include <QIcon>
+#include <QPainter>
+#include <QRandomGenerator>
+#include <QStyle>
+#include <QToolButton>
+#include <QToolTip>
+
 //! [0]
-SortingBox::SortingBox()
+SortingBox::SortingBox(QWidget *parent)
+    : QWidget(parent)
 {
 //! [0] //! [1]
     setMouseTracking(true);
@@ -63,7 +68,7 @@ SortingBox::SortingBox()
     setBackgroundRole(QPalette::Base);
 //! [2]
 
-    itemInMotion = 0;
+    itemInMotion = nullptr;
 
 //! [3]
     newCircleButton = createToolButton(tr("New Circle"),
@@ -139,7 +144,7 @@ void SortingBox::paintEvent(QPaintEvent * /* event */)
 {
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
-    foreach (ShapeItem shapeItem, shapeItems) {
+    for (const ShapeItem &shapeItem : qAsConst(shapeItems)) {
 //! [8] //! [9]
         painter.translate(shapeItem.position());
 //! [9] //! [10]
@@ -178,7 +183,7 @@ void SortingBox::mouseReleaseEvent(QMouseEvent *event)
 {
     if (event->button() == Qt::LeftButton && itemInMotion) {
         moveItemTo(event->pos());
-        itemInMotion = 0;
+        itemInMotion = nullptr;
     }
 }
 //! [13]
@@ -278,12 +283,12 @@ QToolButton *SortingBox::createToolButton(const QString &toolTip,
 QPoint SortingBox::initialItemPosition(const QPainterPath &path)
 {
     int x;
-    int y = (height() - (int)path.controlPointRect().height()) / 2;
+    int y = (height() - qRound(path.controlPointRect().height()) / 2);
     if (shapeItems.size() == 0)
-        x = ((3 * width()) / 2 - (int)path.controlPointRect().width()) / 2;
+        x = ((3 * width()) / 2 - qRound(path.controlPointRect().width())) / 2;
     else
         x = (width() / shapeItems.size()
-             - (int)path.controlPointRect().width()) / 2;
+             - qRound(path.controlPointRect().width())) / 2;
 
     return QPoint(x, y);
 }

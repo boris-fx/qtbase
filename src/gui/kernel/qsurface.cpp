@@ -39,6 +39,8 @@
 
 #include "qsurface.h"
 #include "qopenglcontext.h"
+#include <qpa/qplatformintegration.h>
+#include <QtGui/private/qguiapplication_p.h>
 
 QT_BEGIN_NAMESPACE
 
@@ -103,6 +105,10 @@ QT_BEGIN_NAMESPACE
 bool QSurface::supportsOpenGL() const
 {
     SurfaceType type = surfaceType();
+    if (type == RasterSurface) {
+        QPlatformIntegration *integ = QGuiApplicationPrivate::instance()->platformIntegration();
+        return integ->hasCapability(QPlatformIntegration::OpenGLOnRasterSurface);
+    }
     return type == OpenGLSurface || type == RasterGLSurface;
 }
 
@@ -128,7 +134,7 @@ bool QSurface::supportsOpenGL() const
     Creates a surface with the given \a type.
 */
 QSurface::QSurface(SurfaceClass type)
-    : m_type(type), m_reserved(0)
+    : m_type(type), m_reserved(nullptr)
 {
 }
 

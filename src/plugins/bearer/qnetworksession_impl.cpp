@@ -56,15 +56,16 @@ QT_BEGIN_NAMESPACE
 static QBearerEngineImpl *getEngineFromId(const QString &id)
 {
     QNetworkConfigurationManagerPrivate *priv = qNetworkConfigurationManagerPrivate();
-
-    const auto engines = priv->engines();
-    for (QBearerEngine *engine : engines) {
-        QBearerEngineImpl *engineImpl = qobject_cast<QBearerEngineImpl *>(engine);
-        if (engineImpl && engineImpl->hasIdentifier(id))
-            return engineImpl;
+    if (priv) {
+        const auto engines = priv->engines();
+        for (QBearerEngine *engine : engines) {
+            QBearerEngineImpl *engineImpl = qobject_cast<QBearerEngineImpl *>(engine);
+            if (engineImpl && engineImpl->hasIdentifier(id))
+                return engineImpl;
+        }
     }
 
-    return 0;
+    return nullptr;
 }
 
 class QNetworkSessionManagerPrivate : public QObject
@@ -72,7 +73,7 @@ class QNetworkSessionManagerPrivate : public QObject
     Q_OBJECT
 
 public:
-    QNetworkSessionManagerPrivate(QObject *parent = 0) : QObject(parent) {}
+    QNetworkSessionManagerPrivate(QObject *parent = nullptr) : QObject(parent) {}
     ~QNetworkSessionManagerPrivate() {}
 
     inline void forceSessionClose(const QNetworkConfiguration &config)
@@ -81,8 +82,6 @@ public:
 Q_SIGNALS:
     void forcedSessionClose(const QNetworkConfiguration &config);
 };
-
-#include "qnetworksession_impl.moc"
 
 Q_GLOBAL_STATIC(QNetworkSessionManagerPrivate, sessionManager);
 
@@ -120,7 +119,7 @@ void QNetworkSessionPrivateImpl::syncStateWithInterface()
         // Defer setting serviceConfig and activeConfig until open().
         Q_FALLTHROUGH();
     default:
-        engine = 0;
+        engine = nullptr;
     }
 
     networkConfigurationsChanged();
@@ -432,3 +431,5 @@ void QNetworkSessionPrivateImpl::decrementTimeout()
 }
 
 QT_END_NAMESPACE
+
+#include "qnetworksession_impl.moc"

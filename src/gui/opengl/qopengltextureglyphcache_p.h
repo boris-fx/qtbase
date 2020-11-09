@@ -110,7 +110,7 @@ public:
 class Q_GUI_EXPORT QOpenGLTextureGlyphCache : public QImageTextureGlyphCache
 {
 public:
-    QOpenGLTextureGlyphCache(QFontEngine::GlyphFormat glyphFormat, const QTransform &matrix);
+    QOpenGLTextureGlyphCache(QFontEngine::GlyphFormat glyphFormat, const QTransform &matrix, const QColor &color = QColor());
     ~QOpenGLTextureGlyphCache();
 
     virtual void createTextureData(int width, int height) override;
@@ -139,7 +139,7 @@ public:
 
     inline void setPaintEnginePrivate(QOpenGL2PaintEngineExPrivate *p) { pex = p; }
 
-    inline const QOpenGLContextGroup *contextGroup() const { return m_textureResource ? m_textureResource->group() : 0; }
+    inline const QOpenGLContextGroup *contextGroup() const { return m_textureResource ? m_textureResource->group() : nullptr; }
 
     inline int serialNumber() const { return m_serialNumber; }
 

@@ -93,25 +93,26 @@ public:
         Version9_6 = 22,
         Version10 = 23,
         Version11 = 24,
+        Version12 = 25,
         UnknownLaterVersion = 100000
     };
 
-    explicit QPSQLDriver(QObject *parent=0);
-    explicit QPSQLDriver(PGconn *conn, QObject *parent=0);
+    explicit QPSQLDriver(QObject *parent = nullptr);
+    explicit QPSQLDriver(PGconn *conn, QObject *parent = nullptr);
     ~QPSQLDriver();
     bool hasFeature(DriverFeature f) const override;
-    bool open(const QString & db,
-              const QString & user,
-              const QString & password,
-              const QString & host,
+    bool open(const QString &db,
+              const QString &user,
+              const QString &password,
+              const QString &host,
               int port,
-              const QString& connOpts) override;
+              const QString &connOpts) override;
     bool isOpen() const override;
     void close() override;
     QSqlResult *createResult() const override;
     QStringList tables(QSql::TableType) const override;
-    QSqlIndex primaryIndex(const QString& tablename) const override;
-    QSqlRecord record(const QString& tablename) const override;
+    QSqlIndex primaryIndex(const QString &tablename) const override;
+    QSqlRecord record(const QString &tablename) const override;
 
     Protocol protocol() const;
     QVariant handle() const override;
@@ -129,7 +130,7 @@ protected:
     bool rollbackTransaction() override;
 
 private Q_SLOTS:
-    void _q_handleNotification(int);
+    void _q_handleNotification();
 };
 
 QT_END_NAMESPACE

@@ -65,7 +65,7 @@
 class DialogOptionsWidget : public QGroupBox
 {
 public:
-    explicit DialogOptionsWidget(QWidget *parent = 0);
+    explicit DialogOptionsWidget(QWidget *parent = nullptr);
 
     void addCheckBox(const QString &text, int value);
     void addSpacer();
@@ -99,9 +99,10 @@ void DialogOptionsWidget::addSpacer()
 int DialogOptionsWidget::value() const
 {
     int result = 0;
-    foreach (const CheckBoxEntry &checkboxEntry, checkBoxEntries)
+    for (const CheckBoxEntry &checkboxEntry : qAsConst(checkBoxEntries)) {
         if (checkboxEntry.first->isChecked())
             result |= checkboxEntry.second;
+    }
     return result;
 }
 
@@ -286,7 +287,6 @@ Dialog::Dialog(QWidget *parent)
     fileDialogOptionsWidget->addCheckBox(tr("Show directories only"), QFileDialog::ShowDirsOnly);
     fileDialogOptionsWidget->addCheckBox(tr("Do not resolve symlinks"), QFileDialog::DontResolveSymlinks);
     fileDialogOptionsWidget->addCheckBox(tr("Do not confirm overwrite"), QFileDialog::DontConfirmOverwrite);
-    fileDialogOptionsWidget->addCheckBox(tr("Do not use sheet"), QFileDialog::DontUseSheet);
     fileDialogOptionsWidget->addCheckBox(tr("Readonly"), QFileDialog::ReadOnly);
     fileDialogOptionsWidget->addCheckBox(tr("Hide name filter details"), QFileDialog::HideNameFilterDetails);
     fileDialogOptionsWidget->addCheckBox(tr("Do not use custom directory icons (Windows)"), QFileDialog::DontUseCustomDirectoryIcons);
@@ -317,7 +317,7 @@ void Dialog::setInteger()
 {
 //! [0]
     bool ok;
-    int i = QInputDialog::getInt(this, tr("QInputDialog::getInteger()"),
+    int i = QInputDialog::getInt(this, tr("QInputDialog::getInt()"),
                                  tr("Percentage:"), 25, 0, 100, 1, &ok);
     if (ok)
         integerLabel->setText(tr("%1%").arg(i));
@@ -329,7 +329,8 @@ void Dialog::setDouble()
 //! [1]
     bool ok;
     double d = QInputDialog::getDouble(this, tr("QInputDialog::getDouble()"),
-                                       tr("Amount:"), 37.56, -10000, 10000, 2, &ok);
+                                       tr("Amount:"), 37.56, -10000, 10000, 2, &ok,
+                                       Qt::WindowFlags(), 1);
     if (ok)
         doubleLabel->setText(QString("$%1").arg(d));
 //! [1]
@@ -492,7 +493,7 @@ void Dialog::questionMessage()
 void Dialog::warningMessage()
 {
     QMessageBox msgBox(QMessageBox::Warning, tr("QMessageBox::warning()"),
-                       MESSAGE, 0, this);
+                       MESSAGE, { }, this);
     msgBox.setDetailedText(MESSAGE_DETAILS);
     msgBox.addButton(tr("Save &Again"), QMessageBox::AcceptRole);
     msgBox.addButton(tr("&Continue"), QMessageBox::RejectRole);

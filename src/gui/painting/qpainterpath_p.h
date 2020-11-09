@@ -62,8 +62,11 @@
 #include <private/qvectorpath_p.h>
 #include <private/qstroker_p.h>
 
+#include <memory>
+
 QT_BEGIN_NAMESPACE
 
+// ### Qt 6: merge with QPainterPathData
 class QPainterPathPrivate
 {
 public:
@@ -80,7 +83,19 @@ public:
     friend Q_GUI_EXPORT QDataStream &operator>>(QDataStream &, QPainterPath &);
 #endif
 
-    QPainterPathPrivate() : ref(1) {}
+    QPainterPathPrivate() noexcept
+        : ref(1)
+    {
+    }
+
+    QPainterPathPrivate(const QPainterPathPrivate &other) noexcept
+        : ref(1),
+          elements(other.elements)
+    {
+    }
+
+    QPainterPathPrivate &operator=(const QPainterPathPrivate &) = delete;
+    ~QPainterPathPrivate() = default;
 
 private:
     QAtomicInt ref;
@@ -157,7 +172,7 @@ public:
     QVectorPath path;
 
 private:
-    Q_DISABLE_COPY(QVectorPathConverter)
+    Q_DISABLE_COPY_MOVE(QVectorPathConverter)
 };
 
 class QPainterPathData : public QPainterPathPrivate
@@ -166,38 +181,39 @@ public:
     QPainterPathData() :
         cStart(0),
         fillRule(Qt::OddEvenFill),
+        require_moveTo(false),
         dirtyBounds(false),
         dirtyControlBounds(false),
-        pathConverter(0)
+        convex(false),
+        pathConverter(nullptr)
     {
-        require_moveTo = false;
-        convex = false;
     }
 
     QPainterPathData(const QPainterPathData &other) :
-        QPainterPathPrivate(), cStart(other.cStart), fillRule(other.fillRule),
+        QPainterPathPrivate(other),
+        cStart(other.cStart),
+        fillRule(other.fillRule),
         bounds(other.bounds),
         controlBounds(other.controlBounds),
+        require_moveTo(false),
         dirtyBounds(other.dirtyBounds),
         dirtyControlBounds(other.dirtyControlBounds),
         convex(other.convex),
-        pathConverter(0)
+        pathConverter(nullptr)
     {
-        require_moveTo = false;
-        elements = other.elements;
     }
 
-    ~QPainterPathData() {
-        delete pathConverter;
-    }
+    QPainterPathData &operator=(const QPainterPathData &) = delete;
+    ~QPainterPathData() = default;
 
     inline bool isClosed() const;
     inline void close();
     inline void maybeMoveTo();
+    inline void clear();
 
     const QVectorPath &vectorPath() {
         if (!pathConverter)
-            pathConverter = new QVectorPathConverter(elements, fillRule, convex);
+            pathConverter.reset(new QVectorPathConverter(elements, fillRule, convex));
         return pathConverter->path;
     }
 
@@ -212,7 +228,7 @@ public:
     uint dirtyControlBounds : 1;
     uint convex : 1;
 
-    QVectorPathConverter *pathConverter;
+    std::unique_ptr<QVectorPathConverter> pathConverter;
 };
 
 
@@ -265,7 +281,7 @@ inline bool QPainterPathData::isClosed() const
 
 inline void QPainterPathData::close()
 {
-    Q_ASSERT(ref.load() == 1);
+    Q_ASSERT(ref.loadRelaxed() == 1);
     require_moveTo = true;
     const QPainterPath::Element &first = elements.at(cStart);
     QPainterPath::Element &last = elements.last();
@@ -290,6 +306,24 @@ inline void QPainterPathData::maybeMoveTo()
     }
 }
 
+inline void QPainterPathData::clear()
+{
+    Q_ASSERT(ref.loadRelaxed() == 1);
+
+    elements.clear();
+
+    cStart = 0;
+    fillRule = Qt::OddEvenFill;
+    bounds = {};
+    controlBounds = {};
+
+    require_moveTo = false;
+    dirtyBounds = false;
+    dirtyControlBounds = false;
+    convex = false;
+
+    pathConverter.reset();
+}
 #define KAPPA qreal(0.5522847498)
 
 

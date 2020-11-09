@@ -50,18 +50,17 @@
 
 #include "customproxy.h"
 
-#include <QStyleOptionGraphicsItem>
-#include <QPainter>
 #include <QGraphicsScene>
+#include <QPainter>
+#include <QStyleOptionGraphicsItem>
 
 CustomProxy::CustomProxy(QGraphicsItem *parent, Qt::WindowFlags wFlags)
-    : QGraphicsProxyWidget(parent, wFlags), popupShown(false), currentPopup(0)
+    : QGraphicsProxyWidget(parent, wFlags), timeLine(new QTimeLine(250, this))
 {
-    timeLine = new QTimeLine(250, this);
-    connect(timeLine, SIGNAL(valueChanged(qreal)),
-            this, SLOT(updateStep(qreal)));
-    connect(timeLine, SIGNAL(stateChanged(QTimeLine::State)),
-            this, SLOT(stateChanged(QTimeLine::State)));
+    connect(timeLine, &QTimeLine::valueChanged,
+            this, &CustomProxy::updateStep);
+    connect(timeLine, &QTimeLine::stateChanged,
+            this, &CustomProxy::stateChanged);
 }
 
 QRectF CustomProxy::boundingRect() const
@@ -99,7 +98,7 @@ void CustomProxy::hoverEnterEvent(QGraphicsSceneHoverEvent *event)
 {
     QGraphicsProxyWidget::hoverEnterEvent(event);
     scene()->setActiveWindow(this);
-    if (timeLine->currentValue() != 1)
+    if (qFuzzyCompare(timeLine->currentValue(), 1))
         zoomIn();
 }
 
@@ -107,7 +106,7 @@ void CustomProxy::hoverLeaveEvent(QGraphicsSceneHoverEvent *event)
 {
     QGraphicsProxyWidget::hoverLeaveEvent(event);
     if (!popupShown
-            && (timeLine->direction() != QTimeLine::Backward || timeLine->currentValue() != 0)) {
+            && (timeLine->direction() != QTimeLine::Backward || qFuzzyIsNull(timeLine->currentValue()))) {
         zoomOut();
     }
 }
@@ -133,7 +132,7 @@ QVariant CustomProxy::itemChange(GraphicsItemChange change, const QVariant &valu
                 currentPopup->installSceneEventFilter(this);
         } else if (scene()) {
             currentPopup->removeSceneEventFilter(this);
-            currentPopup = 0;
+            currentPopup = nullptr;
         }
     } else if (currentPopup && change == ItemSceneHasChanged) {
         currentPopup->installSceneEventFilter(this);

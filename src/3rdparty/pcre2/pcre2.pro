@@ -14,10 +14,16 @@ load(qt_helper_lib)
 
 DEFINES += HAVE_CONFIG_H
 
+qtConfig(intelcet) {
+    QMAKE_CFLAGS += $$QMAKE_CFLAGS_SHSTK
+    QMAKE_CXXFLAGS += $$QMAKE_CXXFLAGS_SHSTK
+}
+
 # platform/compiler specific definitions
 uikit|qnx|winrt: DEFINES += PCRE2_DISABLE_JIT
 win32:contains(QT_ARCH, "arm"): DEFINES += PCRE2_DISABLE_JIT
 win32:contains(QT_ARCH, "arm64"): DEFINES += PCRE2_DISABLE_JIT
+macos:contains(QT_ARCH, "arm64"): DEFINES += PCRE2_DISABLE_JIT
 
 SOURCES += \
     $$PWD/src/pcre2_auto_possess.c \
@@ -36,6 +42,7 @@ SOURCES += \
     $$PWD/src/pcre2_newline.c \
     $$PWD/src/pcre2_ord2utf.c \
     $$PWD/src/pcre2_pattern_info.c \
+    $$PWD/src/pcre2_script_run.c \
     $$PWD/src/pcre2_serialize.c \
     $$PWD/src/pcre2_string_utils.c \
     $$PWD/src/pcre2_study.c \

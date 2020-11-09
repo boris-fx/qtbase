@@ -65,33 +65,37 @@ static inline QVariant themeableHint(QPlatformTheme::ThemeHint th,
     return QGuiApplicationPrivate::platformIntegration()->styleHint(ih);
 }
 
+static inline QVariant themeableHint(QPlatformTheme::ThemeHint th)
+{
+    if (!QCoreApplication::instance()) {
+        qWarning("Must construct a QGuiApplication before accessing a platform theme hint.");
+        return QVariant();
+    }
+    if (const QPlatformTheme *theme = QGuiApplicationPrivate::platformTheme()) {
+        const QVariant themeHint = theme->themeHint(th);
+        if (themeHint.isValid())
+            return themeHint;
+    }
+    return QPlatformTheme::defaultThemeHint(th);
+}
+
 class QStyleHintsPrivate : public QObjectPrivate
 {
     Q_DECLARE_PUBLIC(QStyleHints)
 public:
-    inline QStyleHintsPrivate()
-        : m_mouseDoubleClickInterval(-1)
-        , m_mousePressAndHoldInterval(-1)
-        , m_startDragDistance(-1)
-        , m_startDragTime(-1)
-        , m_keyboardInputInterval(-1)
-        , m_cursorFlashTime(-1)
-        , m_tabFocusBehavior(-1)
-        , m_uiEffects(-1)
-        , m_wheelScrollLines(-1)
-        , m_mouseQuickSelectionThreshold(-1)
-        {}
-
-    int m_mouseDoubleClickInterval;
-    int m_mousePressAndHoldInterval;
-    int m_startDragDistance;
-    int m_startDragTime;
-    int m_keyboardInputInterval;
-    int m_cursorFlashTime;
-    int m_tabFocusBehavior;
-    int m_uiEffects;
-    int m_wheelScrollLines;
-    int m_mouseQuickSelectionThreshold;
+    int m_mouseDoubleClickInterval = -1;
+    int m_mousePressAndHoldInterval = -1;
+    int m_startDragDistance = -1;
+    int m_startDragTime = -1;
+    int m_keyboardInputInterval = -1;
+    int m_cursorFlashTime = -1;
+    int m_tabFocusBehavior = -1;
+    int m_uiEffects = -1;
+    int m_showShortcutsInContextMenus = -1;
+    int m_wheelScrollLines = -1;
+    int m_mouseQuickSelectionThreshold = -1;
+    int m_mouseDoubleClickDistance = -1;
+    int m_touchDoubleTapDistance = -1;
 };
 
 /*!
@@ -112,7 +116,7 @@ public:
     \sa QGuiApplication::styleHints()
  */
 QStyleHints::QStyleHints()
-    : QObject(*new QStyleHintsPrivate(), 0)
+    : QObject(*new QStyleHintsPrivate(), nullptr)
 {
 }
 
@@ -142,6 +146,34 @@ int QStyleHints::mouseDoubleClickInterval() const
     return d->m_mouseDoubleClickInterval >= 0 ?
            d->m_mouseDoubleClickInterval :
            themeableHint(QPlatformTheme::MouseDoubleClickInterval, QPlatformIntegration::MouseDoubleClickInterval).toInt();
+}
+
+/*!
+    \property QStyleHints::mouseDoubleClickDistance
+    \brief the maximum distance, in pixels, that the mouse can be moved between
+    two consecutive mouse clicks and still have it detected as a double-click
+    \since 5.14
+*/
+int QStyleHints::mouseDoubleClickDistance() const
+{
+    Q_D(const QStyleHints);
+    return d->m_mouseDoubleClickDistance >= 0 ?
+                d->m_mouseDoubleClickDistance :
+                themeableHint(QPlatformTheme::MouseDoubleClickDistance).toInt();
+}
+
+/*!
+    \property QStyleHints::touchDoubleTapDistance
+    \brief the maximum distance, in pixels, that a finger can be moved between
+    two consecutive taps and still have it detected as a double-tap
+    \since 5.14
+*/
+int QStyleHints::touchDoubleTapDistance() const
+{
+    Q_D(const QStyleHints);
+    return d->m_touchDoubleTapDistance >= 0 ?
+                d->m_touchDoubleTapDistance :
+                themeableHint(QPlatformTheme::TouchDoubleTapDistance).toInt();
 }
 
 /*!
@@ -371,10 +403,25 @@ bool QStyleHints::showIsMaximized() const
     \since 5.10
     \brief \c true if the platform normally shows shortcut key sequences in
     context menus, otherwise \c false.
+
+    Since Qt 5.13, the setShowShortcutsInContextMenus() function can be used to
+    override the platform default.
 */
 bool QStyleHints::showShortcutsInContextMenus() const
 {
-    return themeableHint(QPlatformTheme::ShowShortcutsInContextMenus, QPlatformIntegration::ShowShortcutsInContextMenus).toBool();
+    Q_D(const QStyleHints);
+    return d->m_showShortcutsInContextMenus >= 0
+        ? d->m_showShortcutsInContextMenus != 0
+        : themeableHint(QPlatformTheme::ShowShortcutsInContextMenus, QPlatformIntegration::ShowShortcutsInContextMenus).toBool();
+}
+
+void QStyleHints::setShowShortcutsInContextMenus(bool s)
+{
+    Q_D(QStyleHints);
+    if (s != showShortcutsInContextMenus()) {
+        d->m_showShortcutsInContextMenus = s ? 1 : 0;
+        emit showShortcutsInContextMenusChanged(s);
+    }
 }
 
 /*!

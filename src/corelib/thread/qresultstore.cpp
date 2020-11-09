@@ -43,6 +43,21 @@ QT_BEGIN_NAMESPACE
 
 namespace QtPrivate {
 
+/*!
+  \class QtPrivate::ResultItem
+  \internal
+ */
+
+/*!
+  \class QtPrivate::ResultIteratorBase
+  \internal
+ */
+
+/*!
+  \class QtPrivate::ResultStoreBase
+  \internal
+ */
+
 ResultIteratorBase::ResultIteratorBase()
  : mapIterator(QMap<int, ResultItem>::const_iterator()), m_vectorIndex(0) { }
 ResultIteratorBase::ResultIteratorBase(QMap<int, ResultItem>::const_iterator _mapIterator, int _vectorIndex)
@@ -177,7 +192,7 @@ int ResultStoreBase::addResults(int index, const void *results, int vectorSize, 
             ResultItem filteredIn(results, vectorSize);
             insertResultItem(index, filteredIn);
         }
-        ResultItem filteredAway(0, totalCount - vectorSize);
+        ResultItem filteredAway(nullptr, totalCount - vectorSize);
         return insertResultItem(index + vectorSize, filteredAway);
     }
 }

@@ -41,6 +41,9 @@
 
 #include <QtCore/QCoreApplication>
 #include <QtCore/QVariant>
+#if QT_CONFIG(regularexpression)
+#include <QtCore/QRegularExpression>
+#endif
 #include <QtCore/QSharedData>
 #if QT_CONFIG(settings)
 #include <QtCore/QSettings>
@@ -61,6 +64,18 @@ QT_BEGIN_NAMESPACE
 
     \brief The QPlatformDialogHelper class allows for platform-specific customization of dialogs.
 
+*/
+
+/*!
+    \enum QPlatformDialogHelper::StyleHint
+
+    This enum type specifies platform-specific style hints.
+
+    \value DialogIsQtWindow Indicates that a platform-specific dialog is implemented
+                            as in-process Qt window. It allows to prevent blocking the
+                            dialog by an invisible proxy Qt dialog.
+
+    \sa styleHint()
 */
 
 static const int buttonRoleLayouts[2][6][14] =
@@ -171,7 +186,7 @@ QVariant  QPlatformDialogHelper::defaultStyleHint(QPlatformDialogHelper::StyleHi
 class QFontDialogOptionsPrivate : public QSharedData
 {
 public:
-    QFontDialogOptionsPrivate() : options(0) {}
+    QFontDialogOptionsPrivate() = default;
 
     QFontDialogOptions::FontDialogOptions options;
     QString windowTitle;
@@ -313,7 +328,7 @@ Q_GLOBAL_STATIC(QColorDialogStaticData, qColorDialogStaticData)
 class QColorDialogOptionsPrivate : public QSharedData
 {
 public:
-    QColorDialogOptionsPrivate() : options(0) {}
+    QColorDialogOptionsPrivate() = default;
     // Write out settings around destruction of dialogs
     ~QColorDialogOptionsPrivate() { qColorDialogStaticData()->writeSettings(); }
 
@@ -450,24 +465,16 @@ void QPlatformColorDialogHelper::setOptions(const QSharedPointer<QColorDialogOpt
 class QFileDialogOptionsPrivate : public QSharedData
 {
 public:
-    QFileDialogOptionsPrivate() : options(0),
-        viewMode(QFileDialogOptions::Detail),
-        fileMode(QFileDialogOptions::AnyFile),
-        acceptMode(QFileDialogOptions::AcceptOpen),
-        filters(QDir::AllEntries | QDir::NoDotAndDotDot | QDir::AllDirs),
-        useDefaultNameFilters(true)
-    {}
-
     QFileDialogOptions::FileDialogOptions options;
     QString windowTitle;
 
-    QFileDialogOptions::ViewMode viewMode;
-    QFileDialogOptions::FileMode fileMode;
-    QFileDialogOptions::AcceptMode acceptMode;
+    QFileDialogOptions::ViewMode viewMode = QFileDialogOptions::Detail;
+    QFileDialogOptions::FileMode fileMode = QFileDialogOptions::AnyFile;
+    QFileDialogOptions::AcceptMode acceptMode = QFileDialogOptions::AcceptOpen;
     QString labels[QFileDialogOptions::DialogLabelCount];
-    QDir::Filters filters;
+    QDir::Filters filters = QDir::AllEntries | QDir::NoDotAndDotDot | QDir::AllDirs;
     QList<QUrl> sidebarUrls;
-    bool useDefaultNameFilters;
+    bool useDefaultNameFilters = true;
     QStringList nameFilters;
     QStringList mimeTypeFilters;
     QString defaultSuffix;
@@ -767,19 +774,24 @@ void QPlatformFileDialogHelper::setOptions(const QSharedPointer<QFileDialogOptio
     m_options = options;
 }
 
-const char *QPlatformFileDialogHelper::filterRegExp =
+const char QPlatformFileDialogHelper::filterRegExp[] =
 "^(.*)\\(([a-zA-Z0-9_.,*? +;#\\-\\[\\]@\\{\\}/!<>\\$%&=^~:\\|]*)\\)$";
 
 // Makes a list of filters from a normal filter string "Image Files (*.png *.jpg)"
 QStringList QPlatformFileDialogHelper::cleanFilterList(const QString &filter)
 {
-    QRegExp regexp(QString::fromLatin1(filterRegExp));
+#if QT_CONFIG(regularexpression)
+    QRegularExpression regexp(QString::fromLatin1(filterRegExp));
     Q_ASSERT(regexp.isValid());
     QString f = filter;
-    int i = regexp.indexIn(f);
-    if (i >= 0)
-        f = regexp.cap(2);
-    return f.split(QLatin1Char(' '), QString::SkipEmptyParts);
+    QRegularExpressionMatch match;
+    filter.indexOf(regexp, 0, &match);
+    if (match.hasMatch())
+        f = match.captured(2);
+    return f.split(QLatin1Char(' '), Qt::SkipEmptyParts);
+#else
+    return QStringList();
+#endif
 }
 
 // Message dialog
@@ -967,7 +979,7 @@ QPlatformDialogHelper::ButtonRole QPlatformDialogHelper::buttonRole(QPlatformDia
 const int *QPlatformDialogHelper::buttonLayout(Qt::Orientation orientation, ButtonLayout policy)
 {
     if (policy == UnknownLayout) {
-#if defined (Q_OS_OSX)
+#if defined (Q_OS_MACOS)
         policy = MacLayout;
 #elif defined (Q_OS_LINUX) || defined (Q_OS_UNIX)
         policy = KdeLayout;

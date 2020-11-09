@@ -291,14 +291,12 @@ void QSpacerItem::changeSize(int w, int h, QSizePolicy::Policy hPolicy,
 /*!
     Destructor.
 */
-QWidgetItem::~QWidgetItem() {}
+QWidgetItem::~QWidgetItem() = default;
 
 /*!
     Destroys the QLayoutItem.
 */
-QLayoutItem::~QLayoutItem()
-{
-}
+QLayoutItem::~QLayoutItem() = default;
 
 /*!
     Invalidates any cached information in this layout item.
@@ -309,24 +307,24 @@ void QLayoutItem::invalidate()
 
 /*!
     If this item is a QLayout, it is returned as a QLayout; otherwise
-    0 is returned. This function provides type-safe casting.
+    \nullptr is returned. This function provides type-safe casting.
 
     \sa spacerItem(), widget()
 */
-QLayout * QLayoutItem::layout()
+QLayout *QLayoutItem::layout()
 {
-    return 0;
+    return nullptr;
 }
 
 /*!
     If this item is a QSpacerItem, it is returned as a QSpacerItem;
-    otherwise 0 is returned. This function provides type-safe casting.
+    otherwise \nullptr is returned. This function provides type-safe casting.
 
     \sa layout(), widget()
 */
-QSpacerItem * QLayoutItem::spacerItem()
+QSpacerItem *QLayoutItem::spacerItem()
 {
-    return 0;
+    return nullptr;
 }
 
 /*!
@@ -354,7 +352,7 @@ QSpacerItem * QSpacerItem::spacerItem()
 
 /*!
     If this item manages a QWidget, returns that widget. Otherwise,
-    \c nullptr is returned.
+    \nullptr is returned.
 
     \note While the functions layout() and spacerItem() perform casts, this
     function returns another object: QLayout and QSpacerItem inherit QLayoutItem,
@@ -362,15 +360,23 @@ QSpacerItem * QSpacerItem::spacerItem()
 
     \sa layout(), spacerItem()
 */
-QWidget * QLayoutItem::widget()
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+QWidget *QLayoutItem::widget()
+#else
+QWidget *QLayoutItem::widget() const
+#endif
 {
-    return 0;
+    return nullptr;
 }
 
 /*!
     Returns the widget managed by this item.
 */
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
 QWidget *QWidgetItem::widget()
+#else
+QWidget *QWidgetItem::widget() const
+#endif
 {
     return wid;
 }
@@ -502,6 +508,17 @@ void QWidgetItem::setGeometry(const QRect &rect)
     else if (!(align & Qt::AlignTop))
         y = y + (r.height() - s.height()) / 2;
 
+    // Make sure we don't move outside of the parent, e.g when styles demand
+    // surplus space that exceeds the available margins (f.ex macOS with QGroupBox)
+    if (x < 0) {
+        s.rwidth() += x;
+        x = 0;
+    }
+    if (y < 0) {
+        s.rheight() += y;
+        y = 0;
+    }
+
     wid->setGeometry(x, y, s.width(), s.height());
 }
 
@@ -580,7 +597,7 @@ Qt::Orientations QSpacerItem::expandingDirections() const
 Qt::Orientations QWidgetItem::expandingDirections() const
 {
     if (isEmpty())
-        return Qt::Orientations(0);
+        return {};
 
     Qt::Orientations e = wid->sizePolicy().expandingDirections();
     /*
@@ -761,7 +778,7 @@ QWidgetItemV2::QWidgetItemV2(QWidget *widget)
       q_cachedMaximumSize(Dirty, Dirty),
       q_firstCachedHfw(0),
       q_hfwCacheSize(0),
-      d(0)
+      d(nullptr)
 {
     QWidgetPrivate *wd = wid->d_func();
     if (!wd->widgetItem)
@@ -773,7 +790,7 @@ QWidgetItemV2::~QWidgetItemV2()
     if (wid) {
         auto *wd = static_cast<QWidgetPrivate *>(QObjectPrivate::get(wid));
         if (wd->widgetItem == this)
-            wd->widgetItem = 0;
+            wd->widgetItem = nullptr;
     }
 }
 

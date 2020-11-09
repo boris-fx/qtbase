@@ -112,6 +112,20 @@ QXcbVirtualDesktop::QXcbVirtualDesktop(QXcbConnection *connection, xcb_screen_t 
 
         xcb_depth_next(&depth_iterator);
     }
+
+    auto dpiChangedCallback = [](QXcbVirtualDesktop *desktop, const QByteArray &, const QVariant &property, void *) {
+        bool ok;
+        int dpiTimes1k = property.toInt(&ok);
+        if (!ok)
+            return;
+        int dpi = dpiTimes1k / 1024;
+        if (desktop->m_forcedDpi == dpi)
+            return;
+        desktop->m_forcedDpi = dpi;
+        for (QXcbScreen *screen : desktop->connection()->screens())
+            QWindowSystemInterface::handleScreenLogicalDotsPerInchChange(screen->QPlatformScreen::screen(), dpi, dpi);
+    };
+    xSettings()->registerCallbackForProperty("Xft/DPI", dpiChangedCallback, nullptr);
 }
 
 QXcbVirtualDesktop::~QXcbVirtualDesktop()
@@ -147,7 +161,7 @@ void QXcbVirtualDesktop::setPrimaryScreen(QPlatformScreen *s)
 {
     const int idx = m_screens.indexOf(s);
     Q_ASSERT(idx > -1);
-    m_screens.swap(0, idx);
+    m_screens.swapItemsAt(0, idx);
 }
 
 QXcbXSettings *QXcbVirtualDesktop::xSettings() const
@@ -318,9 +332,19 @@ bool QXcbVirtualDesktop::xResource(const QByteArray &identifier,
 
 static bool parseXftInt(const QByteArray& stringValue, int *value)
 {
-    Q_ASSERT(value != 0);
+    Q_ASSERT(value);
     bool ok;
     *value = stringValue.toInt(&ok);
+    return ok;
+}
+
+static bool parseXftDpi(const QByteArray& stringValue, int *value)
+{
+    Q_ASSERT(value);
+    bool ok = parseXftInt(stringValue, value);
+    // Support GNOME 3 bug that wrote DPI with fraction:
+    if (!ok)
+        *value = qRound(stringValue.toDouble(&ok));
     return ok;
 }
 
@@ -380,7 +404,7 @@ void QXcbVirtualDesktop::readXResources()
         int value;
         QByteArray stringValue;
         if (xResource(r, "Xft.dpi:\t", stringValue)) {
-            if (parseXftInt(stringValue, &value))
+            if (parseXftDpi(stringValue, &value))
                 m_forcedDpi = value;
         } else if (xResource(r, "Xft.hintstyle:\t", stringValue)) {
             m_hintStyle = parseXftHintStyle(stringValue);
@@ -457,7 +481,7 @@ const xcb_visualtype_t *QXcbVirtualDesktop::visualForId(xcb_visualid_t visualid)
 {
     QMap<xcb_visualid_t, xcb_visualtype_t>::const_iterator it = m_visuals.find(visualid);
     if (it == m_visuals.constEnd())
-        return 0;
+        return nullptr;
     return &*it;
 }
 
@@ -577,7 +601,7 @@ QWindow *QXcbScreen::topLevelAt(const QPoint &p) const
     do {
         auto translate_reply = Q_XCB_REPLY_UNCHECKED(xcb_translate_coordinates, xcb_connection(), parent, child, x, y);
         if (!translate_reply) {
-            return 0;
+            return nullptr;
         }
 
         parent = child;
@@ -586,14 +610,14 @@ QWindow *QXcbScreen::topLevelAt(const QPoint &p) const
         y = translate_reply->dst_y;
 
         if (!child || child == root)
-            return 0;
+            return nullptr;
 
         QPlatformWindow *platformWindow = connection()->platformWindowFromId(child);
         if (platformWindow)
             return platformWindow->window();
     } while (parent != child);
 
-    return 0;
+    return nullptr;
 }
 
 void QXcbScreen::windowShown(QXcbWindow *window)
@@ -655,25 +679,26 @@ QImage::Format QXcbScreen::format() const
     bool needsRgbSwap;
     qt_xcb_imageFormatForVisual(connection(), screen()->root_depth, visualForId(screen()->root_visual), &format, &needsRgbSwap);
     // We are ignoring needsRgbSwap here and just assumes the backing-store will handle it.
-    return format;
+    if (format != QImage::Format_Invalid)
+        return format;
+    return QImage::Format_RGB32;
+}
+
+int QXcbScreen::forcedDpi() const
+{
+    const int forcedDpi = m_virtualDesktop->forcedDpi();
+    if (forcedDpi > 0)
+        return forcedDpi;
+    return 0;
 }
 
 QDpi QXcbScreen::logicalDpi() const
 {
-    static const int overrideDpi = qEnvironmentVariableIntValue("QT_FONT_DPI");
-    if (overrideDpi)
-        return QDpi(overrideDpi, overrideDpi);
-
-    const int forcedDpi = m_virtualDesktop->forcedDpi();
-    if (forcedDpi > 0) {
+    const int forcedDpi = this->forcedDpi();
+    if (forcedDpi > 0)
         return QDpi(forcedDpi, forcedDpi);
-    }
-    return m_virtualDesktop->dpi();
-}
 
-qreal QXcbScreen::pixelDensity() const
-{
-    return m_pixelDensity;
+    return m_virtualDesktop->dpi();
 }
 
 QPlatformCursor *QXcbScreen::cursor() const
@@ -739,12 +764,6 @@ void QXcbScreen::updateGeometry(const QRect &geometry, uint8_t rotation)
     if (m_sizeMillimeters.isEmpty())
         m_sizeMillimeters = sizeInMillimeters(geometry.size(), m_virtualDesktop->dpi());
 
-    qreal dpi = geometry.width() / physicalSize().width() * qreal(25.4);
-
-    // Use 128 as a reference DPI on small screens. This favors "small UI" over "large UI".
-    qreal referenceDpi = physicalSize().width() <= 320 ? 128 : 96;
-
-    m_pixelDensity = qMax(1, qRound(dpi/referenceDpi));
     m_geometry = geometry;
     m_availableGeometry = geometry & m_virtualDesktop->workArea();
     QWindowSystemInterface::handleScreenGeometryChange(QPlatformScreen::screen(), m_geometry, m_availableGeometry);
@@ -780,7 +799,7 @@ void QXcbScreen::updateRefreshRate(xcb_randr_mode_t mode)
             xcb_randr_mode_info_t *modeInfo = modesIter.data;
             if (modeInfo->id == mode) {
                 const uint32_t dotCount = modeInfo->htotal * modeInfo->vtotal;
-                m_refreshRate = (dotCount != 0) ? modeInfo->dot_clock / dotCount : 0;
+                m_refreshRate = (dotCount != 0) ? modeInfo->dot_clock / qreal(dotCount) : 0;
                 m_mode = mode;
                 break;
             }
@@ -915,7 +934,7 @@ QByteArray QXcbScreen::getEdid() const
 static inline void formatRect(QDebug &debug, const QRect r)
 {
     debug << r.width() << 'x' << r.height()
-        << forcesign << r.x() << r.y() << noforcesign;
+        << Qt::forcesign << r.x() << r.y() << Qt::noforcesign;
 }
 
 static inline void formatSizeF(QDebug &debug, const QSizeF s)
@@ -929,7 +948,7 @@ QDebug operator<<(QDebug debug, const QXcbScreen *screen)
     debug.nospace();
     debug << "QXcbScreen(" << (const void *)screen;
     if (screen) {
-        debug << fixed << qSetRealNumberPrecision(1);
+        debug << Qt::fixed << qSetRealNumberPrecision(1);
         debug << ", name=" << screen->name();
         debug << ", geometry=";
         formatRect(debug, screen->geometry());
@@ -947,7 +966,7 @@ QDebug operator<<(QDebug debug, const QXcbScreen *screen)
         debug << "), orientation=" << screen->orientation();
         debug << ", depth=" << screen->depth();
         debug << ", refreshRate=" << screen->refreshRate();
-        debug << ", root=" << hex << screen->root();
+        debug << ", root=" << Qt::hex << screen->root();
         debug << ", windowManagerName=" << screen->windowManagerName();
     }
     debug << ')';

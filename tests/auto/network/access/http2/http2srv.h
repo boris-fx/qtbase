@@ -42,6 +42,7 @@
 #include <QtCore/qbytearray.h>
 #include <QtCore/qatomic.h>
 #include <QtCore/qglobal.h>
+#include <QtCore/qmap.h>
 
 #include <vector>
 #include <map>
@@ -62,20 +63,33 @@ public:
     Q_DECLARE_PRIVATE(Http11Reply)
 };
 
+enum class H2Type {
+    h2Alpn, // Secure connection, ALPN to negotiate h2.
+    h2c, // Clear text with protocol upgrade.
+    h2Direct, // Secure connection, ALPN not supported.
+    h2cDirect, // Clear text direct
+};
+
+using RawSettings = QMap<Http2::Settings, quint32>;
+
 class Http2Server : public QTcpServer
 {
     Q_OBJECT
 public:
-    Http2Server(bool clearText, const Http2::RawSettings &serverSettings,
-                const Http2::RawSettings &clientSettings);
+
+    Http2Server(H2Type type, const RawSettings &serverSettings,
+                const RawSettings &clientSettings);
 
     ~Http2Server();
+
 
     // To be called before server started:
     void enablePushPromise(bool enabled, const QByteArray &path = QByteArray());
     void setResponseBody(const QByteArray &body);
     void emulateGOAWAY(int timeout);
     void redirectOpenStream(quint16 targetPort);
+
+    bool isClearText() const;
 
     // Invokables, since we can call them from the main thread,
     // but server (can) work on its own thread.
@@ -114,6 +128,7 @@ Q_SIGNALS:
     void receivedRequest(quint32 streamID);
     void receivedData(quint32 streamID);
     void windowUpdate(quint32 streamID);
+    void sendingData();
 
 private slots:
     void connectionEstablished();
@@ -129,14 +144,15 @@ private:
 
     QScopedPointer<QAbstractSocket> socket;
 
+    H2Type connectionType = H2Type::h2Alpn;
     // Connection preface:
     bool waitingClientPreface = false;
     bool waitingClientSettings = false;
     bool settingsSent = false;
     bool waitingClientAck = false;
 
-    Http2::RawSettings serverSettings;
-    Http2::RawSettings expectedClientSettings;
+    RawSettings serverSettings;
+    RawSettings expectedClientSettings;
 
     bool connectionError = false;
 
@@ -170,7 +186,6 @@ private:
     quint32 streamRecvWindowSize = Http2::defaultSessionWindowSize;
 
     QByteArray responseBody;
-    bool clearTextHTTP2 = false;
     bool pushPromiseEnabled = false;
     quint32 lastPromisedStream = 0;
     QByteArray pushPath;

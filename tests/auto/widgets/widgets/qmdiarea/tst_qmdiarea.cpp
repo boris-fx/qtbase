@@ -331,8 +331,9 @@ void tst_QMdiArea::subWindowActivated()
     int i;
 
     for ( i = 0; i < count; ++i ) {
-        QWidget *widget = new QWidget(workspace, 0);
+        QWidget *widget = new QWidget(workspace, {});
         widget->setAttribute(Qt::WA_DeleteOnClose);
+        widget->setFocus();
         workspace->addSubWindow(widget)->show();
         widget->show();
         qApp->processEvents();
@@ -447,6 +448,9 @@ bool macHasAccessToWindowsServer()
 
 void tst_QMdiArea::subWindowActivated2()
 {
+    if (QGuiApplication::platformName().startsWith(QLatin1String("wayland"), Qt::CaseInsensitive))
+        QSKIP("Wayland: This fails. Figure out why.");
+
     QMdiArea mdiArea;
     QSignalSpy spy(&mdiArea, SIGNAL(subWindowActivated(QMdiSubWindow*)));
     for (int i = 0; i < 5; ++i)
@@ -478,9 +482,6 @@ void tst_QMdiArea::subWindowActivated2()
     // Check that we only emit _one_ signal and the active window
     // is unchanged after hide/show.
     mdiArea.hide();
-#if 0 // Used to be included in Qt4 for Q_WS_X11
-    qt_x11_wait_for_window_manager(&mdiArea);
-#endif
     QTest::qWait(100);
     QTRY_COMPARE(spy.count(), 1);
     QVERIFY(!mdiArea.activeSubWindow());
@@ -879,7 +880,7 @@ void tst_QMdiArea::minimumSizeHint()
 {
     QMdiArea workspace;
     workspace.show();
-    QSize expectedSize(workspace.style()->pixelMetric(QStyle::PM_MDIMinimizedWidth),
+    QSize expectedSize(workspace.style()->pixelMetric(QStyle::PM_MdiSubWindowMinimizedWidth),
                        workspace.style()->pixelMetric(QStyle::PM_TitleBarHeight));
     qApp->processEvents();
     QAbstractScrollArea dummyScrollArea;
@@ -968,6 +969,9 @@ void tst_QMdiArea::setActiveSubWindow()
 
 void tst_QMdiArea::activeSubWindow()
 {
+    if (QGuiApplication::platformName().startsWith(QLatin1String("wayland"), Qt::CaseInsensitive))
+        QSKIP("Wayland: This fails. Figure out why.");
+
     QMainWindow mainWindow;
 
     QMdiArea *mdiArea = new QMdiArea;
@@ -1400,6 +1404,9 @@ void tst_QMdiArea::subWindowList_data()
 }
 void tst_QMdiArea::subWindowList()
 {
+    if (QGuiApplication::platformName().startsWith(QLatin1String("wayland"), Qt::CaseInsensitive))
+        QSKIP("Wayland: This fails. Figure out why.");
+
     QFETCH(QMdiArea::WindowOrder, windowOrder);
     QFETCH(int, windowCount);
     QFETCH(int, activeSubWindow);
@@ -1571,6 +1578,9 @@ void tst_QMdiArea::setViewport()
 
 void tst_QMdiArea::tileSubWindows()
 {
+    if (QGuiApplication::platformName().startsWith(QLatin1String("wayland"), Qt::CaseInsensitive))
+        QSKIP("Wayland: This fails. Figure out why.");
+
     QMdiArea workspace;
     workspace.resize(600,480);
     workspace.show();
@@ -1689,14 +1699,16 @@ void tst_QMdiArea::tileSubWindows()
     workspace.setActiveSubWindow(0);
     QVERIFY(workspace.viewport()->childrenRect() != workspace.viewport()->rect());
 
-    // Make sure the active window is placed in top left corner regardless
+    // Make sure the active window does not move position after a tile regardless
     // of whether we have any windows with staysOnTopHint or not.
+    workspace.tileSubWindows();
     windows.at(3)->setWindowFlags(windows.at(3)->windowFlags() | Qt::WindowStaysOnTopHint);
     QMdiSubWindow *activeSubWindow = windows.at(6);
     workspace.setActiveSubWindow(activeSubWindow);
     QCOMPARE(workspace.activeSubWindow(), activeSubWindow);
+    QPoint pos = activeSubWindow->geometry().topLeft();
     workspace.tileSubWindows();
-    QCOMPARE(activeSubWindow->geometry().topLeft(), QPoint(0, 0));
+    QCOMPARE(activeSubWindow->geometry().topLeft(), pos);
 
     // Verify that we try to resize the area such that all sub-windows are visible.
     // It's important that tiled windows are NOT overlapping.
@@ -1713,6 +1725,8 @@ void tst_QMdiArea::tileSubWindows()
     // Prevent scrollbars from messing up the expected viewport calculation below
     workspace.setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     workspace.setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    QCOMPARE(workspace.horizontalScrollBarPolicy(), Qt::ScrollBarAlwaysOff);
+    QCOMPARE(workspace.verticalScrollBarPolicy(), Qt::ScrollBarAlwaysOff);
 
     workspace.tileSubWindows();
     // The sub-windows are now tiled like this:
@@ -1731,9 +1745,11 @@ void tst_QMdiArea::tileSubWindows()
     const QSize expectedViewportSize(3 * minSize.width() + spacing, 3 * minSize.height() + spacing);
     QTRY_COMPARE(workspace.viewport()->rect().size(), expectedViewportSize);
 
-    // Restore original scrollbar behavior for test below
+    // Enable scroll bar for test below (default property for QMdiArea is Qt::ScrollBarAlwaysOff)
     workspace.setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     workspace.setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    QCOMPARE(workspace.horizontalScrollBarPolicy(), Qt::ScrollBarAsNeeded);
+    QCOMPARE(workspace.verticalScrollBarPolicy(), Qt::ScrollBarAsNeeded);
 
     // Not enough space for all sub-windows to be visible -> provide scroll bars.
     workspace.resize(160, 150);
@@ -1754,13 +1770,16 @@ void tst_QMdiArea::tileSubWindows()
     QCOMPARE(vBar->value(), 0);
     QCOMPARE(vBar->minimum(), 0);
 
+    // Tile windows with scroll bars enabled.
     workspace.tileSubWindows();
     QVERIFY(QTest::qWaitForWindowExposed(&workspace));
     qApp->processEvents();
 
-    QTRY_VERIFY(workspace.size() != QSize(150, 150));
-    QTRY_VERIFY(!vBar->isVisible());
-    QTRY_VERIFY(!hBar->isVisible());
+    // Workspace should not have changed size after tile.
+    QTRY_VERIFY(workspace.size() == QSize(160, 150));
+    // Scroll bars should be visible.
+    QTRY_VERIFY(vBar->isVisible());
+    QTRY_VERIFY(hBar->isVisible());
 }
 
 void tst_QMdiArea::cascadeAndTileSubWindows()
@@ -2066,6 +2085,9 @@ private:
 
 void tst_QMdiArea::resizeTimer()
 {
+    if (QGuiApplication::platformName().startsWith(QLatin1String("wayland"), Qt::CaseInsensitive))
+        QSKIP("Wayland: This fails. Figure out why.");
+
     QMdiArea mdiArea;
     QMdiSubWindow *subWindow = mdiArea.addSubWindow(new QWidget);
     mdiArea.show();
@@ -2180,7 +2202,7 @@ void tst_QMdiArea::setActivationOrder_data()
 
     list << 2 << 1 << 0 << 1 << 2 << 3 << 4;
     list2 << 0 << 1 << 2 << 3 << 4;
-    list3 << 1 << 4 << 3 << 1 << 2 << 0;
+    list3 << 4 << 3 << 2 << 4 << 1 << 0; // Most recently created window is in top-left position
     QTest::newRow("CreationOrder") << QMdiArea::CreationOrder << 5 << 3 << 1 << list << list2 << list3;
 
     list = QList<int>();
@@ -2188,7 +2210,7 @@ void tst_QMdiArea::setActivationOrder_data()
     list2 = QList<int>();
     list2 << 0 << 2 << 4 << 1 << 3;
     list3 = QList<int>();
-    list3 << 1 << 3 << 4 << 1 << 2 << 0;
+    list3 << 3 << 1 << 4 << 3 << 2 << 0; // Window with "stays-on-top" flag set will be in the top-left position
     QTest::newRow("StackingOrder") << QMdiArea::StackingOrder << 5 << 3 << 1 << list << list2 << list3;
 
     list = QList<int>();

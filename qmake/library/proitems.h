@@ -31,6 +31,7 @@
 
 #include "qmake_global.h"
 
+#include <qdebug.h>
 #include <qstring.h>
 #include <qvector.h>
 #include <qhash.h>
@@ -67,6 +68,7 @@ class ProString {
 public:
     ProString();
     ProString(const ProString &other);
+    ProString &operator=(const ProString &) = default;
     PROITEM_EXPLICIT ProString(const QString &str);
     PROITEM_EXPLICIT ProString(const QStringRef &str);
     PROITEM_EXPLICIT ProString(const char *str);
@@ -429,26 +431,27 @@ class ProFunctionDef {
 public:
     ProFunctionDef(ProFile *pro, int offset) : m_pro(pro), m_offset(offset) { m_pro->ref(); }
     ProFunctionDef(const ProFunctionDef &o) : m_pro(o.m_pro), m_offset(o.m_offset) { m_pro->ref(); }
-    ProFunctionDef(ProFunctionDef &&other) Q_DECL_NOTHROW
+    ProFunctionDef(ProFunctionDef &&other) noexcept
         : m_pro(other.m_pro), m_offset(other.m_offset) { other.m_pro = nullptr; }
-    ~ProFunctionDef() { m_pro->deref(); }
+    ~ProFunctionDef() { if (m_pro) m_pro->deref(); }
     ProFunctionDef &operator=(const ProFunctionDef &o)
     {
         if (this != &o) {
-            m_pro->deref();
+            if (m_pro)
+                m_pro->deref();
             m_pro = o.m_pro;
             m_pro->ref();
             m_offset = o.m_offset;
         }
         return *this;
     }
-    ProFunctionDef &operator=(ProFunctionDef &&other) Q_DECL_NOTHROW
+    ProFunctionDef &operator=(ProFunctionDef &&other) noexcept
     {
         ProFunctionDef moved(std::move(other));
         swap(moved);
         return *this;
     }
-    void swap(ProFunctionDef &other) Q_DECL_NOTHROW
+    void swap(ProFunctionDef &other) noexcept
     {
         qSwap(m_pro, other.m_pro);
         qSwap(m_offset, other.m_offset);
@@ -467,6 +470,8 @@ struct ProFunctionDefs {
     QHash<ProKey, ProFunctionDef> testFunctions;
     QHash<ProKey, ProFunctionDef> replaceFunctions;
 };
+
+QDebug operator<<(QDebug debug, const ProString &str);
 
 QT_END_NAMESPACE
 

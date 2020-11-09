@@ -67,9 +67,7 @@ public:
     bool read(QImage *image) override;
     bool write(const QImage &image) override;
 
-    QByteArray name() const override;
-
-    static bool canRead(QIODevice *device, QByteArray *subType = 0);
+    static bool canRead(QIODevice *device, QByteArray *subType = nullptr);
 
     QVariant option(ImageOption option) const override;
     void setOption(ImageOption option, const QVariant &value) override;

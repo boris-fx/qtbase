@@ -50,9 +50,8 @@
 
 #include "mimetypemodel.h"
 
-#include <QIcon>
-
 #include <QDebug>
+#include <QIcon>
 #include <QMimeDatabase>
 #include <QTextStream>
 #include <QVariant>
@@ -96,7 +95,7 @@ QVariant MimetypeModel::data(const QModelIndex &index, int role) const
     if (role != Qt::DecorationRole || !index.isValid() || index.data(iconQueriedRole).toBool())
         return QStandardItemModel::data(index, role);
     QStandardItem *item = itemFromIndex(index);
-    const QString iconName = item->data(mimeTypeRole).value<QMimeType>().iconName();
+    const QString iconName = qvariant_cast<QMimeType>(item->data(mimeTypeRole)).iconName();
     if (!iconName.isEmpty())
         item->setIcon(QIcon::fromTheme(iconName));
     item->setData(QVariant(true), iconQueriedRole);
@@ -105,7 +104,7 @@ QVariant MimetypeModel::data(const QModelIndex &index, int role) const
 
 QMimeType MimetypeModel::mimeType(const QModelIndex &index) const
 {
-    return index.data(mimeTypeRole).value<QMimeType>();
+    return qvariant_cast<QMimeType>(index.data(mimeTypeRole));
 }
 
 void MimetypeModel::populate()

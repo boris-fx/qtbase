@@ -48,25 +48,21 @@ public:
     void acceptCustomWidgets(DomCustomWidgets *node) override;
     void acceptCustomWidget(DomCustomWidget *node) override;
 
-    inline QStringList customWidgets() const
-    { return m_customWidgets.keys(); }
-
-    inline bool hasCustomWidget(const QString &name) const
-    { return m_customWidgets.contains(name); }
-
     inline DomCustomWidget *customWidget(const QString &name) const
     { return m_customWidgets.value(name); }
 
     QString customWidgetAddPageMethod(const QString &name) const;
+    QString simpleContainerAddPageMethod(const QString &name) const;
 
     QString realClassName(const QString &className) const;
 
     bool extends(const QString &className, QLatin1String baseClassName) const;
+    bool extendsOneOf(const QString &className, const QStringList &baseClassNames) const;
 
     bool isCustomWidgetContainer(const QString &className) const;
 
 private:
-    typedef QMap<QString, DomCustomWidget*> NameCustomWidgetMap;
+    using NameCustomWidgetMap = QMap<QString, DomCustomWidget*>;
     NameCustomWidgetMap m_customWidgets;
 };
 

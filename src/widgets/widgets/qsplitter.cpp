@@ -119,7 +119,7 @@ QSplitterPrivate::~QSplitterPrivate()
     \a parent.
 */
 QSplitterHandle::QSplitterHandle(Qt::Orientation orientation, QSplitter *parent)
-    : QWidget(*new QSplitterHandlePrivate, parent, 0)
+    : QWidget(*new QSplitterHandlePrivate, parent, { })
 {
     Q_D(QSplitterHandle);
     d->s = parent;
@@ -771,14 +771,13 @@ void QSplitterPrivate::setGeo(QSplitterLayoutStruct *sls, int p, int s, bool all
     if (!sls->handle->isHidden()) {
         QSplitterHandle *h = sls->handle;
         QSize hs = h->sizeHint();
-        int left, top, right, bottom;
-        h->getContentsMargins(&left, &top, &right, &bottom);
+        const QMargins m = h->contentsMargins();
         if (orient==Qt::Horizontal) {
             if (q->isRightToLeft())
                 p = contents.width() - p + hs.width();
-            h->setGeometry(p-hs.width() - left, contents.y(), hs.width() + left + right, contents.height());
+            h->setGeometry(p-hs.width() - m.left(), contents.y(), hs.width() + m.left() + m.right(), contents.height());
         } else {
-            h->setGeometry(contents.x(), p-hs.height() - top, contents.width(), hs.height() + top + bottom);
+            h->setGeometry(contents.x(), p-hs.height() - m.top(), contents.width(), hs.height() + m.top() + m.bottom());
         }
     }
 }
@@ -1231,7 +1230,7 @@ QSplitterHandle *QSplitter::createHandle()
 
 /*!
     Returns the handle to the left of (or above) the item in the
-    splitter's layout at the given \a index, or \c nullptr if there is no such item.
+    splitter's layout at the given \a index, or \nullptr if there is no such item.
     The handle at index 0 is always hidden.
 
     For right-to-left languages such as Arabic and Hebrew, the layout
@@ -1250,7 +1249,7 @@ QSplitterHandle *QSplitter::handle(int index) const
 
 /*!
     Returns the widget at the given \a index in the splitter's layout,
-    or \c nullptr if there is no such widget.
+    or \nullptr if there is no such widget.
 
     \sa count(), handle(), indexOf(), insertWidget()
 */
@@ -1378,7 +1377,7 @@ bool QSplitter::event(QEvent *e)
     default:
         ;
     }
-    return QWidget::event(e);
+    return QFrame::event(e);
 }
 
 /*!
@@ -1495,7 +1494,7 @@ int QSplitter::closestLegalPosition(int pos, int index)
 bool QSplitter::opaqueResize() const
 {
     Q_D(const QSplitter);
-    return d->opaqueResizeSet ? d->opaque : style()->styleHint(QStyle::SH_Splitter_OpaqueResize, 0, this);
+    return d->opaqueResizeSet ? d->opaque : style()->styleHint(QStyle::SH_Splitter_OpaqueResize, nullptr, this);
 }
 
 
@@ -1640,7 +1639,7 @@ int QSplitter::handleWidth() const
     if (d->handleWidth >= 0) {
         return d->handleWidth;
     } else {
-        return style()->pixelMetric(QStyle::PM_SplitterWidth, 0, this);
+        return style()->pixelMetric(QStyle::PM_SplitterWidth, nullptr, this);
     }
 }
 
@@ -1783,6 +1782,7 @@ void QSplitter::setStretchFactor(int index, int stretch)
 }
 
 
+#if QT_DEPRECATED_SINCE(5, 13)
 /*!
     \relates QSplitter
     \obsolete
@@ -1792,7 +1792,7 @@ void QSplitter::setStretchFactor(int index, int stretch)
 
 QTextStream& operator<<(QTextStream& ts, const QSplitter& splitter)
 {
-    ts << splitter.saveState() << endl;
+    ts << splitter.saveState() << Qt::endl;
     return ts;
 }
 
@@ -1813,6 +1813,7 @@ QTextStream& operator>>(QTextStream& ts, QSplitter& splitter)
     splitter.restoreState(std::move(line).toLatin1());
     return ts;
 }
+#endif
 
 QT_END_NAMESPACE
 

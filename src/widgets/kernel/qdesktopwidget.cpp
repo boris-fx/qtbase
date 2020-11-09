@@ -111,7 +111,7 @@ const QRect QDesktopWidgetPrivate::availableGeometry(const QWidget *widget)
 QDesktopScreenWidget *QDesktopWidgetPrivate::widgetForScreen(QScreen *qScreen) const
 {
     foreach (QDesktopScreenWidget *widget, screens) {
-        if (widget->screen() == qScreen)
+        if (widget->assignedScreen() == qScreen)
             return widget;
     }
     return nullptr;
@@ -176,46 +176,56 @@ void QDesktopWidgetPrivate::_q_updateScreens()
         // Notice that we trigger screenCountChanged even if a screen was removed and another one added,
         // in which case the total number of screens did not change. This is the only way for applications
         // to notice that a screen was swapped out against another one.
+#if QT_DEPRECATED_SINCE(5, 11)
 QT_WARNING_PUSH
 QT_WARNING_DISABLE_DEPRECATED
         emit q->screenCountChanged(targetLength);
 QT_WARNING_POP
+#endif
     }
+#if QT_DEPRECATED_SINCE(5, 11)
     foreach (int changedScreen, changedScreens)
 QT_WARNING_PUSH
 QT_WARNING_DISABLE_DEPRECATED
         emit q->resized(changedScreen);
 QT_WARNING_POP
+#endif
 }
 
 void QDesktopWidgetPrivate::_q_availableGeometryChanged()
 {
+#if QT_DEPRECATED_SINCE(5, 11)
     Q_Q(QDesktopWidget);
     if (QScreen *screen = qobject_cast<QScreen *>(q->sender()))
 QT_WARNING_PUSH
 QT_WARNING_DISABLE_DEPRECATED
         emit q->workAreaResized(QGuiApplication::screens().indexOf(screen));
 QT_WARNING_POP
+#endif
 }
 
 QDesktopWidget::QDesktopWidget()
-    : QWidget(*new QDesktopWidgetPrivate, 0, Qt::Desktop)
+    : QWidget(*new QDesktopWidgetPrivate, nullptr, Qt::Desktop)
 {
     Q_D(QDesktopWidget);
     setObjectName(QLatin1String("desktop"));
     d->_q_updateScreens();
     connect(qApp, SIGNAL(screenAdded(QScreen*)), this, SLOT(_q_updateScreens()));
+#if QT_DEPRECATED_SINCE(5, 11)
     connect(qApp, SIGNAL(primaryScreenChanged(QScreen*)), this, SIGNAL(primaryScreenChanged()));
+#endif
 }
 
 QDesktopWidget::~QDesktopWidget()
 {
 }
 
+#if QT_DEPRECATED_SINCE(5, 11)
 bool QDesktopWidget::isVirtualDesktop() const
 {
     return QDesktopWidgetPrivate::isVirtualDesktop();
 }
+#endif
 
 bool QDesktopWidgetPrivate::isVirtualDesktop()
 {
@@ -242,24 +252,27 @@ int QDesktopWidgetPrivate::height()
     return geometry().height();
 }
 
+#if QT_DEPRECATED_SINCE(5, 11)
 int QDesktopWidget::primaryScreen() const
 {
     return QDesktopWidgetPrivate::primaryScreen();
 }
+#endif
 
 int QDesktopWidgetPrivate::primaryScreen()
 {
     return 0;
 }
 
-int QDesktopWidget::numScreens() const
-{
-    return QDesktopWidgetPrivate::numScreens();
-}
-
 int QDesktopWidgetPrivate::numScreens()
 {
     return qMax(QGuiApplication::screens().size(), 1);
+}
+
+#if QT_DEPRECATED_SINCE(5, 11)
+int QDesktopWidget::numScreens() const
+{
+    return QDesktopWidgetPrivate::numScreens();
 }
 
 QWidget *QDesktopWidget::screen(int screen)
@@ -274,6 +287,7 @@ const QRect QDesktopWidget::availableGeometry(int screenNo) const
 {
     return QDesktopWidgetPrivate::availableGeometry(screenNo);
 }
+#endif
 
 const QRect QDesktopWidgetPrivate::availableGeometry(int screenNo)
 {
@@ -281,10 +295,12 @@ const QRect QDesktopWidgetPrivate::availableGeometry(int screenNo)
     return screen ? screen->availableGeometry() : QRect();
 }
 
+#if QT_DEPRECATED_SINCE(5, 11)
 const QRect QDesktopWidget::screenGeometry(int screenNo) const
 {
     return QDesktopWidgetPrivate::screenGeometry(screenNo);
 }
+#endif
 
 const QRect QDesktopWidgetPrivate::screenGeometry(int screenNo)
 {
@@ -307,20 +323,12 @@ int QDesktopWidgetPrivate::screenNumber(const QWidget *w)
     if (screens.isEmpty()) // This should never happen
         return primaryScreen();
 
-    const QWindow *winHandle = w->windowHandle();
-    if (!winHandle) {
-        if (const QWidget *nativeParent = w->nativeParentWidget())
-            winHandle = nativeParent->windowHandle();
-    }
-
     // If there is more than one virtual desktop
     if (screens.count() != screens.constFirst()->virtualSiblings().count()) {
         // Find the root widget, get a QScreen from it and use the
         // virtual siblings for checking the window position.
-        if (winHandle) {
-            if (const QScreen *winScreen = winHandle->screen())
-                screens = winScreen->virtualSiblings();
-        }
+        if (const QScreen *winScreen = qt_widget_private(const_cast<QWidget *>(w))->associatedScreen())
+            screens = winScreen->virtualSiblings();
     }
 
     // Get the screen number from window position using screen geometry
@@ -344,10 +352,12 @@ int QDesktopWidgetPrivate::screenNumber(const QWidget *w)
     return allScreens.indexOf(widgetScreen);
 }
 
+#if QT_DEPRECATED_SINCE(5, 11)
 int QDesktopWidget::screenNumber(const QPoint &p) const
 {
     return QDesktopWidgetPrivate::screenNumber(p);
 }
+#endif
 
 int QDesktopWidgetPrivate::screenNumber(const QPoint &p)
 {

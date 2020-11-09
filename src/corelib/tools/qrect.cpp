@@ -81,7 +81,7 @@ QT_BEGIN_NAMESPACE
     position, and the translated() function returns a translated copy
     of this rectangle.
 
-    The size() function returns the rectange's dimensions as a
+    The size() function returns the rectangle's dimensions as a
     QSize. The dimensions can also be retrieved separately using the
     width() and height() functions. To manipulate the dimensions use
     the setSize(), setWidth() or setHeight() functions. Alternatively,
@@ -300,7 +300,7 @@ QT_BEGIN_NAMESPACE
     \sa isValid(), isEmpty()
 */
 
-QRect QRect::normalized() const Q_DECL_NOTHROW
+QRect QRect::normalized() const noexcept
 {
     QRect r;
     if (x2 < x1 - 1) {                                // swap bad x values
@@ -820,7 +820,7 @@ QRect QRect::normalized() const Q_DECL_NOTHROW
     \sa intersects()
 */
 
-bool QRect::contains(const QPoint &p, bool proper) const Q_DECL_NOTHROW
+bool QRect::contains(const QPoint &p, bool proper) const noexcept
 {
     int l, r;
     if (x2 < x1 - 1) {
@@ -884,7 +884,7 @@ bool QRect::contains(const QPoint &p, bool proper) const Q_DECL_NOTHROW
     rectangle (not on the edge).
 */
 
-bool QRect::contains(const QRect &r, bool proper) const Q_DECL_NOTHROW
+bool QRect::contains(const QRect &r, bool proper) const noexcept
 {
     if (isNull() || r.isNull())
         return false;
@@ -962,7 +962,7 @@ bool QRect::contains(const QRect &r, bool proper) const Q_DECL_NOTHROW
     \sa operator|=(), united()
 */
 
-QRect QRect::operator|(const QRect &r) const Q_DECL_NOTHROW
+QRect QRect::operator|(const QRect &r) const noexcept
 {
     if (isNull())
         return r;
@@ -1033,7 +1033,7 @@ QRect QRect::operator|(const QRect &r) const Q_DECL_NOTHROW
     \sa operator&=(), intersected()
 */
 
-QRect QRect::operator&(const QRect &r) const Q_DECL_NOTHROW
+QRect QRect::operator&(const QRect &r) const noexcept
 {
     if (isNull() || r.isNull())
         return QRect();
@@ -1112,7 +1112,7 @@ QRect QRect::operator&(const QRect &r) const Q_DECL_NOTHROW
     \sa contains()
 */
 
-bool QRect::intersects(const QRect &r) const Q_DECL_NOTHROW
+bool QRect::intersects(const QRect &r) const noexcept
 {
     if (isNull() || r.isNull())
         return false;
@@ -1194,7 +1194,7 @@ bool QRect::intersects(const QRect &r) const Q_DECL_NOTHROW
     \fn QRect operator-(const QRect &lhs, const QMargins &rhs)
     \relates QRect
 
-    Returns the \a lhs rectangle shrunken by the \a rhs margins.
+    Returns the \a lhs rectangle shrunk by the \a rhs margins.
 
     \since 5.3
 */
@@ -1340,7 +1340,7 @@ QDebug operator<<(QDebug dbg, const QRect &r)
     current position, and the translated() function returns a
     translated copy of this rectangle.
 
-    The size() function returns the rectange's dimensions as a
+    The size() function returns the rectangle's dimensions as a
     QSizeF. The dimensions can also be retrieved separately using the
     width() and height() functions. To manipulate the dimensions use
     the setSize(), setWidth() or setHeight() functions. Alternatively,
@@ -1540,7 +1540,7 @@ QDebug operator<<(QDebug dbg, const QRect &r)
     \sa isValid(), isEmpty()
 */
 
-QRectF QRectF::normalized() const Q_DECL_NOTHROW
+QRectF QRectF::normalized() const noexcept
 {
     QRectF r = *this;
     if (r.w < 0) {
@@ -1964,7 +1964,7 @@ QRectF QRectF::normalized() const Q_DECL_NOTHROW
     \sa intersects()
 */
 
-bool QRectF::contains(const QPointF &p) const Q_DECL_NOTHROW
+bool QRectF::contains(const QPointF &p) const noexcept
 {
     qreal l = xp;
     qreal r = xp;
@@ -2010,7 +2010,7 @@ bool QRectF::contains(const QPointF &p) const Q_DECL_NOTHROW
     otherwise returns \c false.
 */
 
-bool QRectF::contains(const QRectF &r) const Q_DECL_NOTHROW
+bool QRectF::contains(const QRectF &r) const noexcept
 {
     qreal l1 = xp;
     qreal r1 = xp;
@@ -2148,7 +2148,7 @@ bool QRectF::contains(const QRectF &r) const Q_DECL_NOTHROW
     \sa united(), operator|=()
 */
 
-QRectF QRectF::operator|(const QRectF &r) const Q_DECL_NOTHROW
+QRectF QRectF::operator|(const QRectF &r) const noexcept
 {
     if (isNull())
         return r;
@@ -2217,7 +2217,7 @@ QRectF QRectF::operator|(const QRectF &r) const Q_DECL_NOTHROW
     \sa operator&=(), intersected()
 */
 
-QRectF QRectF::operator&(const QRectF &r) const Q_DECL_NOTHROW
+QRectF QRectF::operator&(const QRectF &r) const noexcept
 {
     qreal l1 = xp;
     qreal r1 = xp;
@@ -2302,7 +2302,7 @@ QRectF QRectF::operator&(const QRectF &r) const Q_DECL_NOTHROW
     \sa contains()
 */
 
-bool QRectF::intersects(const QRectF &r) const Q_DECL_NOTHROW
+bool QRectF::intersects(const QRectF &r) const noexcept
 {
     qreal l1 = xp;
     qreal r1 = xp;
@@ -2369,7 +2369,7 @@ bool QRectF::intersects(const QRectF &r) const Q_DECL_NOTHROW
     \sa toRect()
 */
 
-QRect QRectF::toAlignedRect() const Q_DECL_NOTHROW
+QRect QRectF::toAlignedRect() const noexcept
 {
     int xmin = int(qFloor(xp));
     int xmax = int(qCeil(xp + w));
@@ -2417,7 +2417,7 @@ QRect QRectF::toAlignedRect() const Q_DECL_NOTHROW
     \relates QRectF
     \since 5.3
 
-    Returns the \a lhs rectangle grown by the \a rhs margins.
+    Returns the \a lhs rectangle shrunk by the \a rhs margins.
 */
 
 /*!

@@ -76,6 +76,7 @@
 QT_BEGIN_NAMESPACE
 
 Q_DECLARE_LOGGING_CATEGORY(qLcTray)
+Q_LOGGING_CATEGORY(lcQpaFonts, "qt.qpa.fonts")
 
 ResourceHelper::ResourceHelper()
 {
@@ -96,6 +97,7 @@ const char *QGenericUnixTheme::name = "generic";
 // Default system font, corresponding to the value returned by 4.8 for
 // XRender/FontConfig which we can now assume as default.
 static const char defaultSystemFontNameC[] = "Sans Serif";
+static const char defaultFixedFontNameC[] = "monospace";
 enum { defaultSystemFontSize = 9 };
 
 #if !defined(QT_NO_DBUS) && !defined(QT_NO_SYSTEMTRAYICON)
@@ -136,9 +138,10 @@ public:
     QGenericUnixThemePrivate()
         : QPlatformThemePrivate()
         , systemFont(QLatin1String(defaultSystemFontNameC), defaultSystemFontSize)
-        , fixedFont(QStringLiteral("monospace"), systemFont.pointSize())
+        , fixedFont(QLatin1String(defaultFixedFontNameC), systemFont.pointSize())
     {
         fixedFont.setStyleHint(QFont::TypeWriter);
+        qCDebug(lcQpaFonts) << "default fonts: system" << systemFont << "fixed" << fixedFont;
     }
 
     const QFont systemFont;
@@ -172,15 +175,9 @@ QStringList QGenericUnixTheme::xdgIconThemePaths()
     if (homeIconDir.isDir())
         paths.prepend(homeIconDir.absoluteFilePath());
 
-    QString xdgDirString = QFile::decodeName(qgetenv("XDG_DATA_DIRS"));
-    if (xdgDirString.isEmpty())
-        xdgDirString = QLatin1String("/usr/local/share/:/usr/share/");
-    const auto xdgDirs = xdgDirString.splitRef(QLatin1Char(':'));
-    for (const QStringRef &xdgDir : xdgDirs) {
-        const QFileInfo xdgIconsDir(xdgDir + QLatin1String("/icons"));
-        if (xdgIconsDir.isDir())
-            paths.append(xdgIconsDir.absoluteFilePath());
-    }
+    paths.append(QStandardPaths::locateAll(QStandardPaths::GenericDataLocation,
+                                           QStringLiteral("icons"),
+                                           QStandardPaths::LocateDirectory));
 
     return paths;
 }
@@ -390,7 +387,7 @@ void QKdeThemePrivate::refresh()
     if (QFont *fixedFont = kdeFont(readKdeSetting(QStringLiteral("fixed"), kdeDirs, kdeVersion, kdeSettings))) {
         resources.fonts[QPlatformTheme::FixedFont] = fixedFont;
     } else {
-        fixedFont = new QFont(QLatin1String(defaultSystemFontNameC), defaultSystemFontSize);
+        fixedFont = new QFont(QLatin1String(defaultFixedFontNameC), defaultSystemFontSize);
         fixedFont->setStyleHint(QFont::TypeWriter);
         resources.fonts[QPlatformTheme::FixedFont] = fixedFont;
     }
@@ -403,6 +400,8 @@ void QKdeThemePrivate::refresh()
     if (QFont *toolBarFont = kdeFont(readKdeSetting(QStringLiteral("toolBarFont"), kdeDirs, kdeVersion, kdeSettings)))
         resources.fonts[QPlatformTheme::ToolButtonFont] = toolBarFont;
 
+    qCDebug(lcQpaFonts) << "default fonts: system" << resources.fonts[QPlatformTheme::SystemFont]
+                        << "fixed" << resources.fonts[QPlatformTheme::FixedFont];
     qDeleteAll(kdeSettings);
 }
 
@@ -518,7 +517,7 @@ QFont *QKdeThemePrivate::kdeFont(const QVariant &fontValue)
         // causing recursion.
         QString fontDescription;
         QString fontFamily;
-        if (fontValue.type() == QVariant::StringList) {
+        if (fontValue.userType() == QMetaType::QStringList) {
             const QStringList list = fontValue.toStringList();
             if (!list.isEmpty()) {
                 fontFamily = list.first();
@@ -642,7 +641,7 @@ QPlatformTheme *QKdeTheme::createKdeTheme()
 
     const QString kdeDirsVar = QFile::decodeName(qgetenv("KDEDIRS"));
     if (!kdeDirsVar.isEmpty())
-        kdeDirs += kdeDirsVar.split(QLatin1Char(':'), QString::SkipEmptyParts);
+        kdeDirs += kdeDirsVar.split(QLatin1Char(':'), Qt::SkipEmptyParts);
 
     const QString kdeVersionHomePath = QDir::homePath() + QLatin1String("/.kde") + QLatin1String(kdeVersionBA);
     if (QFileInfo(kdeVersionHomePath).isDir())
@@ -716,8 +715,9 @@ public:
         QString fontName = gtkFontName.left(split);
 
         systemFont = new QFont(fontName, size);
-        fixedFont = new QFont(QLatin1String("monospace"), systemFont->pointSize());
+        fixedFont = new QFont(QLatin1String(defaultFixedFontNameC), systemFont->pointSize());
         fixedFont->setStyleHint(QFont::TypeWriter);
+        qCDebug(lcQpaFonts) << "default fonts: system" << systemFont << "fixed" << fixedFont;
     }
 
     mutable QFont *systemFont;

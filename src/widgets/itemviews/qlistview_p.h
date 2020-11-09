@@ -248,7 +248,7 @@ private:
 class QIconModeViewBase : public QCommonListViewBase
 {
 public:
-    QIconModeViewBase(QListView *q, QListViewPrivate *d) : QCommonListViewBase(q, d), interSectingVector(0) {}
+    QIconModeViewBase(QListView *q, QListViewPrivate *d) : QCommonListViewBase(q, d), interSectingVector(nullptr) {}
 
     QBspTree tree;
     QVector<QListViewItem> items;
@@ -393,6 +393,14 @@ public:
     inline bool isHidden(int row) const {
         QModelIndex idx = model->index(row, 0, root);
         return isPersistent(idx) && hiddenRows.contains(idx);
+    }
+    // helper to avoid checking for isPersistent and creating persistent indexes as above in isHidden
+    QVector<int> hiddenRowIds() const {
+        QVector<int> rowIds;
+        rowIds.reserve(hiddenRows.size());
+        for (const auto &idx : hiddenRows)
+            rowIds += idx.row();
+        return rowIds;
     }
     inline bool isHiddenOrDisabled(int row) const { return isHidden(row) || !isIndexEnabled(modelIndex(row)); }
 

@@ -150,7 +150,7 @@ public:
         Q_UNUSED(option);
         Q_UNUSED(widget);
         painter->setBrush(m_brush);
-        painter->drawRoundRect(rect());
+        painter->drawRoundedRect(rect(), 25, 25, Qt::RelativeSize);
     }
 
     void setSizeHint(Qt::SizeHint which, const QSizeF &size) {
@@ -245,7 +245,7 @@ void tst_QGraphicsLinearLayout::alignment()
     widget->setLayout(&layout);
 
     static const Qt::Alignment alignmentsToTest[] = {
-        (Qt::Alignment)0,
+        Qt::Alignment{},
         Qt::AlignLeft,
         Qt::AlignRight,
         Qt::AlignHCenter,
@@ -253,7 +253,7 @@ void tst_QGraphicsLinearLayout::alignment()
         Qt::AlignBottom,
         Qt::AlignVCenter,
         Qt::AlignCenter,
-        (Qt::Alignment)0,
+        Qt::Alignment{},
         Qt::AlignLeft,
         Qt::AlignRight,
         Qt::AlignHCenter,
@@ -1518,7 +1518,7 @@ void tst_QGraphicsLinearLayout::removeLayout()
 
     QGraphicsView view(&scene);
     view.show();
-    QVERIFY(QTest::qWaitForWindowActive(&view));
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
 
     QRectF r1 = textEdit->geometry();
     QRectF r2 = pushButton->geometry();

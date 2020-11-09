@@ -71,6 +71,10 @@ DBusConnection::DBusConnection(QObject *parent)
 {
     // Start monitoring if "org.a11y.Bus" is registered as DBus service.
     QDBusConnection c = QDBusConnection::sessionBus();
+    if (!c.isConnected()) {
+        return;
+    }
+
     dbusWatcher = new QDBusServiceWatcher(A11Y_SERVICE, c, QDBusServiceWatcher::WatchForRegistration, this);
     connect(dbusWatcher, SIGNAL(serviceRegistered(QString)), this, SLOT(serviceRegistered()));
 
@@ -116,8 +120,7 @@ void DBusConnection::serviceRegistered()
     //debugging.
     static const bool a11yAlwaysOn = qEnvironmentVariableIsSet("QT_LINUX_ACCESSIBILITY_ALWAYS_ON");
 
-    // a11yStatus->isEnabled() returns always true (since Gnome 3.6)
-    bool enabled = a11yAlwaysOn || a11yStatus->screenReaderEnabled();
+    bool enabled = a11yAlwaysOn || a11yStatus->screenReaderEnabled() || a11yStatus->isEnabled();
 
     if (enabled != m_enabled) {
         m_enabled = enabled;

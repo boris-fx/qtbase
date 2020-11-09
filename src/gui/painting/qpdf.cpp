@@ -439,8 +439,8 @@ QByteArray QPdf::generateDashes(const QPen &pen)
 
 
 static const char* const pattern_for_brush[] = {
-    0, // NoBrush
-    0, // SolidPattern
+    nullptr, // NoBrush
+    nullptr, // SolidPattern
     "0 J\n"
     "6 w\n"
     "[] 0 d\n"
@@ -637,7 +637,7 @@ static void cubicToHook(qfixed c1x, qfixed c1y,
 }
 
 QPdf::Stroker::Stroker()
-    : stream(0),
+    : stream(nullptr),
     first(true),
     dashStroker(&basicStroker)
 {
@@ -652,7 +652,7 @@ QPdf::Stroker::Stroker()
 void QPdf::Stroker::setPen(const QPen &pen, QPainter::RenderHints hints)
 {
     if (pen.style() == Qt::NoPen) {
-        stroker = 0;
+        stroker = nullptr;
         return;
     }
     qreal w = pen.widthF();
@@ -856,7 +856,6 @@ void QPdfEngine::drawRects (const QRectF *rects, int rectCount)
     if (!d->hasPen && !d->hasBrush)
         return;
 
-    QBrush penBrush = d->pen.brush();
     if (d->simplePen || !d->hasPen) {
         // draw strokes natively in this case for better output
         if(!d->simplePen && !d->stroker.matrix.isIdentity())
@@ -949,7 +948,8 @@ void QPdfEngine::drawPixmap (const QRectF &rectangle, const QPixmap &pixmap, con
     QPixmap pm = sourceRect != pixmap.rect() ? pixmap.copy(sourceRect) : pixmap;
     QImage image = pm.toImage();
     bool bitmap = true;
-    const int object = d->addImage(image, &bitmap, pm.cacheKey());
+    const bool lossless = painter()->testRenderHint(QPainter::LosslessImageRendering);
+    const int object = d->addImage(image, &bitmap, lossless, pm.cacheKey());
     if (object < 0)
         return;
 
@@ -988,7 +988,8 @@ void QPdfEngine::drawImage(const QRectF &rectangle, const QImage &image, const Q
     QRect sourceRect = sr.toRect();
     QImage im = sourceRect != image.rect() ? image.copy(sourceRect) : image;
     bool bitmap = true;
-    const int object = d->addImage(im, &bitmap, im.cacheKey());
+    const bool lossless = painter()->testRenderHint(QPainter::LosslessImageRendering);
+    const int object = d->addImage(im, &bitmap, lossless, im.cacheKey());
     if (object < 0)
         return;
 
@@ -1389,6 +1390,18 @@ void QPdfEngine::setPdfVersion(PdfVersion version)
     d->pdfVersion = version;
 }
 
+void QPdfEngine::setDocumentXmpMetadata(const QByteArray &xmpMetadata)
+{
+    Q_D(QPdfEngine);
+    d->xmpDocumentMetadata = xmpMetadata;
+}
+
+QByteArray QPdfEngine::documentXmpMetadata() const
+{
+    Q_D(const QPdfEngine);
+    return d->xmpDocumentMetadata;
+}
+
 void QPdfEngine::setPageLayout(const QPageLayout &pageLayout)
 {
     Q_D(QPdfEngine);
@@ -1468,7 +1481,7 @@ int QPdfEngine::metric(QPaintDevice::PaintDeviceMetric metricType) const
 QPdfEnginePrivate::QPdfEnginePrivate()
     : clipEnabled(false), allClipped(false), hasPen(true), hasBrush(false), simplePen(false),
       pdfVersion(QPdfEngine::Version_1_4),
-      outDevice(0), ownsDevice(false),
+      outDevice(nullptr), ownsDevice(false),
       embedFonts(true),
       grayscale(false),
       m_pageLayout(QPageSize(QPageSize::A4), QPageLayout::Portrait, QMarginsF(10, 10, 10, 10))
@@ -1476,8 +1489,8 @@ QPdfEnginePrivate::QPdfEnginePrivate()
     initResources();
     resolution = 1200;
     currentObject = 1;
-    currentPage = 0;
-    stroker.stream = 0;
+    currentPage = nullptr;
+    stroker.stream = nullptr;
 
     streampos = 0;
 
@@ -1519,6 +1532,8 @@ bool QPdfEngine::begin(QPaintDevice *pdev)
 
     d->xrefPositions.clear();
     d->pageRoot = 0;
+    d->embeddedfilesRoot = 0;
+    d->namesRoot = 0;
     d->catalog = 0;
     d->info = 0;
     d->graphicsState = 0;
@@ -1541,21 +1556,29 @@ bool QPdfEngine::end()
     Q_D(QPdfEngine);
     d->writeTail();
 
-    d->stream->unsetDevice();
+    d->stream->setDevice(nullptr);
 
     qDeleteAll(d->fonts);
     d->fonts.clear();
     delete d->currentPage;
-    d->currentPage = 0;
+    d->currentPage = nullptr;
 
     if (d->outDevice && d->ownsDevice) {
         d->outDevice->close();
         delete d->outDevice;
-        d->outDevice = 0;
+        d->outDevice = nullptr;
     }
+
+    d->fileCache.clear();
 
     setActive(false);
     return true;
+}
+
+void QPdfEngine::addFileAttachment(const QString &fileName, const QByteArray &data, const QString &mimeType)
+{
+    Q_D(QPdfEngine);
+    d->fileCache.push_back({fileName, data, mimeType});
 }
 
 QPdfEnginePrivate::~QPdfEnginePrivate()
@@ -1569,12 +1592,14 @@ void QPdfEnginePrivate::writeHeader()
 {
     addXrefEntry(0,false);
 
-    static const QHash<QPdfEngine::PdfVersion, const char *> mapping {
-        {QPdfEngine::Version_1_4, "1.4"},
-        {QPdfEngine::Version_A1b, "1.4"},
-        {QPdfEngine::Version_1_6, "1.6"}
+    // Keep in sync with QPdfEngine::PdfVersion!
+    static const char mapping[][4] = {
+        "1.4", // Version_1_4
+        "1.4", // Version_A1b
+        "1.6", // Version_1_6
     };
-    const char *verStr = mapping.value(pdfVersion, "1.4");
+    static const size_t numMappings = sizeof mapping / sizeof *mapping;
+    const char *verStr = mapping[size_t(pdfVersion) < numMappings ? pdfVersion : 0];
 
     xprintf("%%PDF-%s\n", verStr);
     xprintf("%%\303\242\303\243\n");
@@ -1583,13 +1608,19 @@ void QPdfEnginePrivate::writeHeader()
 
     int metaDataObj = -1;
     int outputIntentObj = -1;
+    if (pdfVersion == QPdfEngine::Version_A1b || !xmpDocumentMetadata.isEmpty()) {
+        metaDataObj = writeXmpDcumentMetaData();
+    }
     if (pdfVersion == QPdfEngine::Version_A1b) {
-        metaDataObj = writeXmpMetaData();
         outputIntentObj = writeOutputIntent();
     }
 
     catalog = addXrefEntry(-1);
     pageRoot = requestObject();
+    if (!fileCache.isEmpty()) {
+        namesRoot = requestObject();
+        embeddedfilesRoot = requestObject();
+    }
 
     // catalog
     {
@@ -1599,15 +1630,26 @@ void QPdfEnginePrivate::writeHeader()
           << "/Type /Catalog\n"
           << "/Pages " << pageRoot << "0 R\n";
 
-        if (pdfVersion == QPdfEngine::Version_A1b) {
-            s << "/OutputIntents [" << outputIntentObj << "0 R]\n";
+        // Embedded files, if any
+        if (!fileCache.isEmpty())
+            s << "/Names " << embeddedfilesRoot << "0 R\n";
+
+        if (pdfVersion == QPdfEngine::Version_A1b || !xmpDocumentMetadata.isEmpty())
             s << "/Metadata " << metaDataObj << "0 R\n";
-        }
+
+        if (pdfVersion == QPdfEngine::Version_A1b)
+            s << "/OutputIntents [" << outputIntentObj << "0 R]\n";
 
         s << ">>\n"
           << "endobj\n";
 
         write(catalog);
+    }
+
+    if (!fileCache.isEmpty()) {
+        addXrefEntry(embeddedfilesRoot);
+        xprintf("<</EmbeddedFiles %d 0 R>>\n"
+                "endobj\n", namesRoot);
     }
 
     // graphics state
@@ -1661,39 +1703,45 @@ void QPdfEnginePrivate::writeInfo()
             "endobj\n");
 }
 
-int QPdfEnginePrivate::writeXmpMetaData()
+int QPdfEnginePrivate::writeXmpDcumentMetaData()
 {
     const int metaDataObj = addXrefEntry(-1);
+    QByteArray metaDataContent;
 
-    const QString producer(QString::fromLatin1("Qt " QT_VERSION_STR));
+    if (xmpDocumentMetadata.isEmpty()) {
+        const QString producer(QString::fromLatin1("Qt " QT_VERSION_STR));
 
-    const QDateTime now = QDateTime::currentDateTime();
-    const QDate date = now.date();
-    const QTime time = now.time();
+        const QDateTime now = QDateTime::currentDateTime();
+        const QDate date = now.date();
+        const QTime time = now.time();
+        const QString timeStr =
+                QString::asprintf("%d-%02d-%02dT%02d:%02d:%02d",
+                                  date.year(), date.month(), date.day(),
+                                  time.hour(), time.minute(), time.second());
 
-    QString timeStr;
-    timeStr.sprintf("%d-%02d-%02dT%02d:%02d:%02d", date.year(), date.month(), date.day(),
-                                                   time.hour(), time.minute(), time.second());
+        const int offset = now.offsetFromUtc();
+        const int hours  = (offset / 60) / 60;
+        const int mins   = (offset / 60) % 60;
+        QString tzStr;
+        if (offset < 0)
+            tzStr = QString::asprintf("-%02d:%02d", -hours, -mins);
+        else if (offset > 0)
+            tzStr = QString::asprintf("+%02d:%02d", hours , mins);
+        else
+            tzStr = QLatin1String("Z");
 
-    const int offset = now.offsetFromUtc();
-    const int hours  = (offset / 60) / 60;
-    const int mins   = (offset / 60) % 60;
-    QString tzStr;
-    if (offset < 0)
-        tzStr.sprintf("-%02d:%02d", -hours, -mins);
-    else if (offset > 0)
-        tzStr.sprintf("+%02d:%02d", hours , mins);
+        const QString metaDataDate = timeStr + tzStr;
+
+        QFile metaDataFile(QLatin1String(":/qpdf/qpdfa_metadata.xml"));
+        metaDataFile.open(QIODevice::ReadOnly);
+        metaDataContent = QString::fromUtf8(metaDataFile.readAll()).arg(producer.toHtmlEscaped(),
+                                                                        title.toHtmlEscaped(),
+                                                                        creator.toHtmlEscaped(),
+                                                                        metaDataDate).toUtf8();
+    }
     else
-        tzStr = QLatin1String("Z");
+        metaDataContent = xmpDocumentMetadata;
 
-    const QString metaDataDate = timeStr + tzStr;
-
-    QFile metaDataFile(QLatin1String(":/qpdf/qpdfa_metadata.xml"));
-    metaDataFile.open(QIODevice::ReadOnly);
-    const QByteArray metaDataContent = QString::fromUtf8(metaDataFile.readAll()).arg(producer.toHtmlEscaped(),
-                                                                                     title.toHtmlEscaped(),
-                                                                                     creator.toHtmlEscaped(),
-                                                                                     metaDataDate).toUtf8();
     xprintf("<<\n"
             "/Type /Metadata /Subtype /XML\n"
             "/Length %d\n"
@@ -1771,6 +1819,56 @@ void QPdfEnginePrivate::writePageRoot()
             "endobj\n");
 }
 
+void QPdfEnginePrivate::writeAttachmentRoot()
+{
+    if (fileCache.isEmpty())
+        return;
+
+    QVector<int> attachments;
+    const int size = fileCache.size();
+    for (int i = 0; i < size; ++i) {
+        auto attachment = fileCache.at(i);
+        const int attachmentID = addXrefEntry(-1);
+        xprintf("<<\n");
+        if (do_compress)
+            xprintf("/Filter /FlateDecode\n");
+
+        const int lenobj = requestObject();
+        xprintf("/Length %d 0 R\n", lenobj);
+        int len = 0;
+        xprintf(">>\nstream\n");
+        len = writeCompressed(attachment.data);
+        xprintf("\nendstream\n"
+                "endobj\n");
+        addXrefEntry(lenobj);
+        xprintf("%d\n"
+                "endobj\n", len);
+
+        attachments.push_back(addXrefEntry(-1));
+        xprintf("<<\n"
+                "/F (%s)", attachment.fileName.toLatin1().constData());
+
+        xprintf("\n/EF <</F %d 0 R>>\n"
+                "/Type/Filespec\n"
+                 , attachmentID);
+        if (!attachment.mimeType.isEmpty())
+            xprintf("/Subtype/%s\n",
+                    attachment.mimeType.replace(QLatin1String("/"),
+                                                QLatin1String("#2F")).toLatin1().constData());
+        xprintf(">>\nendobj\n");
+    }
+
+    // names
+    addXrefEntry(namesRoot);
+    xprintf("<</Names[");
+    for (int i = 0; i < size; ++i) {
+        auto attachment = fileCache.at(i);
+        printString(attachment.fileName);
+        xprintf("%d 0 R\n", attachments.at(i));
+    }
+    xprintf("]>>\n"
+            "endobj\n");
+}
 
 void QPdfEnginePrivate::embedFont(QFontSubset *font)
 {
@@ -2028,6 +2126,8 @@ void QPdfEnginePrivate::writeTail()
     writePage();
     writeFonts();
     writePageRoot();
+    writeAttachmentRoot();
+
     addXrefEntry(xrefPositions.size(),false);
     xprintf("xref\n"
             "0 %d\n"
@@ -2633,6 +2733,8 @@ int QPdfEnginePrivate::addConstantAlphaObject(int brushAlpha, int penAlpha)
 
 int QPdfEnginePrivate::addBrushPattern(const QTransform &m, bool *specifyColor, int *gStateObject)
 {
+    Q_Q(QPdfEngine);
+
     int paintType = 2; // Uncolored tiling
     int w = 8;
     int h = 8;
@@ -2662,7 +2764,8 @@ int QPdfEnginePrivate::addBrushPattern(const QTransform &m, bool *specifyColor, 
             return 0;
         QImage image = brush.textureImage();
         bool bitmap = true;
-        imageObject = addImage(image, &bitmap, image.cacheKey());
+        const bool lossless = q->painter()->testRenderHint(QPainter::LosslessImageRendering);
+        imageObject = addImage(image, &bitmap, lossless, image.cacheKey());
         if (imageObject != -1) {
             QImage::Format f = image.format();
             if (f != QImage::Format_MonoLSB && f != QImage::Format_Mono) {
@@ -2724,7 +2827,7 @@ static inline bool is_monochrome(const QVector<QRgb> &colorTable)
 /*!
  * Adds an image to the pdf and return the pdf-object id. Returns -1 if adding the image failed.
  */
-int QPdfEnginePrivate::addImage(const QImage &img, bool *bitmap, qint64 serial_no)
+int QPdfEnginePrivate::addImage(const QImage &img, bool *bitmap, bool lossless, qint64 serial_no)
 {
     if (img.isNull())
         return -1;
@@ -2785,7 +2888,7 @@ int QPdfEnginePrivate::addImage(const QImage &img, bool *bitmap, qint64 serial_n
         bool hasAlpha = false;
         bool hasMask = false;
 
-        if (QImageWriter::supportedImageFormats().contains("jpeg") && !grayscale) {
+        if (QImageWriter::supportedImageFormats().contains("jpeg") && !grayscale && !lossless) {
             QBuffer buffer(&imageData);
             QImageWriter writer(&buffer, "jpeg");
             writer.setQuality(94);

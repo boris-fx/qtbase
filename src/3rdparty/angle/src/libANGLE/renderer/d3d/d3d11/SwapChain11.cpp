@@ -504,6 +504,10 @@ EGLint SwapChain11::resize(const gl::Context *context,
     ASSERT(SUCCEEDED(result));
     if (SUCCEEDED(result))
     {
+#ifndef ANGLE_ENABLE_WINDOWS_STORE
+        if (mNativeWindow->getNativeWindow())
+            InvalidateRect(mNativeWindow->getNativeWindow(), nullptr, FALSE);
+#endif
         const auto &format =
             d3d11::Format::Get(mOffscreenRenderTargetFormat, mRenderer->getRenderer11DeviceCaps());
         mBackBufferTexture.set(backbufferTexture, format);
@@ -841,7 +845,7 @@ EGLint SwapChain11::copyOffscreenToBackbuffer(const gl::Context *context,
     stateManager->setRenderTarget(mBackBufferRTView.get(), nullptr);
 
     // Set the viewport
-    stateManager->setSimpleViewport(mWidth, mHeight);
+    stateManager->setSimpleViewport(width, height);
 
     // Apply textures
     stateManager->setSimplePixelTextureAndSampler(mOffscreenSRView, mPassThroughSampler);

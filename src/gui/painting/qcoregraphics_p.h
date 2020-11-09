@@ -51,6 +51,8 @@
 // We mean it.
 //
 
+#include <QtCore/private/qcore_mac_p.h>
+
 #include <QtGui/private/qtguiglobal_p.h>
 #include <QtGui/qregion.h>
 #include <QtGui/qpalette.h>
@@ -67,9 +69,16 @@ QT_BEGIN_NAMESPACE
 Q_GUI_EXPORT CGBitmapInfo qt_mac_bitmapInfoForImage(const QImage &image);
 
 #ifdef HAVE_APPKIT
-Q_GUI_EXPORT NSImage *qt_mac_create_nsimage(const QPixmap &pm);
-Q_GUI_EXPORT NSImage *qt_mac_create_nsimage(const QIcon &icon, int defaultSize = 0);
 Q_GUI_EXPORT QPixmap qt_mac_toQPixmap(const NSImage *image, const QSizeF &size);
+
+QT_END_NAMESPACE
+@interface NSImage (QtExtras)
++ (instancetype)imageFromQImage:(const QT_PREPEND_NAMESPACE(QImage) &)image;
++ (instancetype)imageFromQIcon:(const QT_PREPEND_NAMESPACE(QIcon) &)icon;
++ (instancetype)imageFromQIcon:(const QT_PREPEND_NAMESPACE(QIcon) &)icon withSize:(int)size;
+@end
+QT_BEGIN_NAMESPACE
+
 #endif
 Q_GUI_EXPORT CGImageRef qt_mac_toCGImage(const QImage &qImage);
 Q_GUI_EXPORT CGImageRef qt_mac_toCGImageMask(const QImage &qImage);
@@ -89,38 +98,16 @@ Q_GUI_EXPORT QBrush qt_mac_toQBrush(CGColorRef color);
 class Q_GUI_EXPORT QMacCGContext
 {
 public:
-    inline QMacCGContext() { context = 0; }
+    QMacCGContext() = default;
     QMacCGContext(QPaintDevice *pdev);
     QMacCGContext(QPainter *p);
-    inline QMacCGContext(CGContextRef cg, bool takeOwnership = false) {
-        context = cg;
-        if (!takeOwnership)
-            CGContextRetain(context);
-    }
-    inline QMacCGContext(const QMacCGContext &copy) : context(0) { *this = copy; }
-    inline ~QMacCGContext() {
-        if (context)
-            CGContextRelease(context);
-    }
-    inline bool isNull() const { return context; }
-    inline operator CGContextRef() { return context; }
-    inline QMacCGContext &operator=(const QMacCGContext &copy) {
-        if (context)
-            CGContextRelease(context);
-        context = copy.context;
-        CGContextRetain(context);
-        return *this;
-    }
-    inline QMacCGContext &operator=(CGContextRef cg) {
-        if (context)
-            CGContextRelease(context);
-        context = cg;
-        CGContextRetain(context); //we do not take ownership
-        return *this;
-    }
+
+    operator CGContextRef() { return context; }
 
 private:
-    CGContextRef context;
+    void initialize(QPaintDevice *paintDevice);
+    void initialize(const QImage *, QPainter *painter = nullptr);
+    QCFType<CGContextRef> context;
 };
 
 QT_END_NAMESPACE

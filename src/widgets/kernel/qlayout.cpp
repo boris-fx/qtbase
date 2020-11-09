@@ -109,7 +109,7 @@ static int menuBarHeightForWidth(QWidget *menubar, int w)
 
 /*!
     Constructs a new top-level QLayout, with parent \a parent.
-    \a parent may not be a \c nullptr.
+    \a parent may not be \nullptr.
 
     The layout is set directly as the top-level layout for
     \a parent. There can be only one top-level layout for a
@@ -130,7 +130,7 @@ QLayout::QLayout(QWidget *parent)
     management will work.
 */
 QLayout::QLayout()
-    : QObject(*new QLayoutPrivate, 0)
+    : QObject(*new QLayoutPrivate, nullptr)
 {
 }
 
@@ -149,14 +149,14 @@ QLayout::QLayout(QLayoutPrivate &dd, QLayout *lay, QWidget *w)
                      " already has a layout",
                      qUtf16Printable(QObject::objectName()), w->metaObject()->className(),
                      qUtf16Printable(w->objectName()));
-            setParent(0);
+            setParent(nullptr);
         } else {
             d->topLevel = true;
             w->d_func()->layout = this;
             QT_TRY {
                 invalidate();
             } QT_CATCH(...) {
-                w->d_func()->layout = 0;
+                w->d_func()->layout = nullptr;
                 QT_RETHROW;
             }
         }
@@ -166,7 +166,7 @@ QLayout::QLayout(QLayoutPrivate &dd, QLayout *lay, QWidget *w)
 QLayoutPrivate::QLayoutPrivate()
     : QObjectPrivate(), insideSpacing(-1), userLeftMargin(-1), userTopMargin(-1), userRightMargin(-1),
       userBottomMargin(-1), topLevel(false), enabled(true), activated(true), autoNewChild(false),
-      constraint(QLayout::SetDefaultConstraint), menubar(0)
+      constraint(QLayout::SetDefaultConstraint), menubar(nullptr)
 {
 }
 
@@ -181,7 +181,7 @@ void QLayoutPrivate::getMargin(int *result, int userMargin, QStyle::PixelMetric 
     } else if (!topLevel) {
         *result = 0;
     } else if (QWidget *pw = q->parentWidget()) {
-        *result = pw->style()->pixelMetric(pm, 0, pw);
+        *result = pw->style()->pixelMetric(pm, nullptr, pw);
     } else {
         *result = 0;
     }
@@ -189,8 +189,8 @@ void QLayoutPrivate::getMargin(int *result, int userMargin, QStyle::PixelMetric 
 
 // Static item factory functions that allow for hooking things in Designer
 
-QLayoutPrivate::QWidgetItemFactoryMethod QLayoutPrivate::widgetItemFactoryMethod = 0;
-QLayoutPrivate::QSpacerItemFactoryMethod QLayoutPrivate::spacerItemFactoryMethod = 0;
+QLayoutPrivate::QWidgetItemFactoryMethod QLayoutPrivate::widgetItemFactoryMethod = nullptr;
+QLayoutPrivate::QSpacerItemFactoryMethod QLayoutPrivate::spacerItemFactoryMethod = nullptr;
 
 QWidgetItem *QLayoutPrivate::createWidgetItem(const QLayout *layout, QWidget *widget)
 {
@@ -282,6 +282,7 @@ bool QLayout::setAlignment(QLayout *l, Qt::Alignment alignment)
     return false;
 }
 
+#if QT_DEPRECATED_SINCE(5, 13)
 /*!
     \property QLayout::margin
     \brief the width of the outside border of the layout
@@ -306,6 +307,15 @@ int QLayout::margin() const
     }
 }
 
+/*!
+    \obsolete
+*/
+void QLayout::setMargin(int margin)
+{
+    setContentsMargins(margin, margin, margin, margin);
+}
+
+#endif
 /*!
     \property QLayout::spacing
     \brief the spacing between widgets inside the layout
@@ -342,14 +352,6 @@ int QLayout::spacing() const
             return qSmartSpacing(this, QStyle::PM_LayoutHorizontalSpacing);
         }
     }
-}
-
-/*!
-    \obsolete
-*/
-void QLayout::setMargin(int margin)
-{
-    setContentsMargins(margin, margin, margin, margin);
 }
 
 void QLayout::setSpacing(int spacing)
@@ -417,9 +419,9 @@ void QLayout::setContentsMargins(const QMargins &margins)
 /*!
     \since 4.3
 
-    Extracts the left, top, right, and bottom margins used around the
-    layout, and assigns them to *\a left, *\a top, *\a right, and *\a
-    bottom (unless they are null pointers).
+    For each of \a left, \a top, \a right and \a bottom that is not
+    \nullptr, stores the size of the margin named in the location the
+    pointer refers to.
 
     By default, QLayout uses the values provided by the style. On
     most platforms, the margin is 11 pixels in all directions.
@@ -474,8 +476,8 @@ QRect QLayout::contentsRect() const
 
 
 /*!
-    Returns the parent widget of this layout, or 0 if this layout is
-    not installed on any widget.
+    Returns the parent widget of this layout, or \nullptr if this
+    layout is not installed on any widget.
 
     If the layout is a sub-layout, this function returns the parent
     widget of the parent layout.
@@ -490,11 +492,11 @@ QWidget *QLayout::parentWidget() const
             QLayout *parentLayout = qobject_cast<QLayout*>(parent());
             if (Q_UNLIKELY(!parentLayout)) {
                 qWarning("QLayout::parentWidget: A layout can only have another layout as a parent.");
-                return 0;
+                return nullptr;
             }
             return parentLayout->parentWidget();
         } else {
-            return 0;
+            return nullptr;
         }
     } else {
         Q_ASSERT(parent() && parent()->isWidgetType());
@@ -581,18 +583,18 @@ static bool removeWidgetRecursively(QLayoutItem *li, QObject *w)
 }
 
 
-void QLayoutPrivate::doResize(const QSize &r)
+void QLayoutPrivate::doResize()
 {
     Q_Q(QLayout);
-    int mbh = menuBarHeightForWidth(menubar, r.width());
     QWidget *mw = q->parentWidget();
     QRect rect = mw->testAttribute(Qt::WA_LayoutOnEntireRect) ? mw->rect() : mw->contentsRect();
+    const int mbh = menuBarHeightForWidth(menubar, rect.width());
     const int mbTop = rect.top();
     rect.setTop(mbTop + mbh);
     q->setGeometry(rect);
 #if QT_CONFIG(menubar)
     if (menubar)
-        menubar->setGeometry(rect.left(), mbTop, r.width(), mbh);
+        menubar->setGeometry(rect.left(), mbTop, rect.width(), mbh);
 #endif
 }
 
@@ -611,12 +613,10 @@ void QLayout::widgetEvent(QEvent *e)
 
     switch (e->type()) {
     case QEvent::Resize:
-        if (d->activated) {
-            QResizeEvent *r = (QResizeEvent *)e;
-            d->doResize(r->size());
-        } else {
+        if (d->activated)
+            d->doResize();
+        else
             activate();
-        }
         break;
     case QEvent::ChildRemoved:
         {
@@ -624,7 +624,7 @@ void QLayout::widgetEvent(QEvent *e)
             if (c->child()->isWidgetType()) {
 #if QT_CONFIG(menubar)
                 if (c->child() == d->menubar)
-                    d->menubar = 0;
+                    d->menubar = nullptr;
 #endif
                 removeWidgetRecursively(this, c->child());
             }
@@ -764,7 +764,7 @@ QLayout::~QLayout()
 {
     Q_D(QLayout);
     if (d->topLevel && parent() && parent()->isWidgetType() && parentWidget()->layout() == this)
-        parentWidget()->d_func()->layout = 0;
+        parentWidget()->d_func()->layout = nullptr;
     else if (QLayout *parentLayout = qobject_cast<QLayout *>(parent()))
         parentLayout->removeItem(this);
 }
@@ -919,7 +919,7 @@ void QLayout::addChildWidget(QWidget *w)
                 qWarning("QLayout::addChildWidget: %s \"%ls\" in wrong parent; moved to correct parent",
                          w->metaObject()->className(), qUtf16Printable(w->objectName()));
 #endif
-        pw = 0;
+        pw = nullptr;
     }
     bool needShow = mw && mw->isVisible() && !(w->isHidden() && w->testAttribute(Qt::WA_WState_ExplicitShowHide));
     if (!pw && mw)
@@ -950,8 +950,8 @@ void QLayout::setMenuBar(QWidget *widget)
 }
 
 /*!
-    Returns the menu bar set for this layout, or 0 if no menu bar is
-    set.
+    Returns the menu bar set for this layout, or \nullptr if no
+    menu bar is set.
 */
 
 QWidget *QLayout::menuBar() const
@@ -1038,7 +1038,7 @@ void QLayout::update()
         if (layout->d_func()->topLevel) {
             Q_ASSERT(layout->parent()->isWidgetType());
             QWidget *mw = static_cast<QWidget*>(layout->parent());
-            QApplication::postEvent(mw, new QEvent(QEvent::LayoutRequest));
+            QCoreApplication::postEvent(mw, new QEvent(QEvent::LayoutRequest));
             break;
         }
         layout = static_cast<QLayout*>(layout->parent());
@@ -1114,7 +1114,7 @@ bool QLayout::activate()
         break;
     }
 
-    d->doResize(mw->size());
+    d->doResize();
 
     if (md->extra) {
         md->extra->explicitMinSize = explMin;
@@ -1130,8 +1130,9 @@ bool QLayout::activate()
 
     Searches for widget \a from and replaces it with widget \a to if found.
     Returns the layout item that contains the widget \a from on success.
-    Otherwise \c 0 is returned. If \a options contains \c Qt::FindChildrenRecursively
-    (the default), sub-layouts are searched for doing the replacement.
+    Otherwise \nullptr is returned.
+    If \a options contains \c Qt::FindChildrenRecursively  (the default),
+    sub-layouts are searched for doing the replacement.
     Any other flag in \a options is ignored.
 
     Notice that the returned item therefore might not belong to this layout,
@@ -1152,10 +1153,12 @@ QLayoutItem *QLayout::replaceWidget(QWidget *from, QWidget *to, Qt::FindChildOpt
 {
     Q_D(QLayout);
     if (!from || !to)
-        return 0;
+        return nullptr;
+    if (from == to)     // Do not return a QLayoutItem for \a from, since ownership still
+        return nullptr; // belongs to the layout (since nothing was changed)
 
     int index = -1;
-    QLayoutItem *item = 0;
+    QLayoutItem *item = nullptr;
     for (int u = 0; u < count(); ++u) {
         item = itemAt(u);
         if (!item)
@@ -1173,7 +1176,7 @@ QLayoutItem *QLayout::replaceWidget(QWidget *from, QWidget *to, Qt::FindChildOpt
         }
     }
     if (index == -1)
-        return 0;
+        return nullptr;
 
     addChildWidget(to);
     QLayoutItem *newitem = new QWidgetItem(to);
@@ -1334,7 +1337,7 @@ QRect QLayout::alignmentRect(const QRect &r) const
       returned by QLayoutItems that have an alignment.
     */
     QLayout *that = const_cast<QLayout *>(this);
-    that->setAlignment(0);
+    that->setAlignment({ });
     QSize ms = that->maximumSize();
     that->setAlignment(a);
 
@@ -1361,7 +1364,7 @@ QRect QLayout::alignmentRect(const QRect &r) const
         y += (r.height() - s.height()) / 2;
 
     QWidget *parent = parentWidget();
-    a = QStyle::visualAlignment(parent ? parent->layoutDirection() : QApplication::layoutDirection(), a);
+    a = QStyle::visualAlignment(parent ? parent->layoutDirection() : QGuiApplication::layoutDirection(), a);
     if (a & Qt::AlignRight)
         x += (r.width() - s.width());
     else if (!(a & Qt::AlignLeft))

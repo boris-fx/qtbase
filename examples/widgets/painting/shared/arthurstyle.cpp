@@ -61,10 +61,10 @@
 
 QPixmap cached(const QString &img)
 {
-    if (QPixmap *p = QPixmapCache::find(img))
-        return *p;
-
     QPixmap pm;
+    if (QPixmapCache::find(img, &pm))
+        return pm;
+
     pm = QPixmap::fromImage(QImage(img), Qt::OrderedDither | Qt::OrderedAlphaDither);
     if (pm.isNull())
         return QPixmap();
@@ -443,9 +443,9 @@ void ArthurStyle::polish(QWidget *widget)
     if (widget->layout() && qobject_cast<QGroupBox *>(widget)) {
         if (widget->findChildren<QGroupBox *>().size() == 0) {
             widget->layout()->setSpacing(0);
-            widget->layout()->setMargin(12);
+            widget->layout()->setContentsMargins(12, 12, 12, 12);
         } else {
-            widget->layout()->setMargin(13);
+            widget->layout()->setContentsMargins(13, 13, 13, 13);
         }
     }
 
@@ -457,7 +457,7 @@ void ArthurStyle::polish(QWidget *widget)
 
     QPalette pal = widget->palette();
     if (widget->isWindow()) {
-        pal.setColor(QPalette::Background, QColor(241, 241, 241));
+        pal.setColor(QPalette::Window, QColor(241, 241, 241));
         widget->setPalette(pal);
     }
 
@@ -474,7 +474,7 @@ void ArthurStyle::unpolish(QWidget *widget)
 
 void ArthurStyle::polish(QPalette &palette)
 {
-    palette.setColor(QPalette::Background, QColor(241, 241, 241));
+    palette.setColor(QPalette::Window, QColor(241, 241, 241));
 }
 
 QRect ArthurStyle::subElementRect(SubElement element, const QStyleOption *option, const QWidget *widget) const

@@ -166,7 +166,7 @@ void QXcbConnection::xi2SetupDevice(void *info, bool removeExisting)
         }
         case XCB_INPUT_DEVICE_CLASS_TYPE_BUTTON: {
             auto *bci = reinterpret_cast<xcb_input_button_class_t *>(classinfo);
-            xcb_atom_t *labels = 0;
+            xcb_atom_t *labels = nullptr;
             if (bci->num_buttons >= 5) {
                 labels = xcb_input_button_class_labels(bci);
                 xcb_atom_t label4 = labels[3];
@@ -238,6 +238,10 @@ void QXcbConnection::xi2SetupDevice(void *info, bool removeExisting)
         tabletData.pointerType = QTabletEvent::Pen;
         dbgType = QLatin1String("pen");
     } else if (name.contains("uc-logic") && isTablet) {
+        tabletData.pointerType = QTabletEvent::Pen;
+        dbgType = QLatin1String("pen");
+    } else if (name.contains("ugee")) {
+        isTablet = true;
         tabletData.pointerType = QTabletEvent::Pen;
         dbgType = QLatin1String("pen");
     } else {
@@ -420,7 +424,7 @@ QXcbConnection::TouchDeviceData *QXcbConnection::touchDeviceForId(int id)
 QXcbConnection::TouchDeviceData *QXcbConnection::populateTouchDevices(void *info)
 {
     auto *deviceinfo = reinterpret_cast<xcb_input_xi_device_info_t *>(info);
-    QTouchDevice::Capabilities caps = 0;
+    QTouchDevice::Capabilities caps;
     int type = -1;
     int maxTouchPoints = 1;
     bool isTouchDevice = false;
@@ -510,12 +514,10 @@ QXcbConnection::TouchDeviceData *QXcbConnection::populateTouchDevices(void *info
     return isTouchDevice ? &m_touchDevices[deviceinfo->deviceid] : nullptr;
 }
 
-#if QT_CONFIG(tabletevent)
 static inline qreal fixed1616ToReal(xcb_input_fp1616_t val)
 {
     return qreal(val) / 0x10000;
 }
-#endif // QT_CONFIG(tabletevent)
 
 void QXcbConnection::xi2HandleEvent(xcb_ge_event_t *event)
 {
@@ -523,7 +525,7 @@ void QXcbConnection::xi2HandleEvent(xcb_ge_event_t *event)
     int sourceDeviceId = xiEvent->deviceid; // may be the master id
     qt_xcb_input_device_event_t *xiDeviceEvent = nullptr;
     xcb_input_enter_event_t *xiEnterEvent = nullptr;
-    QXcbWindowEventListener *eventListener = 0;
+    QXcbWindowEventListener *eventListener = nullptr;
 
     switch (xiEvent->event_type) {
     case XCB_INPUT_BUTTON_PRESS:
@@ -637,7 +639,7 @@ void QXcbConnection::xi2ProcessTouch(void *xiDevEvent, QXcbWindow *platformWindo
     qreal nx = -1.0, ny = -1.0;
     qreal w = 0.0, h = 0.0;
     bool majorAxisIsY = touchPoint.area.height() > touchPoint.area.width();
-    for (const TouchDeviceData::ValuatorClassInfo vci : dev->valuatorInfo) {
+    for (const TouchDeviceData::ValuatorClassInfo &vci : qAsConst(dev->valuatorInfo)) {
         double value;
         if (!xi2GetValuatorValueIfSet(xiDeviceEvent, vci.number, &value))
             continue;
@@ -749,7 +751,7 @@ void QXcbConnection::xi2ProcessTouch(void *xiDevEvent, QXcbWindow *platformWindo
                 xcb_input_xi_allow_events(xcb_connection(), XCB_CURRENT_TIME, xiDeviceEvent->deviceid,
                                           XCB_INPUT_EVENT_MODE_REJECT_TOUCH,
                                           xiDeviceEvent->detail, xiDeviceEvent->event);
-                window->doStartSystemMoveResize(QPoint(x, y), m_startSystemMoveResizeInfo.corner);
+                window->doStartSystemMoveResize(QPoint(x, y), m_startSystemMoveResizeInfo.edges);
                 m_startSystemMoveResizeInfo.window = XCB_NONE;
             }
         }
@@ -783,19 +785,20 @@ void QXcbConnection::xi2ProcessTouch(void *xiDevEvent, QXcbWindow *platformWindo
         touchPoint.state = Qt::TouchPointStationary;
 }
 
-bool QXcbConnection::startSystemMoveResizeForTouchBegin(xcb_window_t window, const QPoint &point, int corner)
+bool QXcbConnection::startSystemMoveResizeForTouch(xcb_window_t window, int edges)
 {
     QHash<int, TouchDeviceData>::const_iterator devIt = m_touchDevices.constBegin();
     for (; devIt != m_touchDevices.constEnd(); ++devIt) {
         TouchDeviceData deviceData = devIt.value();
         if (deviceData.qtTouchDevice->type() == QTouchDevice::TouchScreen) {
-            QHash<int, QPointF>::const_iterator pointIt = deviceData.pointPressedPosition.constBegin();
-            for (; pointIt != deviceData.pointPressedPosition.constEnd(); ++pointIt) {
-                if (pointIt.value().toPoint() == point) {
+            auto pointIt = deviceData.touchPoints.constBegin();
+            for (; pointIt != deviceData.touchPoints.constEnd(); ++pointIt) {
+                Qt::TouchPointState state = pointIt.value().state;
+                if (state == Qt::TouchPointMoved || state == Qt::TouchPointPressed || state == Qt::TouchPointStationary) {
                     m_startSystemMoveResizeInfo.window = window;
                     m_startSystemMoveResizeInfo.deviceid = devIt.key();
                     m_startSystemMoveResizeInfo.pointid = pointIt.key();
-                    m_startSystemMoveResizeInfo.corner = corner;
+                    m_startSystemMoveResizeInfo.edges = edges;
                     return true;
                 }
             }
@@ -823,7 +826,7 @@ bool QXcbConnection::xi2SetMouseGrabEnabled(xcb_window_t w, bool grab)
                 | XCB_INPUT_XI_EVENT_MASK_TOUCH_UPDATE
                 | XCB_INPUT_XI_EVENT_MASK_TOUCH_END;
 
-        for (int id : m_xiMasterPointerIds) {
+        for (int id : qAsConst(m_xiMasterPointerIds)) {
             xcb_generic_error_t *error = nullptr;
             auto cookie = xcb_input_xi_grab_device(xcb_connection(), w, XCB_CURRENT_TIME, XCB_CURSOR_NONE, id,
                                                    XCB_INPUT_GRAB_MODE_22_ASYNC, XCB_INPUT_GRAB_MODE_22_ASYNC,
@@ -841,7 +844,7 @@ bool QXcbConnection::xi2SetMouseGrabEnabled(xcb_window_t w, bool grab)
             free(reply);
         }
     } else { // ungrab
-        for (int id : m_xiMasterPointerIds) {
+        for (int id : qAsConst(m_xiMasterPointerIds)) {
             auto cookie = xcb_input_xi_ungrab_device_checked(xcb_connection(), XCB_CURRENT_TIME, id);
             xcb_generic_error_t *error = xcb_request_check(xcb_connection(), cookie);
             if (error) {
@@ -993,8 +996,8 @@ void QXcbConnection::xi2HandleScrollEvent(void *event, ScrollingDevice &scrollin
                 QPoint global(fixed1616ToReal(xiDeviceEvent->root_x), fixed1616ToReal(xiDeviceEvent->root_y));
                 Qt::KeyboardModifiers modifiers = keyboard()->translateModifiers(xiDeviceEvent->mods.effective);
                 if (modifiers & Qt::AltModifier) {
-                    std::swap(angleDelta.rx(), angleDelta.ry());
-                    std::swap(rawDelta.rx(), rawDelta.ry());
+                    angleDelta = angleDelta.transposed();
+                    rawDelta = rawDelta.transposed();
                 }
                 qCDebug(lcQpaXInputEvents) << "scroll wheel @ window pos" << local << "delta px" << rawDelta << "angle" << angleDelta;
                 QWindowSystemInterface::handleWheelEvent(platformWindow->window(), xiDeviceEvent->time, local, global, rawDelta, angleDelta, modifiers);
@@ -1020,7 +1023,7 @@ void QXcbConnection::xi2HandleScrollEvent(void *event, ScrollingDevice &scrollin
                 QPoint global(fixed1616ToReal(xiDeviceEvent->root_x), fixed1616ToReal(xiDeviceEvent->root_y));
                 Qt::KeyboardModifiers modifiers = keyboard()->translateModifiers(xiDeviceEvent->mods.effective);
                 if (modifiers & Qt::AltModifier)
-                    std::swap(angleDelta.rx(), angleDelta.ry());
+                    angleDelta = angleDelta.transposed();
                 qCDebug(lcQpaXInputEvents) << "scroll wheel (button" << xiDeviceEvent->detail << ") @ window pos" << local << "delta angle" << angleDelta;
                 QWindowSystemInterface::handleWheelEvent(platformWindow->window(), xiDeviceEvent->time, local, global, QPoint(), angleDelta, modifiers);
             }
@@ -1208,6 +1211,11 @@ bool QXcbConnection::xi2HandleTabletEvent(const void *event, TabletData *tabletD
     return handled;
 }
 
+inline qreal scaleOneValuator(qreal normValue, qreal screenMin, qreal screenSize)
+{
+    return screenMin + normValue * screenSize;
+}
+
 void QXcbConnection::xi2ReportTabletEvent(const void *event, TabletData *tabletData)
 {
     auto *ev = reinterpret_cast<const qt_xcb_input_device_event_t *>(event);
@@ -1220,6 +1228,17 @@ void QXcbConnection::xi2ReportTabletEvent(const void *event, TabletData *tabletD
     QPointF global(fixed1616ToReal(ev->root_x), fixed1616ToReal(ev->root_y));
     double pressure = 0, rotation = 0, tangentialPressure = 0;
     int xTilt = 0, yTilt = 0;
+    static const bool useValuators = !qEnvironmentVariableIsSet("QT_XCB_TABLET_LEGACY_COORDINATES");
+
+    // Valuators' values are relative to the physical size of the current virtual
+    // screen. Therefore we cannot use QScreen/QWindow geometry and should use
+    // QPlatformWindow/QPlatformScreen instead.
+    QRect physicalScreenArea;
+    if (Q_LIKELY(useValuators)) {
+        const QList<QPlatformScreen *> siblings = window->screen()->handle()->virtualSiblings();
+        for (const QPlatformScreen *screen : siblings)
+            physicalScreenArea |= screen->geometry();
+    }
 
     for (QHash<int, TabletData::ValuatorClassInfo>::iterator it = tabletData->valuatorInfo.begin(),
             ite = tabletData->valuatorInfo.end(); it != ite; ++it) {
@@ -1228,6 +1247,22 @@ void QXcbConnection::xi2ReportTabletEvent(const void *event, TabletData *tabletD
         xi2GetValuatorValueIfSet(event, classInfo.number, &classInfo.curVal);
         double normalizedValue = (classInfo.curVal - classInfo.minVal) / (classInfo.maxVal - classInfo.minVal);
         switch (valuator) {
+        case QXcbAtom::AbsX:
+            if (Q_LIKELY(useValuators)) {
+                const qreal value = scaleOneValuator(normalizedValue, physicalScreenArea.x(), physicalScreenArea.width());
+                global.setX(value);
+                // mapFromGlobal is ok for nested/embedded windows, but works only with whole-number QPoint;
+                // so map it first, then add back the sub-pixel position
+                local.setX(window->mapFromGlobal(QPoint(int(value), 0)).x() + (value - int(value)));
+            }
+            break;
+        case QXcbAtom::AbsY:
+            if (Q_LIKELY(useValuators)) {
+                qreal value = scaleOneValuator(normalizedValue, physicalScreenArea.y(), physicalScreenArea.height());
+                global.setY(value);
+                local.setY(window->mapFromGlobal(QPoint(0, int(value))).y() + (value - int(value)));
+            }
+            break;
         case QXcbAtom::AbsPressure:
             pressure = normalizedValue;
             break;

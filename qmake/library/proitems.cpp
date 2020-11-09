@@ -238,7 +238,7 @@ ProString &ProString::append(const ProString &other, bool *pending)
             QChar *ptr;
             if (pending && !*pending) {
                 ptr = prepareExtend(1 + other.m_length, 0, m_length);
-                *ptr++ = 32;
+                *ptr++ = QLatin1Char(' ');
             } else {
                 ptr = prepareExtend(other.m_length, 0, m_length);
             }
@@ -276,7 +276,7 @@ ProString &ProString::append(const ProStringList &other, bool *pending, bool ski
             QChar *ptr = prepareExtend(totalLength, 0, m_length);
             for (int i = startIdx; i < sz; ++i) {
                 if (putSpace)
-                    *ptr++ = 32;
+                    *ptr++ = QLatin1Char(' ');
                 else
                     putSpace = true;
                 const ProString &str = other.at(i);
@@ -515,6 +515,11 @@ ProKey ProFile::getHashStr(const ushort *&tPtr)
     ProKey ret(items(), tPtr - tokPtr(), len, hash);
     tPtr += len;
     return ret;
+}
+
+QDebug operator<<(QDebug debug, const ProString &str)
+{
+    return debug << str.toQString();
 }
 
 QT_END_NAMESPACE

@@ -73,7 +73,7 @@ if (list[0] == "Bob")
 //! [3]
 for (int i = 0; i < list.size(); ++i) {
     if (list.at(i) == "Jane")
-        cout << "Found Jane at position " << i << endl;
+        cout << "Found Jane at position " << i << Qt::endl;
 }
 //! [3]
 
@@ -89,7 +89,7 @@ while (!list.isEmpty())
 //! [5]
 int i = list.indexOf("Jane");
 if (i != -1)
-    cout << "First occurrence of Jane is at position " << i << endl;
+    cout << "First occurrence of Jane is at position " << i << Qt::endl;
 //! [5]
 
 
@@ -146,7 +146,7 @@ list.move(1, 4);
 //! [12]
 QList<QString> list;
 list << "A" << "B" << "C" << "D" << "E" << "F";
-list.swap(1, 4);
+list.swapItemsAt(1, 4);
 // list: ["A", "E", "C", "D", "B", "F"]
 //! [12]
 
@@ -180,7 +180,7 @@ list.append("December");
 
 QList<QString>::iterator i;
 for (i = list.begin(); i != list.end(); ++i)
-    cout << *i << endl;
+    cout << *i << Qt::endl;
 //! [15]
 
 
@@ -213,7 +213,7 @@ list.append("December");
 
 QList<QString>::const_iterator i;
 for (i = list.constBegin(); i != list.constEnd(); ++i)
-    cout << *i << endl;
+    cout << *i << Qt::endl;
 //! [19]
 
 
@@ -247,7 +247,7 @@ QSet<int> set;
 set << 20 << 30 << 40 << ... << 70;
 
 QList<int> list = QList<int>::fromSet(set);
-qSort(list);
+std::sort(list.begin(), list.end());
 //! [23]
 
 

@@ -48,13 +48,28 @@
 **
 ****************************************************************************/
 
-#include <QtWidgets>
-#include "fsmodel.h"
 #include "mainwindow.h"
+#include "fsmodel.h"
+
+#include <QAction>
+#include <QApplication>
+#include <QCheckBox>
+#include <QComboBox>
+#include <QCompleter>
+#include <QGridLayout>
+#include <QHeaderView>
+#include <QLabel>
+#include <QLineEdit>
+#include <QMenuBar>
+#include <QMessageBox>
+#include <QSpinBox>
+#include <QStandardItemModel>
+#include <QStringListModel>
+#include <QTreeView>
 
 //! [0]
 MainWindow::MainWindow(QWidget *parent)
-    : QMainWindow(parent), completer(0), lineEdit(0)
+    : QMainWindow(parent)
 {
     createMenu();
 
@@ -64,8 +79,8 @@ MainWindow::MainWindow(QWidget *parent)
     modelLabel->setText(tr("Model"));
 
     modelCombo = new QComboBox;
-    modelCombo->addItem(tr("QFileSytemModel"));
-    modelCombo->addItem(tr("QFileSytemModel that shows full path"));
+    modelCombo->addItem(tr("QFileSystemModel"));
+    modelCombo->addItem(tr("QFileSystemModel that shows full path"));
     modelCombo->addItem(tr("Country list"));
     modelCombo->addItem(tr("Word list"));
     modelCombo->setCurrentIndex(0);
@@ -102,10 +117,14 @@ MainWindow::MainWindow(QWidget *parent)
     contentsLabel = new QLabel;
     contentsLabel->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
 
-    connect(modelCombo, SIGNAL(activated(int)), this, SLOT(changeModel()));
-    connect(modeCombo, SIGNAL(activated(int)), this, SLOT(changeMode(int)));
-    connect(caseCombo, SIGNAL(activated(int)), this, SLOT(changeCase(int)));
-    connect(maxVisibleSpinBox, SIGNAL(valueChanged(int)), this, SLOT(changeMaxVisible(int)));
+    connect(modelCombo, QOverload<int>::of(&QComboBox::activated),
+            this, &MainWindow::changeModel);
+    connect(modeCombo, QOverload<int>::of(&QComboBox::activated),
+            this, &MainWindow::changeMode);
+    connect(caseCombo, QOverload<int>::of(&QComboBox::activated),
+            this, &MainWindow::changeCase);
+    connect(maxVisibleSpinBox, QOverload<int>::of(&QSpinBox::valueChanged),
+            this, &MainWindow::changeMaxVisible);
 //! [2]
 
 //! [3]
@@ -136,21 +155,21 @@ void MainWindow::createMenu()
     QAction *aboutAct = new QAction(tr("About"), this);
     QAction *aboutQtAct = new QAction(tr("About Qt"), this);
 
-    connect(exitAction, SIGNAL(triggered()), qApp, SLOT(quit()));
-    connect(aboutAct, SIGNAL(triggered()), this, SLOT(about()));
-    connect(aboutQtAct, SIGNAL(triggered()), qApp, SLOT(aboutQt()));
+    connect(exitAction, &QAction::triggered, qApp, &QApplication::quit);
+    connect(aboutAct, &QAction::triggered, this, &MainWindow::about);
+    connect(aboutQtAct, &QAction::triggered, qApp, &QApplication::aboutQt);
 
-    QMenu* fileMenu = menuBar()->addMenu(tr("File"));
+    QMenu *fileMenu = menuBar()->addMenu(tr("File"));
     fileMenu->addAction(exitAction);
 
-    QMenu* helpMenu = menuBar()->addMenu(tr("About"));
+    QMenu *helpMenu = menuBar()->addMenu(tr("About"));
     helpMenu->addAction(aboutAct);
     helpMenu->addAction(aboutQtAct);
 }
 //! [4]
 
 //! [5]
-QAbstractItemModel *MainWindow::modelFromFile(const QString& fileName)
+QAbstractItemModel *MainWindow::modelFromFile(const QString &fileName)
 {
     QFile file(fileName);
     if (!file.open(QFile::ReadOnly))
@@ -159,18 +178,18 @@ QAbstractItemModel *MainWindow::modelFromFile(const QString& fileName)
 
 //! [6]
 #ifndef QT_NO_CURSOR
-    QApplication::setOverrideCursor(QCursor(Qt::WaitCursor));
+    QGuiApplication::setOverrideCursor(QCursor(Qt::WaitCursor));
 #endif
     QStringList words;
 
     while (!file.atEnd()) {
         QByteArray line = file.readLine();
         if (!line.isEmpty())
-            words << line.trimmed();
+            words << QString::fromUtf8(line.trimmed());
     }
 
 #ifndef QT_NO_CURSOR
-    QApplication::restoreOverrideCursor();
+    QGuiApplication::restoreOverrideCursor();
 #endif
 //! [6]
 
@@ -187,8 +206,8 @@ QAbstractItemModel *MainWindow::modelFromFile(const QString& fileName)
     for (int i = 0; i < words.count(); ++i) {
         QModelIndex countryIdx = m->index(i, 0);
         QModelIndex symbolIdx = m->index(i, 1);
-        QString country = words[i].mid(0, words[i].length() - 2).trimmed();
-        QString symbol = words[i].right(2);
+        QString country = words.at(i).mid(0, words[i].length() - 2).trimmed();
+        QString symbol = words.at(i).right(2);
         m->setData(countryIdx, country);
         m->setData(symbolIdx, symbol);
     }
@@ -229,7 +248,7 @@ void MainWindow::changeModel()
     case 0:
         { // Unsorted QFileSystemModel
             QFileSystemModel *fsModel = new QFileSystemModel(completer);
-            fsModel->setRootPath("");
+            fsModel->setRootPath(QString());
             completer->setModel(fsModel);
             contentsLabel->setText(tr("Enter file path"));
         }
@@ -239,7 +258,7 @@ void MainWindow::changeModel()
         {   // FileSystemModel that shows full paths
             FileSystemModel *fsModel = new FileSystemModel(completer);
             completer->setModel(fsModel);
-            fsModel->setRootPath("");
+            fsModel->setRootPath(QString());
             contentsLabel->setText(tr("Enter file path"));
         }
         break;
@@ -271,7 +290,7 @@ void MainWindow::changeModel()
     changeCase(caseCombo->currentIndex());
     completer->setWrapAround(wrapCheckBox->isChecked());
     lineEdit->setCompleter(completer);
-    connect(wrapCheckBox, SIGNAL(clicked(bool)), completer, SLOT(setWrapAround(bool)));
+    connect(wrapCheckBox, &QAbstractButton::clicked, completer, &QCompleter::setWrapAround);
 }
 //! [14]
 

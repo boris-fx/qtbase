@@ -54,8 +54,6 @@
 #include <QtCore/QFile>
 #include <QtCore/QDir>
 
-#include <set>
-
 QT_BEGIN_NAMESPACE
 
 #if defined(QT_OPENGL_3)
@@ -74,7 +72,7 @@ QOpenGLExtensionMatcher::QOpenGLExtensionMatcher()
         return;
     }
     QOpenGLFunctions *funcs = ctx->functions();
-    const char *extensionStr = 0;
+    const char *extensionStr = nullptr;
 
     if (ctx->isOpenGLES() || ctx->format().majorVersion() < 3)
         extensionStr = reinterpret_cast<const char *>(funcs->glGetString(GL_EXTENSIONS));
@@ -82,7 +80,7 @@ QOpenGLExtensionMatcher::QOpenGLExtensionMatcher()
     if (extensionStr) {
         QByteArray ba(extensionStr);
         QList<QByteArray> extensions = ba.split(' ');
-        m_extensions = extensions.toSet();
+        m_extensions = QSet<QByteArray>(extensions.constBegin(), extensions.constEnd());
     } else {
 #ifdef QT_OPENGL_3
         // clear error state
@@ -138,7 +136,7 @@ QDebug operator<<(QDebug d, const QOpenGLConfig::Gpu &g)
     d.nospace();
     d << "Gpu(";
     if (g.isValid()) {
-        d << "vendor=" << hex << showbase <<g.vendorId << ", device=" << g.deviceId
+        d << "vendor=" << Qt::hex << Qt::showbase <<g.vendorId << ", device=" << g.deviceId
           << "version=" << g.driverVersion;
     } else {
         d << 0;
@@ -297,7 +295,7 @@ QString OsTypeTerm::hostOs()
     return  QStringLiteral("win");
 #elif defined(Q_OS_LINUX)
     return QStringLiteral("linux");
-#elif defined(Q_OS_OSX)
+#elif defined(Q_OS_MACOS)
     return  QStringLiteral("macosx");
 #elif defined(Q_OS_ANDROID)
     return  QStringLiteral("android");
@@ -534,15 +532,6 @@ QOpenGLConfig::Gpu QOpenGLConfig::Gpu::fromContext()
         gpu.glVendor = QByteArray(reinterpret_cast<const char *>(p));
 
     return gpu;
-}
-
-Q_GUI_EXPORT std::set<QByteArray> *qgpu_features(const QString &filename)
-{
-    const QSet<QString> features = QOpenGLConfig::gpuFeatures(QOpenGLConfig::Gpu::fromContext(), filename);
-    std::set<QByteArray> *result = new std::set<QByteArray>;
-    for (const QString &feature : features)
-        result->insert(feature.toUtf8());
-    return result;
 }
 
 QT_END_NAMESPACE

@@ -48,7 +48,7 @@
 **
 ****************************************************************************/
 
-#include <QtGui>
+#include <QtWidgets>
 
 #include "mainwindow.h"
 #include "xmlwriter.h"
@@ -73,9 +73,9 @@ MainWindow::MainWindow()
 
     editor = new QTextEdit(this);
 
-    connect(saveAction, SIGNAL(triggered()), this, SLOT(saveFile()));
-    connect(quitAction, SIGNAL(triggered()), this, SLOT(close()));
-    connect(calendarAction, SIGNAL(triggered()), this, SLOT(insertCalendar()));
+    connect(saveAction, &QAction::triggered, this, &MainWindow::saveFile);
+    connect(quitAction, &QAction::triggered, this, &MainWindow::close);
+    connect(calendarAction, &QAction::triggered, this, &MainWindow::insertCalendar);
 
     setCentralWidget(editor);
     setWindowTitle(tr("Text Document Writer"));
@@ -114,7 +114,7 @@ void MainWindow::insertCalendar()
     int year = date.year(), month = date.month();
 
     for (int weekDay = 1; weekDay <= 7; ++weekDay) {
-        cursor.insertText(QString("%1 ").arg(QDate::shortDayName(weekDay), 3),
+        cursor.insertText(QString("%1 ").arg(QLocale::system().dayName(weekDay), 3),
             boldFormat);
     }
 

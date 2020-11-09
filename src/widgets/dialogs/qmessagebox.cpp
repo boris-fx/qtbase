@@ -1,6 +1,6 @@
 /****************************************************************************
 **
-** Copyright (C) 2018 The Qt Company Ltd.
+** Copyright (C) 2020 The Qt Company Ltd.
 ** Contact: https://www.qt.io/licensing/
 **
 ** This file is part of the QtWidgets module of the Qt Toolkit.
@@ -97,7 +97,7 @@ public:
     class TextEdit : public QTextEdit
     {
     public:
-        TextEdit(QWidget *parent=0) : QTextEdit(parent) { }
+        TextEdit(QWidget *parent=nullptr) : QTextEdit(parent) { }
 #ifndef QT_NO_CONTEXTMENU
         void contextMenuEvent(QContextMenuEvent * e) override
         {
@@ -108,12 +108,12 @@ public:
 #endif // QT_NO_CONTEXTMENU
     };
 
-    QMessageBoxDetailsText(QWidget *parent=0)
+    QMessageBoxDetailsText(QWidget *parent=nullptr)
         : QWidget(parent)
         , copyAvailable(false)
     {
         QVBoxLayout *layout = new QVBoxLayout;
-        layout->setMargin(0);
+        layout->setContentsMargins(QMargins());
         QFrame *line = new QFrame(this);
         line->setFrameShape(QFrame::HLine);
         line->setFrameShadow(QFrame::Sunken);
@@ -197,12 +197,12 @@ class QMessageBoxPrivate : public QDialogPrivate
     Q_DECLARE_PUBLIC(QMessageBox)
 
 public:
-    QMessageBoxPrivate() : escapeButton(0), defaultButton(0), checkbox(0), clickedButton(0), detailsButton(0),
+    QMessageBoxPrivate() : escapeButton(nullptr), defaultButton(nullptr), checkbox(nullptr), clickedButton(nullptr), detailsButton(nullptr),
 #if QT_CONFIG(textedit)
-                           detailsText(0),
+                           detailsText(nullptr),
 #endif
                            compatMode(false), autoAddOkButton(true),
-                           detectedEscapeButton(0), informativeLabel(0),
+                           detectedEscapeButton(nullptr), informativeLabel(nullptr),
                            options(QMessageDialogOptions::create()) { }
 
     void init(const QString &title = QString(), const QString &text = QString());
@@ -274,7 +274,7 @@ void QMessageBoxPrivate::init(const QString &title, const QString &text)
 
     label = new QLabel;
     label->setObjectName(QLatin1String("qt_msgbox_label"));
-    label->setTextInteractionFlags(Qt::TextInteractionFlags(q->style()->styleHint(QStyle::SH_MessageBox_TextInteractionFlags, 0, q)));
+    label->setTextInteractionFlags(Qt::TextInteractionFlags(q->style()->styleHint(QStyle::SH_MessageBox_TextInteractionFlags, nullptr, q)));
     label->setAlignment(Qt::AlignVCenter | Qt::AlignLeft);
     label->setOpenExternalLinks(true);
     iconLabel = new QLabel(q);
@@ -283,7 +283,7 @@ void QMessageBoxPrivate::init(const QString &title, const QString &text)
 
     buttonBox = new QDialogButtonBox;
     buttonBox->setObjectName(QLatin1String("qt_msgbox_buttonbox"));
-    buttonBox->setCenterButtons(q->style()->styleHint(QStyle::SH_MessageBox_CenterButtons, 0, q));
+    buttonBox->setCenterButtons(q->style()->styleHint(QStyle::SH_MessageBox_CenterButtons, nullptr, q));
     QObject::connect(buttonBox, SIGNAL(clicked(QAbstractButton*)),
                      q, SLOT(_q_buttonClicked(QAbstractButton*)));
     setupLayout();
@@ -305,7 +305,7 @@ void QMessageBoxPrivate::setupLayout()
     Q_Q(QMessageBox);
     delete q->layout();
     QGridLayout *grid = new QGridLayout;
-    bool hasIcon = iconLabel->pixmap() && !iconLabel->pixmap()->isNull();
+    bool hasIcon = !iconLabel->pixmap(Qt::ReturnByValue).isNull();
 
     if (hasIcon)
         grid->addWidget(iconLabel, 0, 0, 2, 1, Qt::AlignTop);
@@ -756,6 +756,12 @@ void QMessageBoxPrivate::_q_clicked(QPlatformDialogHelper::StandardButton button
 */
 
 /*!
+    \enum QMessageBox::ButtonRole
+
+    \include qdialogbuttonbox.cpp buttonrole-enum
+*/
+
+/*!
     \enum QMessageBox::StandardButton
     \since 4.2
 
@@ -834,7 +840,7 @@ QMessageBox::QMessageBox(QWidget *parent)
     The message box is an \l{Qt::ApplicationModal} {application modal}
     dialog box.
 
-    On \macos, if \a parent is not 0 and you want your message box
+    On \macos, if \a parent is not \nullptr and you want your message box
     to appear as a Qt::Sheet of that parent, set the message box's
     \l{setWindowModality()} {window modality} to Qt::WindowModal
     (default). Otherwise, the message box will be a standard dialog.
@@ -927,9 +933,9 @@ void QMessageBox::removeButton(QAbstractButton *button)
     Q_D(QMessageBox);
     d->customButtonList.removeAll(button);
     if (d->escapeButton == button)
-        d->escapeButton = 0;
+        d->escapeButton = nullptr;
     if (d->defaultButton == button)
-        d->defaultButton = 0;
+        d->defaultButton = nullptr;
     d->buttonBox->removeButton(button);
     d->updateSize();
 }
@@ -952,9 +958,9 @@ void QMessageBox::setStandardButtons(StandardButtons buttons)
 
     QList<QAbstractButton *> buttonList = d->buttonBox->buttons();
     if (!buttonList.contains(d->escapeButton))
-        d->escapeButton = 0;
+        d->escapeButton = nullptr;
     if (!buttonList.contains(d->defaultButton))
-        d->defaultButton = 0;
+        d->defaultButton = nullptr;
     d->autoAddOkButton = false;
     d->updateSize();
 }
@@ -983,7 +989,7 @@ QMessageBox::StandardButton QMessageBox::standardButton(QAbstractButton *button)
     \since 4.2
 
     Returns a pointer corresponding to the standard button \a which,
-    or 0 if the standard button doesn't exist in this message box.
+    or \nullptr if the standard button doesn't exist in this message box.
 
     \sa standardButtons, standardButton()
 */
@@ -1081,7 +1087,7 @@ void QMessageBoxPrivate::detectEscapeButton()
     for (auto *button : buttons) {
         if (buttonBox->buttonRole(button) == QDialogButtonBox::RejectRole) {
             if (detectedEscapeButton) { // already detected!
-                detectedEscapeButton = 0;
+                detectedEscapeButton = nullptr;
                 break;
             }
             detectedEscapeButton = button;
@@ -1094,7 +1100,7 @@ void QMessageBoxPrivate::detectEscapeButton()
     for (auto *button : buttons) {
         if (buttonBox->buttonRole(button) == QDialogButtonBox::NoRole) {
             if (detectedEscapeButton) { // already detected!
-                detectedEscapeButton = 0;
+                detectedEscapeButton = nullptr;
                 break;
             }
             detectedEscapeButton = button;
@@ -1106,7 +1112,7 @@ void QMessageBoxPrivate::detectEscapeButton()
     \since 4.2
 
     Returns the button that was clicked by the user,
-    or 0 if the user hit the \uicontrol Esc key and
+    or \nullptr if the user hit the \uicontrol Esc key and
     no \l{setEscapeButton()}{escape button} was set.
 
     If exec() hasn't been called yet, returns nullptr.
@@ -1173,7 +1179,7 @@ void QMessageBox::setDefaultButton(QMessageBox::StandardButton button)
 /*! \since 5.2
 
     Sets the checkbox \a cb on the message dialog. The message box takes ownership of the checkbox.
-    The argument \a cb can be 0 to remove an existing checkbox from the message box.
+    The argument \a cb can be \nullptr to remove an existing checkbox from the message box.
 
     \sa checkBox()
 */
@@ -1189,7 +1195,7 @@ void QMessageBox::setCheckBox(QCheckBox *cb)
         d->checkbox->hide();
         layout()->removeWidget(d->checkbox);
         if (d->checkbox->parentWidget() == this) {
-            d->checkbox->setParent(0);
+            d->checkbox->setParent(nullptr);
             d->checkbox->deleteLater();
         }
     }
@@ -1205,7 +1211,7 @@ void QMessageBox::setCheckBox(QCheckBox *cb)
 
 /*! \since 5.2
 
-    Returns the checkbox shown on the dialog. This is 0 if no checkbox is set.
+    Returns the checkbox shown on the dialog. This is \nullptr if no checkbox is set.
     \sa setCheckBox()
 */
 
@@ -1317,9 +1323,7 @@ void QMessageBox::setIcon(Icon icon)
 QPixmap QMessageBox::iconPixmap() const
 {
     Q_D(const QMessageBox);
-    if (d->iconLabel && d->iconLabel->pixmap())
-        return *d->iconLabel->pixmap();
-    return QPixmap();
+    return d->iconLabel->pixmap(Qt::ReturnByValue);
 }
 
 void QMessageBox::setIconPixmap(const QPixmap &pixmap)
@@ -1433,9 +1437,9 @@ void QMessageBox::changeEvent(QEvent *ev)
     {
         if (d->icon != NoIcon)
             setIcon(d->icon);
-        Qt::TextInteractionFlags flags(style()->styleHint(QStyle::SH_MessageBox_TextInteractionFlags, 0, this));
+        Qt::TextInteractionFlags flags(style()->styleHint(QStyle::SH_MessageBox_TextInteractionFlags, nullptr, this));
         d->label->setTextInteractionFlags(flags);
-        d->buttonBox->setCenterButtons(style()->styleHint(QStyle::SH_MessageBox_CenterButtons, 0, this));
+        d->buttonBox->setCenterButtons(style()->styleHint(QStyle::SH_MessageBox_CenterButtons, nullptr, this));
         if (d->informativeLabel)
             d->informativeLabel->setTextInteractionFlags(flags);
         Q_FALLTHROUGH();
@@ -1508,7 +1512,7 @@ void QMessageBox::keyPressEvent(QKeyEvent *e)
             if (d->detailsText)
                 textToCopy += d->detailsText->text() + QLatin1Char('\n') + separator;
 #endif
-            QApplication::clipboard()->setText(textToCopy);
+            QGuiApplication::clipboard()->setText(textToCopy);
             return;
         }
 #endif // Q_OS_WIN
@@ -1570,7 +1574,7 @@ QList<QAbstractButton *> QMessageBox::buttons() const
     \since 4.5
 
     Returns the button role for the specified \a button. This function returns
-    \l InvalidRole if \a button is 0 or has not been added to the message box.
+    \l InvalidRole if \a button is \nullptr or has not been added to the message box.
 
     \sa buttons(), addButton()
 */
@@ -1624,7 +1628,7 @@ static QMessageBox::StandardButton showNewMessageBox(QWidget *parent,
 
     QMessageBox msgBox(icon, title, text, QMessageBox::NoButton, parent);
     QDialogButtonBox *buttonBox = msgBox.findChild<QDialogButtonBox*>();
-    Q_ASSERT(buttonBox != 0);
+    Q_ASSERT(buttonBox != nullptr);
 
     uint mask = QMessageBox::FirstButton;
     while (mask <= QMessageBox::LastButton) {
@@ -1835,7 +1839,7 @@ void QMessageBox::about(QWidget *parent, const QString &title, const QString &te
 
 /*!
     Displays a simple message box about Qt, with the given \a title
-    and centered over \a parent (if \a parent is not 0). The message
+    and centered over \a parent (if \a parent is not \nullptr). The message
     includes the version number of Qt being used by the application.
 
     This is useful for inclusion in the \uicontrol Help menu of an application,
@@ -1890,7 +1894,7 @@ void QMessageBox::aboutQt(QWidget *parent, const QString &title)
         "<p>Qt and the Qt logo are trademarks of The Qt Company Ltd.</p>"
         "<p>Qt is The Qt Company Ltd product developed as an open source "
         "project. See <a href=\"http://%3/\">%3</a> for more information.</p>"
-        ).arg(QStringLiteral("2019"),
+        ).arg(QStringLiteral("2020"),
               QStringLiteral("qt.io/licensing"),
               QStringLiteral("qt.io"));
     QMessageBox *msgBox = new QMessageBox(parent);
@@ -2001,7 +2005,7 @@ QAbstractButton *QMessageBoxPrivate::abstractButtonForId(int id) const
     if (result)
         return result;
     if (id & QMessageBox::FlagMask)    // for compatibility with Qt 4.0/4.1 (even if it is silly)
-        return 0;
+        return nullptr;
     return q->button(newButton(id));
 }
 
@@ -2522,13 +2526,13 @@ void QMessageBox::setDetailedText(const QString &text)
             d->detailsText->hide();
             d->detailsText->deleteLater();
         }
-        d->detailsText = 0;
+        d->detailsText = nullptr;
         removeButton(d->detailsButton);
         if (d->detailsButton) {
             d->detailsButton->hide();
             d->detailsButton->deleteLater();
         }
-        d->detailsButton = 0;
+        d->detailsButton = nullptr;
     } else {
         if (!d->detailsText) {
             d->detailsText = new QMessageBoxDetailsText(this);
@@ -2577,12 +2581,12 @@ void QMessageBox::setInformativeText(const QString &text)
             d->informativeLabel->hide();
             d->informativeLabel->deleteLater();
         }
-        d->informativeLabel = 0;
+        d->informativeLabel = nullptr;
     } else {
         if (!d->informativeLabel) {
             QLabel *label = new QLabel;
             label->setObjectName(QLatin1String("qt_msgbox_informativelabel"));
-            label->setTextInteractionFlags(Qt::TextInteractionFlags(style()->styleHint(QStyle::SH_MessageBox_TextInteractionFlags, 0, this)));
+            label->setTextInteractionFlags(Qt::TextInteractionFlags(style()->styleHint(QStyle::SH_MessageBox_TextInteractionFlags, nullptr, this)));
             label->setAlignment(Qt::AlignTop | Qt::AlignLeft);
             label->setOpenExternalLinks(true);
             label->setWordWrap(true);
@@ -2644,32 +2648,27 @@ void QMessageBox::setWindowModality(Qt::WindowModality windowModality)
 QPixmap QMessageBoxPrivate::standardIcon(QMessageBox::Icon icon, QMessageBox *mb)
 {
     QStyle *style = mb ? mb->style() : QApplication::style();
-    int iconSize = style->pixelMetric(QStyle::PM_MessageBoxIconSize, 0, mb);
+    int iconSize = style->pixelMetric(QStyle::PM_MessageBoxIconSize, nullptr, mb);
     QIcon tmpIcon;
     switch (icon) {
     case QMessageBox::Information:
-        tmpIcon = style->standardIcon(QStyle::SP_MessageBoxInformation, 0, mb);
+        tmpIcon = style->standardIcon(QStyle::SP_MessageBoxInformation, nullptr, mb);
         break;
     case QMessageBox::Warning:
-        tmpIcon = style->standardIcon(QStyle::SP_MessageBoxWarning, 0, mb);
+        tmpIcon = style->standardIcon(QStyle::SP_MessageBoxWarning, nullptr, mb);
         break;
     case QMessageBox::Critical:
-        tmpIcon = style->standardIcon(QStyle::SP_MessageBoxCritical, 0, mb);
+        tmpIcon = style->standardIcon(QStyle::SP_MessageBoxCritical, nullptr, mb);
         break;
     case QMessageBox::Question:
-        tmpIcon = style->standardIcon(QStyle::SP_MessageBoxQuestion, 0, mb);
+        tmpIcon = style->standardIcon(QStyle::SP_MessageBoxQuestion, nullptr, mb);
     default:
         break;
     }
     if (!tmpIcon.isNull()) {
-        QWindow *window = nullptr;
-        if (mb) {
-            window = mb->windowHandle();
-            if (!window) {
-                if (const QWidget *nativeParent = mb->nativeParentWidget())
-                    window = nativeParent->windowHandle();
-            }
-        }
+        QWindow *window = mb
+            ? qt_widget_private(mb)->windowHandle(QWidgetPrivate::WindowHandleMode::Closest)
+            : nullptr;
         return tmpIcon.pixmap(window, QSize(iconSize, iconSize));
     }
     return QPixmap();
@@ -2744,7 +2743,7 @@ void QMessageBoxPrivate::helperDone(QDialog::DialogCode code, QPlatformDialogHel
 
 QPixmap QMessageBox::standardIcon(Icon icon)
 {
-    return QMessageBoxPrivate::standardIcon(icon, 0);
+    return QMessageBoxPrivate::standardIcon(icon, nullptr);
 }
 
 /*!

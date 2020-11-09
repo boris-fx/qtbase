@@ -50,6 +50,7 @@
 #include <QtGui/qscreen.h>
 #include <QtGui/private/qguiapplication_p.h> // getPixmapCursor()
 #include <QtGui/private/qhighdpiscaling_p.h>
+#include <QtCore/private/qwinregistry_p.h>
 
 #include <QtCore/qdebug.h>
 #include <QtCore/qscopedpointer.h>
@@ -72,17 +73,16 @@ Q_GUI_EXPORT HBITMAP qt_createIconMask(const QBitmap &bitmap);
     \brief Cache key for storing values in a QHash with a QCursor as key.
 
     \internal
-    \ingroup qt-lighthouse-win
 */
 
 QWindowsPixmapCursorCacheKey::QWindowsPixmapCursorCacheKey(const QCursor &c)
     : bitmapCacheKey(c.pixmap().cacheKey()), maskCacheKey(0)
 {
     if (!bitmapCacheKey) {
-        Q_ASSERT(c.bitmap());
-        Q_ASSERT(c.mask());
-        bitmapCacheKey = c.bitmap()->cacheKey();
-        maskCacheKey = c.mask()->cacheKey();
+        Q_ASSERT(!c.bitmap(Qt::ReturnByValue).isNull());
+        Q_ASSERT(!c.mask(Qt::ReturnByValue).isNull());
+        bitmapCacheKey = c.bitmap(Qt::ReturnByValue).cacheKey();
+        maskCacheKey = c.mask(Qt::ReturnByValue).cacheKey();
     }
 }
 
@@ -96,7 +96,6 @@ QWindowsPixmapCursorCacheKey::QWindowsPixmapCursorCacheKey(const QCursor &c)
     as do the Window manager frames (resize/move handles).
 
     \internal
-    \ingroup qt-lighthouse-win
     \sa QWindowsWindowCursor
 */
 
@@ -168,9 +167,9 @@ static HCURSOR createBitmapCursor(const QImage &bbits, const QImage &mbits,
 // Create a cursor from image and mask of the format QImage::Format_Mono.
 static HCURSOR createBitmapCursor(const QCursor &cursor, qreal scaleFactor = 1)
 {
-    Q_ASSERT(cursor.shape() == Qt::BitmapCursor && cursor.bitmap());
-    QImage bbits = cursor.bitmap()->toImage();
-    QImage mbits = cursor.mask()->toImage();
+    Q_ASSERT(cursor.shape() == Qt::BitmapCursor && !cursor.bitmap(Qt::ReturnByValue).isNull());
+    QImage bbits = cursor.bitmap(Qt::ReturnByValue).toImage();
+    QImage mbits = cursor.mask(Qt::ReturnByValue).toImage();
     scaleFactor /= bbits.devicePixelRatioF();
     if (!qFuzzyCompare(scaleFactor, 1)) {
         const QSize scaledSize = (QSizeF(bbits.size()) * scaleFactor).toSize();
@@ -184,9 +183,11 @@ static HCURSOR createBitmapCursor(const QCursor &cursor, qreal scaleFactor = 1)
     return createBitmapCursor(bbits, mbits, cursor.hotSpot(), invb, invm);
 }
 
-static QSize systemCursorSize(const QPlatformScreen *screen = nullptr)
+static QSize systemCursorSize() { return QSize(GetSystemMetrics(SM_CXCURSOR), GetSystemMetrics(SM_CYCURSOR)); }
+
+static QSize screenCursorSize(const QPlatformScreen *screen = nullptr)
 {
-    const QSize primaryScreenCursorSize(GetSystemMetrics(SM_CXCURSOR), GetSystemMetrics(SM_CYCURSOR));
+    const QSize primaryScreenCursorSize = systemCursorSize();
     if (screen) {
         // Correct the size if the DPI value of the screen differs from
         // that of the primary screen.
@@ -212,7 +213,7 @@ static inline QSize standardCursorSize() { return QSize(32, 32); }
 // createBitmapCursor() only work for standard sizes (32,48,64...), which does
 // not work when scaling the 16x16 openhand cursor bitmaps to 150% (resulting
 // in a non-standard 24x24 size).
-static QWindowsCursor::PixmapCursor createPixmapCursorFromData(const QSize &systemCursorSize,
+static QWindowsCursor::PixmapCursor createPixmapCursorFromData(const QSize &screenCursorSize,
                                           // The cursor size the bitmap is targeted for
                                           const QSize &bitmapTargetCursorSize,
                                           // The actual size of the bitmap data
@@ -222,7 +223,7 @@ static QWindowsCursor::PixmapCursor createPixmapCursorFromData(const QSize &syst
     QPixmap rawImage = QPixmap::fromImage(QBitmap::fromData(QSize(bitmapSize, bitmapSize), bits).toImage());
     rawImage.setMask(QBitmap::fromData(QSize(bitmapSize, bitmapSize), maskBits));
 
-    const qreal factor = qreal(systemCursorSize.width()) / qreal(bitmapTargetCursorSize.width());
+    const qreal factor = qreal(screenCursorSize.width()) / qreal(bitmapTargetCursorSize.width());
     // Scale images if the cursor size is significantly different, starting with 150% where the system cursor
     // size is 48.
     if (qAbs(factor - 1.0) > 0.4) {
@@ -402,13 +403,13 @@ QWindowsCursor::PixmapCursor QWindowsCursor::customCursor(Qt::CursorShape cursor
 
     switch (cursorShape) {
     case Qt::SplitVCursor:
-        return createPixmapCursorFromData(systemCursorSize(screen), standardCursorSize(), 32, vsplit_bits, vsplitm_bits);
+        return createPixmapCursorFromData(screenCursorSize(screen), standardCursorSize(), 32, vsplit_bits, vsplitm_bits);
     case Qt::SplitHCursor:
-        return createPixmapCursorFromData(systemCursorSize(screen), standardCursorSize(), 32, hsplit_bits, hsplitm_bits);
+        return createPixmapCursorFromData(screenCursorSize(screen), standardCursorSize(), 32, hsplit_bits, hsplitm_bits);
     case Qt::OpenHandCursor:
-        return createPixmapCursorFromData(systemCursorSize(screen), standardCursorSize(), 16, openhand_bits, openhandm_bits);
+        return createPixmapCursorFromData(screenCursorSize(screen), standardCursorSize(), 16, openhand_bits, openhandm_bits);
     case Qt::ClosedHandCursor:
-        return createPixmapCursorFromData(systemCursorSize(screen), standardCursorSize(), 16, closedhand_bits, closedhandm_bits);
+        return createPixmapCursorFromData(screenCursorSize(screen), standardCursorSize(), 16, closedhand_bits, closedhandm_bits);
     case Qt::DragCopyCursor:
         return QWindowsCursor::PixmapCursor(QPixmap(copyDragCursorXpmC), QPoint(0, 0));
     case Qt::DragMoveCursor:
@@ -454,7 +455,7 @@ QWindowsCursor::PixmapCursor QWindowsCursor::customCursor(Qt::CursorShape cursor
         { Qt::DragLinkCursor, 64, "draglinkcursor_64.png", 0, 0 }
     };
 
-    const QSize cursorSize = systemCursorSize(screen);
+    const QSize cursorSize = screenCursorSize(screen);
     const QWindowsCustomPngCursor *sEnd = pngCursors + sizeof(pngCursors) / sizeof(pngCursors[0]);
     const QWindowsCustomPngCursor *bestFit = nullptr;
     int sizeDelta = INT_MAX;
@@ -507,7 +508,7 @@ HCURSOR QWindowsCursor::createCursorFromShape(Qt::CursorShape cursorShape, const
 
     switch (cursorShape) {
     case Qt::BlankCursor: {
-        QImage blank = QImage(systemCursorSize(screen), QImage::Format_Mono);
+        QImage blank = QImage(systemCursorSize(), QImage::Format_Mono);
         blank.fill(0); // ignore color table
         return createBitmapCursor(blank, blank);
     }
@@ -684,6 +685,30 @@ void QWindowsCursor::setPos(const QPoint &pos)
     SetCursorPos(pos.x() , pos.y());
 }
 
+/*
+    The standard size is 32x32, even though the cursor is actually just
+    16 pixels large. If a large cursor is set in the accessibility settings,
+    then the cursor increases with 8 pixels for each step.
+*/
+QSize QWindowsCursor::size() const
+{
+    const QPair<DWORD,bool> cursorSizeSetting =
+        QWinRegistryKey(HKEY_CURRENT_USER, LR"(Control Panel\Cursors)")
+                       .dwordValue(L"CursorBaseSize");
+    const int baseSize = screenCursorSize(m_screen).width() / 2;
+    if (!cursorSizeSetting.second)
+        return QSize(baseSize / 2, baseSize / 2);
+
+    // The registry values are dpi-independent, so we need to scale the result.
+    int cursorSizeValue = cursorSizeSetting.first * m_screen->logicalDpi().first
+                                                  / m_screen->logicalBaseDpi().first;
+
+    // map from registry value 32-256 to 0-14, and from there to pixels
+    cursorSizeValue = (cursorSizeValue - 2 * baseSize) / baseSize;
+    const int cursorSize = baseSize + cursorSizeValue * (baseSize / 2);
+    return QSize(cursorSize, cursorSize);
+}
+
 QPixmap QWindowsCursor::dragDefaultCursor(Qt::DropAction action) const
 {
     switch (action) {
@@ -750,7 +775,7 @@ QPixmap QWindowsCursor::dragDefaultCursor(Qt::DropAction action) const
             && GetObject(iconInfo.hbmColor, sizeof(BITMAP), &bmColor)
             && bmColor.bmWidth == bmColor.bmWidthBytes / 4) {
             const int colorBitsLength = bmColor.bmHeight * bmColor.bmWidthBytes;
-            uchar *colorBits = new uchar[colorBitsLength];
+            auto *colorBits = new uchar[colorBitsLength];
             GetBitmapBits(iconInfo.hbmColor, colorBitsLength, colorBits);
             const QImage colorImage(colorBits, bmColor.bmWidth, bmColor.bmHeight,
                                     bmColor.bmWidthBytes, QImage::Format_ARGB32);
@@ -789,7 +814,6 @@ HCURSOR QWindowsCursor::hCursor(const QCursor &c) const
      cursor handle resource.
 
     \internal
-    \ingroup qt-lighthouse-win
     \sa QWindowsCursor
 */
 

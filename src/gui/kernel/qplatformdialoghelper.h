@@ -80,6 +80,7 @@ class Q_GUI_EXPORT QPlatformDialogHelper : public QObject
     Q_OBJECT
 public:
     enum StyleHint {
+        DialogIsQtWindow
     };
     enum DialogCode { Rejected, Accepted };
 
@@ -153,7 +154,7 @@ public:
     Q_ENUM(ButtonLayout)
 
     QPlatformDialogHelper();
-    virtual ~QPlatformDialogHelper();
+    ~QPlatformDialogHelper();
 
     virtual QVariant styleHint(StyleHint hint) const;
 
@@ -317,7 +318,9 @@ public:
         ShowDirsOnly                = 0x00000001,
         DontResolveSymlinks         = 0x00000002,
         DontConfirmOverwrite        = 0x00000004,
-        DontUseSheet                = 0x00000008,
+#if QT_DEPRECATED_SINCE(5, 14)
+        DontUseSheet Q_DECL_ENUMERATOR_DEPRECATED = 0x00000008,
+#endif
         DontUseNativeDialog         = 0x00000010,
         ReadOnly                    = 0x00000020,
         HideNameFilterDetails       = 0x00000040,
@@ -413,7 +416,7 @@ public:
     void setOptions(const QSharedPointer<QFileDialogOptions> &options);
 
     static QStringList cleanFilterList(const QString &filter);
-    static const char *filterRegExp;
+    static const char filterRegExp[];
 
 Q_SIGNALS:
     void fileSelected(const QUrl &file);

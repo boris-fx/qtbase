@@ -88,7 +88,6 @@ QT_BEGIN_NAMESPACE
     \class QWindowsKeyMapper
     \brief Translates Windows keys to QWindowSystemInterface events.
     \internal
-    \ingroup qt-lighthouse-win
 
     In addition, handles some special keys to display system menus, etc.
     The code originates from \c qkeymapper_win.cpp.
@@ -100,7 +99,7 @@ QWindowsKeyMapper::QWindowsKeyMapper()
     : m_useRTLExtensions(false), m_keyGrabber(nullptr)
 {
     memset(keyLayout, 0, sizeof(keyLayout));
-    QGuiApplication *app = static_cast<QGuiApplication *>(QGuiApplication::instance());
+    auto *app = static_cast<QGuiApplication *>(QGuiApplication::instance());
     QObject::connect(app, &QGuiApplication::applicationStateChanged,
                      app, clearKeyRecorderOnApplicationInActive);
     changeKeyboard();
@@ -554,7 +553,7 @@ QDebug operator<<(QDebug d, const KeyboardLayoutItem &k)
             if (const quint32 qtKey = k.qtKey[i]) {
                 d << '[' << i << ' ';
                 QtDebugUtils::formatQFlags(d, ModsTbl[i]);
-                d << ' ' << hex << showbase << qtKey << dec << noshowbase << ' ';
+                d << ' ' << Qt::hex << Qt::showbase << qtKey << Qt::dec << Qt::noshowbase << ' ';
                 QtDebugUtils::formatQEnum(d, Qt::Key(qtKey));
                 if (qtKey >= 32 && qtKey < 128)
                     d << " '" << char(qtKey)  << '\'';
@@ -776,7 +775,7 @@ void QWindowsKeyMapper::updatePossibleKeyCodes(unsigned char *kbdBuffer, quint32
         ::ToAscii(vk_key, scancode, kbdBuffer, reinterpret_cast<LPWORD>(&buffer), 0);
     }
     qCDebug(lcQpaEvents) << __FUNCTION__ << "for virtual key="
-        << hex << showbase << vk_key << dec << noshowbase << keyLayout[vk_key];
+        << Qt::hex << Qt::showbase << vk_key << Qt::dec << Qt::noshowbase << keyLayout[vk_key];
 }
 
 static inline QString messageKeyText(const MSG &msg)
@@ -879,21 +878,16 @@ bool QWindowsKeyMapper::translateMultimediaKeyEventInternal(QWindow *window, con
 #if defined(WM_APPCOMMAND)
     const int cmd = GET_APPCOMMAND_LPARAM(msg.lParam);
     // QTBUG-57198, do not send mouse-synthesized commands as key events in addition
+    bool skipPressRelease = false;
     switch (GET_DEVICE_LPARAM(msg.lParam)) {
     case FAPPCOMMAND_MOUSE:
         return false;
     case FAPPCOMMAND_KEY:
-        // QTBUG-62838, swallow WM_KEYDOWN, WM_KEYUP for commands that are
-        // reflected in VK(s) like VK_MEDIA_NEXT_TRACK. Don't do that for
-        // APPCOMMAND_BROWSER_HOME as that one does not trigger two events
-        if (cmd != APPCOMMAND_BROWSER_HOME) {
-            MSG peekedMsg;
-            if (PeekMessage(&peekedMsg, msg.hwnd, 0, 0, PM_NOREMOVE)
-                && peekedMsg.message == WM_KEYDOWN) {
-                PeekMessage(&peekedMsg, msg.hwnd, 0, 0, PM_REMOVE);
-                PeekMessage(&peekedMsg, msg.hwnd, 0, 0, PM_REMOVE);
-            }
-        }
+        // QTBUG-62838, use WM_KEYDOWN/WM_KEYUP for commands that are reflected
+        // in VK(s) like VK_MEDIA_NEXT_TRACK, to get correct codes and autorepeat.
+        // Don't do that for APPCOMMAND_BROWSER_HOME as that one does not trigger two events.
+        if (cmd != APPCOMMAND_BROWSER_HOME)
+            skipPressRelease = true;
         break;
     }
 
@@ -908,7 +902,8 @@ bool QWindowsKeyMapper::translateMultimediaKeyEventInternal(QWindow *window, con
         return false;
 
     const int qtKey = int(CmdTbl[cmd]);
-    sendExtendedPressRelease(receiver, qtKey, Qt::KeyboardModifier(state), 0, 0, 0);
+    if (!skipPressRelease)
+        sendExtendedPressRelease(receiver, qtKey, Qt::KeyboardModifier(state), 0, 0, 0);
     // QTBUG-43343: Make sure to return false if Qt does not handle the key, otherwise,
     // the keys are not passed to the active media player.
 # if QT_CONFIG(shortcut)
@@ -954,7 +949,7 @@ bool QWindowsKeyMapper::translateKeyEventInternal(QWindow *window, MSG msg,
     const UINT msgType = msg.message;
 
     const quint32 scancode = (msg.lParam >> 16) & scancodeBitmask;
-    quint32 vk_key = quint32(msg.wParam);
+    auto vk_key = quint32(msg.wParam);
     quint32 nModifiers = 0;
 
     QWindow *receiver = m_keyGrabber ? m_keyGrabber : window;
@@ -1023,14 +1018,14 @@ bool QWindowsKeyMapper::translateKeyEventInternal(QWindow *window, MSG msg,
                 if (dirStatus == VK_LSHIFT
                         && ((msg.wParam == VK_SHIFT && GetKeyState(VK_LCONTROL))
                             || (msg.wParam == VK_CONTROL && GetKeyState(VK_LSHIFT)))) {
-                    sendExtendedPressRelease(receiver, Qt::Key_Direction_L, nullptr,
+                    sendExtendedPressRelease(receiver, Qt::Key_Direction_L, {},
                                              scancode, vk_key, nModifiers, QString(), false);
                     result = true;
                     dirStatus = 0;
                 } else if (dirStatus == VK_RSHIFT
                            && ( (msg.wParam == VK_SHIFT && GetKeyState(VK_RCONTROL))
                                 || (msg.wParam == VK_CONTROL && GetKeyState(VK_RSHIFT)))) {
-                    sendExtendedPressRelease(receiver, Qt::Key_Direction_R, nullptr,
+                    sendExtendedPressRelease(receiver, Qt::Key_Direction_R, {},
                                              scancode, vk_key, nModifiers, QString(), false);
                     result = true;
                     dirStatus = 0;
@@ -1186,7 +1181,7 @@ bool QWindowsKeyMapper::translateKeyEventInternal(QWindow *window, MSG msg,
         // results, if we map this virtual key-code directly (for eg '?' US layouts). So try
         // to find the correct key using the current message parameters & keyboard state.
         if (uch.isNull() && msgType == WM_IME_KEYDOWN) {
-            const QWindowsInputContext *windowsInputContext =
+            const auto *windowsInputContext =
                 qobject_cast<const QWindowsInputContext *>(QWindowsIntegration::instance()->inputContext());
             if (!(windowsInputContext && windowsInputContext->isComposing()))
                 vk_key = ImmGetVirtualKey(reinterpret_cast<HWND>(window->winId()));
@@ -1305,7 +1300,23 @@ bool QWindowsKeyMapper::translateKeyEventInternal(QWindow *window, MSG msg,
                       || code == Qt::Key_Control
                       || code == Qt::Key_Meta
                       || code == Qt::Key_Alt)) {
-            // Someone ate the key down event
+
+            // Workaround for QTBUG-77153:
+            // The Surface Pen eraser button generates Meta+F18/19/20 keystrokes,
+            // but when it is not touching the screen the Fn Down is eaten and only
+            // a Fn Up with the previous state as "not pressed" is generated, which
+            // would be ignored. We detect this case and synthesize the expected events.
+            if ((msg.lParam & 0x40000000) == 0 &&
+                    Qt::KeyboardModifier(state) == Qt::NoModifier &&
+                    ((code == Qt::Key_F18) || (code == Qt::Key_F19) || (code == Qt::Key_F20))) {
+                QWindowSystemInterface::handleExtendedKeyEvent(receiver, QEvent::KeyPress, code,
+                                                               Qt::MetaModifier, scancode,
+                                                               quint32(msg.wParam), MetaLeft);
+                QWindowSystemInterface::handleExtendedKeyEvent(receiver, QEvent::KeyRelease, code,
+                                                               Qt::NoModifier, scancode,
+                                                               quint32(msg.wParam), 0);
+                result = true;
+            }
         } else {
             if (!code)
                 code = asciiToKeycode(rec->ascii ? char(rec->ascii) : char(msg.wParam), state);
@@ -1376,7 +1387,7 @@ QList<int> QWindowsKeyMapper::possibleKeys(const QKeyEvent *e) const
         if (key && key != baseKey && ((keyMods & neededMods) == neededMods)) {
             const Qt::KeyboardModifiers missingMods = keyMods & ~neededMods;
             const int matchedKey = int(key) + missingMods;
-            const QList<int>::iterator it =
+            const auto it =
                 std::find_if(result.begin(), result.end(),
                              [key] (int k) { return (k & ~Qt::KeyboardModifierMask) == key; });
             // QTBUG-67200: Use the match with the least modifiers (prefer
@@ -1388,7 +1399,7 @@ QList<int> QWindowsKeyMapper::possibleKeys(const QKeyEvent *e) const
         }
     }
     qCDebug(lcQpaEvents) << __FUNCTION__  << e << "nativeVirtualKey="
-        << showbase << hex << e->nativeVirtualKey() << dec << noshowbase
+        << Qt::showbase << Qt::hex << e->nativeVirtualKey() << Qt::dec << Qt::noshowbase
         << e->modifiers() << kbItem << "\n  returns" << formatKeys(result);
     return result;
 }

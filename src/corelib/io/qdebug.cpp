@@ -147,7 +147,7 @@ using QtMiscUtils::fromHex;
 // Has been defined in the header / inlined before Qt 5.4
 QDebug::~QDebug()
 {
-    if (!--stream->ref) {
+    if (stream && !--stream->ref) {
         if (stream->space && stream->buffer.endsWith(QLatin1Char(' ')))
             stream->buffer.chop(1);
         if (stream->message_output) {
@@ -166,7 +166,7 @@ void QDebug::putUcs4(uint ucs4)
 {
     maybeQuote('\'');
     if (ucs4 < 0x20) {
-        stream->ts << "\\x" << hex << ucs4 << reset;
+        stream->ts << "\\x" << Qt::hex << ucs4 << Qt::reset;
     } else if (ucs4 < 0x80) {
         stream->ts << char(ucs4);
     } else {
@@ -174,7 +174,7 @@ void QDebug::putUcs4(uint ucs4)
             stream->ts << "\\u" << qSetFieldWidth(4);
         else
             stream->ts << "\\U" << qSetFieldWidth(8);
-        stream->ts << hex << qSetPadChar(QLatin1Char('0')) << ucs4 << reset;
+        stream->ts << Qt::hex << qSetPadChar(QLatin1Char('0')) << ucs4 << Qt::reset;
     }
     maybeQuote('\'');
 }
@@ -356,7 +356,7 @@ QDebug &QDebug::resetFormat()
     stream->space = true;
     if (stream->context.version > 1)
         stream->flags = 0;
-    stream->setVerbosity(Stream::DefaultVerbosity);
+    stream->setVerbosity(DefaultVerbosity);
     return *this;
 }
 
@@ -461,7 +461,7 @@ QDebug &QDebug::resetFormat()
 
     The allowed range is from 0 to 7. The default value is 2.
 
-    \sa setVerbosity()
+    \sa setVerbosity(), VerbosityLevel
 */
 
 /*!
@@ -472,7 +472,31 @@ QDebug &QDebug::resetFormat()
 
     The allowed range is from 0 to 7. The default value is 2.
 
-    \sa verbosity()
+    \sa verbosity(), VerbosityLevel
+*/
+
+/*!
+    \fn QDebug &QDebug::verbosity(int verbosityLevel)
+    \since 5.13
+
+    Sets the verbosity of the stream to \a verbosityLevel and returns a reference to the stream.
+
+    The allowed range is from 0 to 7. The default value is 2.
+
+    \sa verbosity(), setVerbosity(), VerbosityLevel
+*/
+
+/*!
+    \enum QDebug::VerbosityLevel
+    \since 5.13
+
+    This enum describes the range of verbosity levels.
+
+    \value MinimumVerbosity
+    \value DefaultVerbosity
+    \value MaximumVerbosity
+
+    \sa verbosity(), setVerbosity()
 */
 
 /*!
@@ -810,7 +834,7 @@ QDebug &QDebug::resetFormat()
     that QDebugStateSaver stores for the duration of the current block.
 
     The settings of the internal QTextStream are also saved and restored,
-    so that using << hex in a QDebug operator doesn't affect other QDebug
+    so that using << Qt::hex in a QDebug operator doesn't affect other QDebug
     operators.
 
     \since 5.1
@@ -819,36 +843,34 @@ QDebug &QDebug::resetFormat()
 class QDebugStateSaverPrivate
 {
 public:
-    QDebugStateSaverPrivate(QDebug &dbg)
-        : m_dbg(dbg),
-          m_spaces(dbg.autoInsertSpaces()),
-          m_flags(0),
-          m_streamParams(dbg.stream->ts.d_ptr->params)
+    QDebugStateSaverPrivate(QDebug::Stream *stream)
+        : m_stream(stream),
+          m_spaces(stream->space),
+          m_flags(stream->context.version > 1 ? stream->flags : 0),
+          m_streamParams(stream->ts.d_ptr->params)
     {
-        if (m_dbg.stream->context.version > 1)
-            m_flags = m_dbg.stream->flags;
     }
     void restoreState()
     {
-        const bool currentSpaces = m_dbg.autoInsertSpaces();
+        const bool currentSpaces = m_stream->space;
         if (currentSpaces && !m_spaces)
-            if (m_dbg.stream->buffer.endsWith(QLatin1Char(' ')))
-                m_dbg.stream->buffer.chop(1);
+            if (m_stream->buffer.endsWith(QLatin1Char(' ')))
+                m_stream->buffer.chop(1);
 
-        m_dbg.setAutoInsertSpaces(m_spaces);
-        m_dbg.stream->ts.d_ptr->params = m_streamParams;
-        if (m_dbg.stream->context.version > 1)
-            m_dbg.stream->flags = m_flags;
+        m_stream->space = m_spaces;
+        m_stream->ts.d_ptr->params = m_streamParams;
+        if (m_stream->context.version > 1)
+            m_stream->flags = m_flags;
 
         if (!currentSpaces && m_spaces)
-            m_dbg.stream->ts << ' ';
+            m_stream->ts << ' ';
     }
 
-    QDebug &m_dbg;
+    QDebug::Stream *m_stream;
 
     // QDebug state
     const bool m_spaces;
-    int m_flags;
+    const int m_flags;
 
     // QTextStream state
     const QTextStreamPrivate::Params m_streamParams;
@@ -862,7 +884,7 @@ public:
     \sa QDebug::setAutoInsertSpaces(), QDebug::autoInsertSpaces()
 */
 QDebugStateSaver::QDebugStateSaver(QDebug &dbg)
-    : d(new QDebugStateSaverPrivate(dbg))
+    : d(new QDebugStateSaverPrivate(dbg.stream))
 {
 }
 
@@ -892,37 +914,127 @@ void qt_QMetaEnum_flagDebugOperator(QDebug &debug, size_t sizeofT, int value)
 
 #ifndef QT_NO_QOBJECT
 /*!
+    \fn QDebug qt_QMetaEnum_debugOperator(QDebug &, int value, const QMetaObject *, const char *name)
     \internal
+
+    Formats the given enum \a value for debug output.
+
+    The supported verbosity are:
+
+      0: Just the key, or value with enum name if no key is found:
+
+         MyEnum2
+         MyEnum(123)
+         MyScopedEnum::Enum3
+         MyScopedEnum(456)
+
+      1: Same as 0, but treating all enums as scoped:
+
+         MyEnum::MyEnum2
+         MyEnum(123)
+         MyScopedEnum::Enum3
+         MyScopedEnum(456)
+
+      2: The QDebug default. Same as 0, and includes class/namespace scope:
+
+         MyNamespace::MyClass::MyEnum2
+         MyNamespace::MyClass::MyEnum(123)
+         MyNamespace::MyClass::MyScopedEnum::Enum3
+         MyNamespace::MyClass::MyScopedEnum(456)
+
+      3: Same as 2, but treating all enums as scoped:
+
+         MyNamespace::MyClass::MyEnum::MyEnum2
+         MyNamespace::MyClass::MyEnum(123)
+         MyNamespace::MyClass::MyScopedEnum::Enum3
+         MyNamespace::MyClass::MyScopedEnum(456)
  */
 QDebug qt_QMetaEnum_debugOperator(QDebug &dbg, int value, const QMetaObject *meta, const char *name)
 {
     QDebugStateSaver saver(dbg);
     dbg.nospace();
     QMetaEnum me = meta->enumerator(meta->indexOfEnumerator(name));
-    const char *key = me.valueToKey(value);
-    if (key) {
+
+    const int verbosity = dbg.verbosity();
+    if (verbosity >= QDebug::DefaultVerbosity) {
         if (const char *scope = me.scope())
             dbg << scope << "::";
-        if (me.isScoped())
-            dbg << me.enumName() << "::";
-        dbg << key;
-    } else {
-        dbg << meta->className() << "::" << name << "(" << value << ")";
     }
+
+    const char *key = me.valueToKey(value);
+    const bool scoped = me.isScoped() || verbosity & 1;
+    if (scoped || !key)
+        dbg << me.enumName() << (!key ? "(" : "::");
+
+    if (key)
+        dbg << key;
+    else
+        dbg << value << ")";
+
     return dbg;
 }
 
+/*!
+    \fn QDebug qt_QMetaEnum_flagDebugOperator(QDebug &, quint64 value, const QMetaObject *, const char *name)
+    \internal
+
+    Formats the given flag \a value for debug output.
+
+    The supported verbosity are:
+
+      0: Just the key(s):
+
+         MyFlag1
+         MyFlag2|MyFlag3
+         MyScopedFlag(MyFlag2)
+         MyScopedFlag(MyFlag2|MyFlag3)
+
+      1: Same as 0, but treating all flags as scoped:
+
+         MyFlag(MyFlag1)
+         MyFlag(MyFlag2|MyFlag3)
+         MyScopedFlag(MyFlag2)
+         MyScopedFlag(MyFlag2|MyFlag3)
+
+      2: The QDebug default. Same as 1, and includes class/namespace scope:
+
+         QFlags<MyNamespace::MyClass::MyFlag>(MyFlag1)
+         QFlags<MyNamespace::MyClass::MyFlag>(MyFlag2|MyFlag3)
+         QFlags<MyNamespace::MyClass::MyScopedFlag>(MyFlag2)
+         QFlags<MyNamespace::MyClass::MyScopedFlag>(MyFlag2|MyFlag3)
+ */
 QDebug qt_QMetaEnum_flagDebugOperator(QDebug &debug, quint64 value, const QMetaObject *meta, const char *name)
 {
+    const int verbosity = debug.verbosity();
+
     QDebugStateSaver saver(debug);
     debug.resetFormat();
     debug.noquote();
     debug.nospace();
-    debug << "QFlags<";
+
     const QMetaEnum me = meta->enumerator(meta->indexOfEnumerator(name));
-    if (const char *scope = me.scope())
-        debug << scope << "::";
-    debug << me.enumName() << ">(" << me.valueToKeys(value) << ')';
+
+    const bool classScope = verbosity >= QDebug::DefaultVerbosity;
+    if (classScope) {
+        debug << "QFlags<";
+
+        if (const char *scope = me.scope())
+            debug << scope << "::";
+    }
+
+    const bool enumScope = me.isScoped() || verbosity > QDebug::MinimumVerbosity;
+    if (enumScope) {
+        debug << me.enumName();
+        if (classScope)
+            debug << ">";
+        debug << "(";
+    }
+
+    debug << me.valueToKeys(value);
+
+    if (enumScope)
+        debug << ')';
+
     return debug;
 }
 #endif // !QT_NO_QOBJECT

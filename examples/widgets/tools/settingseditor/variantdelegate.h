@@ -51,15 +51,15 @@
 #ifndef VARIANTDELEGATE_H
 #define VARIANTDELEGATE_H
 
-#include <QItemDelegate>
+#include <QStyledItemDelegate>
 #include <QRegularExpression>
 
-class VariantDelegate : public QItemDelegate
+class VariantDelegate : public QStyledItemDelegate
 {
     Q_OBJECT
 
 public:
-    VariantDelegate(QObject *parent = 0);
+    VariantDelegate(QObject *parent = nullptr);
 
     void paint(QPainter *painter, const QStyleOptionViewItem &option,
                const QModelIndex &index) const override;
@@ -69,7 +69,7 @@ public:
     void setModelData(QWidget *editor, QAbstractItemModel *model,
                       const QModelIndex &index) const override;
 
-    static bool isSupportedType(QVariant::Type type);
+    static bool isSupportedType(int type);
     static QString displayText(const QVariant &value);
 
 private:

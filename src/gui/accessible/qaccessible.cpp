@@ -350,6 +350,7 @@ Q_LOGGING_CATEGORY(lcAccessibilityCore, "qt.accessibility.core");
     \value MenuItem         An item in a menu or menu bar.
     \value NoRole           The object has no role. This usually indicates an invalid object.
     \value Note             A section whose content is parenthetic or ancillary to the main content of the resource.
+    \value Notification     An object that represents a notification (e.g. in the system tray). This role only has an effect on Linux.
     \value PageTab          A page tab that the user can select to switch to a different page in a dialog.
     \value PageTabList      A list of page tabs.
     \value Paragraph        A paragraph of text (usually found in documents).
@@ -477,15 +478,15 @@ Q_GLOBAL_STATIC(QAccessiblePluginsHash, qAccessiblePlugins)
 Q_GLOBAL_STATIC(QList<QAccessible::InterfaceFactory>, qAccessibleFactories)
 Q_GLOBAL_STATIC(QList<QAccessible::ActivationObserver *>, qAccessibleActivationObservers)
 
-QAccessible::UpdateHandler QAccessible::updateHandler = 0;
-QAccessible::RootObjectHandler QAccessible::rootObjectHandler = 0;
+QAccessible::UpdateHandler QAccessible::updateHandler = nullptr;
+QAccessible::RootObjectHandler QAccessible::rootObjectHandler = nullptr;
 
 static bool cleanupAdded = false;
 
 static QPlatformAccessibility *platformAccessibility()
 {
     QPlatformIntegration *pfIntegration = QGuiApplicationPrivate::platformIntegration();
-    return pfIntegration ? pfIntegration->accessibility() : 0;
+    return pfIntegration ? pfIntegration->accessibility() : nullptr;
 }
 
 /*!
@@ -526,7 +527,7 @@ static void qAccessibleCleanup()
     to it.
 
     If the key and the QObject does not have a corresponding
-    QAccessibleInterface, a null-pointer will be returned.
+    QAccessibleInterface, \nullptr will be returned.
 
     Installed factories are called by queryAccessibilityInterface() until
     one provides an interface.
@@ -672,7 +673,7 @@ void QAccessible::removeActivationObserver(ActivationObserver *observer)
 QAccessibleInterface *QAccessible::queryAccessibleInterface(QObject *object)
 {
     if (!object)
-        return 0;
+        return nullptr;
 
     if (Id id = QAccessibleCache::instance()->objectToId.value(object))
         return QAccessibleCache::instance()->interfaceForId(id);
@@ -695,7 +696,7 @@ QAccessibleInterface *QAccessible::queryAccessibleInterface(QObject *object)
         // Find a QAccessiblePlugin (factory) for the class name. If there's
         // no entry in the cache try to create it using the plugin loader.
         if (!qAccessiblePlugins()->contains(cn)) {
-            QAccessiblePlugin *factory = 0; // 0 means "no plugin found". This is cached as well.
+            QAccessiblePlugin *factory = nullptr; // 0 means "no plugin found". This is cached as well.
             const int index = loader()->indexOf(cn);
             if (index != -1)
                 factory = qobject_cast<QAccessiblePlugin *>(loader()->instance(index));
@@ -723,7 +724,7 @@ QAccessibleInterface *QAccessible::queryAccessibleInterface(QObject *object)
         return appInterface;
     }
 
-    return 0;
+    return nullptr;
 }
 
 /*!
@@ -1112,7 +1113,7 @@ QAccessibleInterface::relations(QAccessible::Relation /*match = QAccessible::All
 */
 QAccessibleInterface *QAccessibleInterface::focusChild() const
 {
-    return 0;
+    return nullptr;
 }
 
 /*!
@@ -1757,12 +1758,12 @@ QAccessibleTextSelectionEvent::~QAccessibleTextSelectionEvent()
 */
 QAccessibleInterface *QAccessibleEvent::accessibleInterface() const
 {
-    if (m_object == 0)
+    if (m_object == nullptr)
         return QAccessible::accessibleInterface(m_uniqueId);
 
     QAccessibleInterface *iface = QAccessible::queryAccessibleInterface(m_object);
     if (!iface || !iface->isValid())
-        return 0;
+        return nullptr;
 
     if (m_child >= 0) {
         QAccessibleInterface *child = iface->child(m_child);
@@ -1790,7 +1791,7 @@ QAccessibleInterface *QAccessibleEvent::accessibleInterface() const
   */
 QWindow *QAccessibleInterface::window() const
 {
-    return 0;
+    return nullptr;
 }
 
 /*!
@@ -1815,11 +1816,6 @@ void QAccessibleInterface::virtual_hook(int /*id*/, void * /*data*/)
     information about a widget or object through the specialized
     interfaces. For example a line edit should implement the
     QAccessibleTextInterface.
-
-    Qt's QLineEdit for example has its accessibility support
-    implemented in QAccessibleLineEdit.
-
-    \snippet code/src_gui_accessible_qaccessible.cpp 3
 
     \sa QAccessible::InterfaceType, QAccessibleTextInterface,
     QAccessibleValueInterface, QAccessibleActionInterface,
@@ -1858,7 +1854,7 @@ Q_GUI_EXPORT QDebug operator<<(QDebug d, const QAccessibleInterface *iface)
         return d;
     }
     d.nospace();
-    d << "QAccessibleInterface(" << hex << (const void *) iface << dec;
+    d << "QAccessibleInterface(" << Qt::hex << (const void *) iface << Qt::dec;
     if (iface->isValid()) {
         d << " name=" << iface->text(QAccessible::Name) << ' ';
         d << "role=" << qAccessibleRoleString(iface->role()) << ' ';
@@ -1897,7 +1893,7 @@ QDebug operator<<(QDebug d, const QAccessibleEvent &ev)
     QDebugStateSaver saver(d);
     d.nospace() << "QAccessibleEvent(";
     if (ev.object()) {
-        d.nospace() << "object=" << hex << ev.object() << dec;
+        d.nospace() << "object=" << Qt::hex << ev.object() << Qt::dec;
         d.nospace() << "child=" << ev.child();
     } else {
         d.nospace() << "no object, uniqueId=" << ev.uniqueId();
@@ -2028,7 +2024,7 @@ QAccessibleTextInterface::~QAccessibleTextInterface()
     \fn void QAccessibleTextInterface::selection(int selectionIndex, int *startOffset, int *endOffset) const
 
     Returns a selection. The size of the selection is returned in \a startOffset and \a endOffset.
-    If there is no selection both \a startOffset and \a endOffset are 0.
+    If there is no selection both \a startOffset and \a endOffset are \nullptr.
 
     The accessibility APIs support multiple selections. For most widgets though, only one selection
     is supported with \a selectionIndex equal to 0.

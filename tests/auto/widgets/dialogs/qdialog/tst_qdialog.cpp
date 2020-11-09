@@ -26,6 +26,7 @@
 **
 ****************************************************************************/
 
+#include "../../../shared/highdpi.h"
 
 #include <QtTest/QtTest>
 
@@ -51,7 +52,9 @@ class DummyDialog : public QDialog
 {
 public:
     DummyDialog(): QDialog() {}
+#if QT_DEPRECATED_SINCE(5, 13)
     using QDialog::showExtension;
+#endif
 };
 
 class tst_QDialog : public QObject
@@ -63,8 +66,10 @@ public:
 private slots:
     void cleanup();
     void getSetCheck();
+#if QT_DEPRECATED_SINCE(5, 13)
     void showExtension_data();
     void showExtension();
+#endif
     void defaultButtons();
     void showMaximized();
     void showMinimized();
@@ -75,6 +80,9 @@ private slots:
     void deleteInExec();
 #if QT_CONFIG(sizegrip)
     void showSizeGrip();
+#if QT_DEPRECATED_SINCE(5, 13)
+    void showSizeGrip_deprecated();
+#endif
 #endif
     void setVisible();
     void reject();
@@ -88,6 +96,7 @@ private slots:
 void tst_QDialog::getSetCheck()
 {
     QDialog obj1;
+#if QT_DEPRECATED_SINCE(5, 13)
     // QWidget* QDialog::extension()
     // void QDialog::setExtension(QWidget*)
     QWidget *var1 = new QWidget;
@@ -96,6 +105,7 @@ void tst_QDialog::getSetCheck()
     obj1.setExtension((QWidget *)0);
     QCOMPARE((QWidget *)0, obj1.extension());
     // No delete var1, since setExtension takes ownership
+#endif
 
     // int QDialog::result()
     // void QDialog::setResult(int)
@@ -145,6 +155,7 @@ void tst_QDialog::cleanup()
     QVERIFY(QApplication::topLevelWidgets().isEmpty());
 }
 
+#if QT_DEPRECATED_SINCE(5, 13)
 void tst_QDialog::showExtension_data()
 {
     QTest::addColumn<QSize>("dlgSize");
@@ -196,6 +207,7 @@ void tst_QDialog::showExtension()
 
     testWidget.setExtension( 0 );
 }
+#endif
 
 void tst_QDialog::defaultButtons()
 {
@@ -210,7 +222,7 @@ void tst_QDialog::defaultButtons()
 
     testWidget.show();
     QApplication::setActiveWindow(&testWidget);
-    QVERIFY(QTest::qWaitForWindowActive(&testWidget));
+    QVERIFY(QTest::qWaitForWindowExposed(&testWidget));
 
     push->setDefault(true);
     QVERIFY(push->isDefault());
@@ -388,8 +400,10 @@ void tst_QDialog::toolDialogPosition()
     dialog.move(QPoint(100,100));
     const QPoint beforeShowPosition = dialog.pos();
     dialog.show();
+    const int fuzz = int(dialog.devicePixelRatioF());
     const QPoint afterShowPosition = dialog.pos();
-    QCOMPARE(afterShowPosition, beforeShowPosition);
+    QVERIFY2(HighDpi::fuzzyCompare(afterShowPosition, beforeShowPosition, fuzz),
+             HighDpi::msgPointMismatch(afterShowPosition, beforeShowPosition).constData());
 }
 
 class Dialog : public QDialog
@@ -419,8 +433,36 @@ void tst_QDialog::deleteInExec()
 }
 
 #if QT_CONFIG(sizegrip)
+
 // From Task 124269
 void tst_QDialog::showSizeGrip()
+{
+    QDialog dialog(nullptr);
+    dialog.show();
+    QWidget *ext = new QWidget(&dialog);
+    QVERIFY(!dialog.isSizeGripEnabled());
+
+    dialog.setSizeGripEnabled(true);
+    QPointer<QSizeGrip> sizeGrip = dialog.findChild<QSizeGrip *>();
+    QVERIFY(sizeGrip);
+    QVERIFY(sizeGrip->isVisible());
+    QVERIFY(dialog.isSizeGripEnabled());
+
+    dialog.setSizeGripEnabled(false);
+    QVERIFY(!dialog.isSizeGripEnabled());
+
+    dialog.setSizeGripEnabled(true);
+    sizeGrip = dialog.findChild<QSizeGrip *>();
+    QVERIFY(sizeGrip);
+    QVERIFY(sizeGrip->isVisible());
+    sizeGrip->hide();
+    dialog.hide();
+    dialog.show();
+    QVERIFY(!sizeGrip->isVisible());
+}
+
+#if QT_DEPRECATED_SINCE(5, 13)
+void tst_QDialog::showSizeGrip_deprecated()
 {
     QDialog dialog(0);
     dialog.show();
@@ -473,7 +515,9 @@ void tst_QDialog::showSizeGrip()
     dialog.show();
     QVERIFY(!sizeGrip->isVisible());
 }
-#endif
+#endif // QT_DEPRECATED_SINCE(5, 13)
+
+#endif // QT_CONFIG(sizegrip)
 
 void tst_QDialog::setVisible()
 {
@@ -563,7 +607,7 @@ void tst_QDialog::snapToDefaultButton()
                                + QPoint(100, 100), QSize(200, 200));
     const QPoint startingPos = dialogGeometry.bottomRight() + QPoint(100, 100);
     QCursor::setPos(startingPos);
-#ifdef Q_OS_OSX
+#ifdef Q_OS_MACOS
     // On OS X we use CGEventPost to move the cursor, it needs at least
     // some time before the event handled and the position really set.
     QTest::qWait(100);

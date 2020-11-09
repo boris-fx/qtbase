@@ -371,7 +371,7 @@ bool QTextCursorPrivate::movePosition(QTextCursor::MoveOperation op, QTextCursor
 
     int newPosition = position;
 
-    if (mode == QTextCursor::KeepAnchor && complexSelectionTable() != 0) {
+    if (mode == QTextCursor::KeepAnchor && complexSelectionTable() != nullptr) {
         if ((op >= QTextCursor::EndOfLine && op <= QTextCursor::NextWord)
                 || (op >= QTextCursor::Right && op <= QTextCursor::WordRight)) {
             QTextTable *t = qobject_cast<QTextTable *>(priv->frameAt(position));
@@ -671,7 +671,7 @@ bool QTextCursorPrivate::movePosition(QTextCursor::MoveOperation op, QTextCursor
 QTextTable *QTextCursorPrivate::complexSelectionTable() const
 {
     if (position == anchor)
-        return 0;
+        return nullptr;
 
     QTextTable *t = qobject_cast<QTextTable *>(priv->frameAt(position));
     if (t) {
@@ -681,7 +681,7 @@ QTextTable *QTextCursorPrivate::complexSelectionTable() const
         Q_ASSERT(cell_anchor.isValid());
 
         if (cell_pos == cell_anchor)
-            t = 0;
+            t = nullptr;
     }
     return t;
 }
@@ -1044,7 +1044,7 @@ QTextLayout *QTextCursorPrivate::blockLayout(QTextBlock &block) const{
     Constructs a null cursor.
  */
 QTextCursor::QTextCursor()
-    : d(0)
+    : d(nullptr)
 {
 }
 
@@ -1145,6 +1145,15 @@ bool QTextCursor::isNull() const
     \a pos using a \c MoveMode specified by \a m. The cursor is positioned
     between characters.
 
+    \note The "characters" in this case refer to the string of QChar
+    objects, i.e. 16-bit Unicode characters, and \a pos is considered
+    an index into this string. This does not necessarily correspond to
+    individual graphemes in the writing system, as a single grapheme may
+    be represented by multiple Unicode characters, such as in the case
+    of surrogate pairs, linguistic ligatures or diacritics. For a more
+    generic approach to navigating the document, use movePosition(),
+    which will respect the actual grapheme boundaries in the text.
+
     \sa position(), movePosition(), anchor()
 */
 void QTextCursor::setPosition(int pos, MoveMode m)
@@ -1176,6 +1185,13 @@ void QTextCursor::setPosition(int pos, MoveMode m)
     Returns the absolute position of the cursor within the document.
     The cursor is positioned between characters.
 
+    \note The "characters" in this case refer to the string of QChar
+    objects, i.e. 16-bit Unicode characters, and the position is considered
+    an index into this string. This does not necessarily correspond to
+    individual graphemes in the writing system, as a single grapheme may
+    be represented by multiple Unicode characters, such as in the case
+    of surrogate pairs, linguistic ligatures or diacritics.
+
     \sa setPosition(), movePosition(), anchor(), positionInBlock()
 */
 int QTextCursor::position() const
@@ -1191,6 +1207,13 @@ int QTextCursor::position() const
     The cursor is positioned between characters.
 
     This is equivalent to \c{ position() - block().position()}.
+
+    \note The "characters" in this case refer to the string of QChar
+    objects, i.e. 16-bit Unicode characters, and the position is considered
+    an index into this string. This does not necessarily correspond to
+    individual graphemes in the writing system, as a single grapheme may
+    be represented by multiple Unicode characters, such as in the case
+    of surrogate pairs, linguistic ligatures or diacritics.
 
     \sa position()
 */
@@ -1600,7 +1623,7 @@ bool QTextCursor::hasComplexSelection() const
     if (!d)
         return false;
 
-    return d->complexSelectionTable() != 0;
+    return d->complexSelectionTable() != nullptr;
 }
 
 /*!
@@ -2088,7 +2111,7 @@ QTextList *QTextCursor::insertList(QTextListFormat::Style style)
 QTextList *QTextCursor::createList(const QTextListFormat &format)
 {
     if (!d || !d->priv)
-        return 0;
+        return nullptr;
 
     QTextList *list = static_cast<QTextList *>(d->priv->createObject(format));
     QTextBlockFormat modifier;
@@ -2123,7 +2146,7 @@ QTextList *QTextCursor::createList(QTextListFormat::Style style)
 QTextList *QTextCursor::currentList() const
 {
     if (!d || !d->priv)
-        return 0;
+        return nullptr;
 
     QTextBlockFormat b = blockFormat();
     QTextObject *o = d->priv->objectForFormat(b);
@@ -2163,7 +2186,7 @@ QTextTable *QTextCursor::insertTable(int rows, int cols)
 QTextTable *QTextCursor::insertTable(int rows, int cols, const QTextTableFormat &format)
 {
     if(!d || !d->priv || rows == 0 || cols == 0)
-        return 0;
+        return nullptr;
 
     int pos = d->position;
     QTextTable *t = QTextTablePrivate::createTable(d->priv, d->position, rows, cols, format);
@@ -2183,7 +2206,7 @@ QTextTable *QTextCursor::insertTable(int rows, int cols, const QTextTableFormat 
 QTextTable *QTextCursor::currentTable() const
 {
     if(!d || !d->priv)
-        return 0;
+        return nullptr;
 
     QTextFrame *frame = d->priv->frameAt(d->position);
     while (frame) {
@@ -2192,7 +2215,7 @@ QTextTable *QTextCursor::currentTable() const
             return table;
         frame = frame->parentFrame();
     }
-    return 0;
+    return nullptr;
 }
 
 /*!
@@ -2207,7 +2230,7 @@ QTextTable *QTextCursor::currentTable() const
 QTextFrame *QTextCursor::insertFrame(const QTextFrameFormat &format)
 {
     if (!d || !d->priv)
-        return 0;
+        return nullptr;
 
     return d->priv->insertFrame(selectionStart(), selectionEnd(), format);
 }
@@ -2220,7 +2243,7 @@ QTextFrame *QTextCursor::insertFrame(const QTextFrameFormat &format)
 QTextFrame *QTextCursor::currentFrame() const
 {
     if(!d || !d->priv)
-        return 0;
+        return nullptr;
 
     return d->priv->frameAt(d->position);
 }
@@ -2238,6 +2261,7 @@ void QTextCursor::insertFragment(const QTextDocumentFragment &fragment)
     d->remove();
     fragment.d->insert(*this);
     d->priv->endEditBlock();
+    d->setX();
 
     if (fragment.d && fragment.d->doc)
         d->priv->mergeCachedResources(fragment.d->doc->docHandle());
@@ -2580,7 +2604,7 @@ QTextDocument *QTextCursor::document() const
 {
     if (d->priv)
         return d->priv->document();
-    return 0; // document went away
+    return nullptr; // document went away
 }
 
 QT_END_NAMESPACE

@@ -1,9 +1,5 @@
 TARGET = qtforandroid
 
-# STATICPLUGIN needed because there's a Q_IMPORT_PLUGIN in androidjnimain.cpp
-# Yes, the plugin imports itself statically
-DEFINES += QT_STATICPLUGIN
-
 LIBS += -ljnigraphics -landroid
 
 QT += \
@@ -19,7 +15,9 @@ INCLUDEPATH += \
     $$PWD \
     $$QT_SOURCE_TREE/src/3rdparty/android
 
-SOURCES += $$PWD/androidplatformplugin.cpp \
+SOURCES += $$PWD/main.cpp \
+           $$PWD/androidplatformplugin.cpp \
+           $$PWD/androidcontentfileengine.cpp \
            $$PWD/androiddeadlockprotector.cpp \
            $$PWD/androidjnimain.cpp \
            $$PWD/androidjniaccessibility.cpp \
@@ -46,9 +44,11 @@ SOURCES += $$PWD/androidplatformplugin.cpp \
            $$PWD/qandroidplatformopenglcontext.cpp \
            $$PWD/qandroidplatformforeignwindow.cpp \
            $$PWD/qandroideventdispatcher.cpp \
-           $$PWD/qandroidplatformoffscreensurface.cpp
+           $$PWD/qandroidplatformoffscreensurface.cpp \
+           $$PWD/qandroidplatformfiledialoghelper.cpp
 
 HEADERS += $$PWD/qandroidplatformintegration.h \
+           $$PWD/androidcontentfileengine.h \
            $$PWD/androiddeadlockprotector.h \
            $$PWD/androidjnimain.h \
            $$PWD/androidjniaccessibility.h \
@@ -75,7 +75,8 @@ HEADERS += $$PWD/qandroidplatformintegration.h \
            $$PWD/qandroidplatformopenglcontext.h \
            $$PWD/qandroidplatformforeignwindow.h \
            $$PWD/qandroideventdispatcher.h \
-           $$PWD/qandroidplatformoffscreensurface.h
+           $$PWD/qandroidplatformoffscreensurface.h \
+           $$PWD/qandroidplatformfiledialoghelper.h
 
 qtConfig(android-style-assets): SOURCES += $$PWD/extract.cpp
 else: SOURCES += $$PWD/extract-dummy.cpp
@@ -88,8 +89,5 @@ qtConfig(vulkan) {
 }
 
 PLUGIN_TYPE = platforms
+PLUGIN_CLASS_NAME = QAndroidIntegrationPlugin
 load(qt_plugin)
-
-#Non-standard install directory, QTBUG-29859
-DESTDIR = $$DESTDIR/android
-target.path = $${target.path}/android

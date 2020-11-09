@@ -75,7 +75,7 @@ bool QVncScreen::initialize()
     mDepth = 32;
     mPhysicalSize = QSizeF(mGeometry.width()/96.*25.4, mGeometry.height()/96.*25.4);
 
-    for (const QString &arg : mArgs) {
+    for (const QString &arg : qAsConst(mArgs)) {
         QRegularExpressionMatch match;
         if (arg.contains(mmSizeRx, &match)) {
             mPhysicalSize = QSizeF(match.captured("width").toDouble(), match.captured("height").toDouble());
@@ -101,7 +101,7 @@ bool QVncScreen::initialize()
     default:
         qWarning("QVNCScreen::initDevice: No support for screen depth %d",
                  depth());
-        dirty = 0;
+        dirty = nullptr;
         return false;
     }
 
@@ -139,6 +139,9 @@ void QVncScreen::enableClientCursor(QVncClient *client)
 void QVncScreen::disableClientCursor(QVncClient *client)
 {
 #if QT_CONFIG(cursor)
+    if (!clientCursor)
+        return;
+
     uint clientCount = clientCursor->removeClient(client);
     if (clientCount == 0) {
         delete clientCursor;

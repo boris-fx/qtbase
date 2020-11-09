@@ -34,7 +34,8 @@
 #include <QSqlDriver>
 #include <QSqlError>
 #include <QSqlQuery>
-#include <QRegExp>
+#include <QRegularExpression>
+#include <QRegularExpressionMatch>
 #include <QDir>
 #include <QScopedPointer>
 #include <QVariant>
@@ -79,14 +80,14 @@ inline QString fixupTableName(const QString &tableName, QSqlDatabase db)
     return tbName;
 }
 
-inline static QString qTableName(const QString& prefix, const char *sourceFileName, QSqlDatabase db)
+inline static QString qTableName(const QString &prefix, const char *sourceFileName,
+                                 QSqlDatabase db, bool escape = true)
 {
-    QString tableStr = QLatin1String("dbtst");
-    if (db.driverName().toLower().contains("ODBC"))
-        tableStr += QLatin1String("_odbc");
-    return fixupTableName(QString(QLatin1String("dbtst") + db.driverName() +
-                          QString::number(qHash(QLatin1String(sourceFileName) +
-                          "_" + qGetHostName().replace( "-", "_" )), 16) + "_" + prefix), db);
+    const auto tableStr = fixupTableName(QString(QLatin1String("dbtst") + db.driverName() +
+                                                 QString::number(qHash(QLatin1String(sourceFileName) +
+                                                 "_" + qGetHostName().replace("-", "_")), 16) +
+                                                 "_" + prefix), db);
+    return escape ? db.driver()->escapeIdentifier(tableStr, QSqlDriver::TableName) : tableStr;
 }
 
 inline static QString qTableName(const QString& prefix, QSqlDatabase db)
@@ -511,13 +512,13 @@ public:
         QSqlQuery q( "SELECT banner FROM v$version", db );
         q.next();
 
-        QRegExp vers( "([0-9]+)\\.[0-9\\.]+[0-9]" );
-
-        if ( vers.indexIn( q.value( 0 ).toString() ) ) {
+        QRegularExpression vers("([0-9]+)\\.[0-9\\.]+[0-9]");
+        QRegularExpressionMatch match = vers.match(q.value(0).toString());
+        if (match.hasMatch()) {
             bool ok;
-            ver = vers.cap( 1 ).toInt( &ok );
+            ver = match.captured(1).toInt(&ok);
 
-            if ( !ok )
+            if (!ok)
                 ver = -1;
         }
 

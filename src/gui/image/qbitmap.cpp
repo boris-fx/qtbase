@@ -218,7 +218,7 @@ QBitmap::~QBitmap()
 */
 QBitmap::operator QVariant() const
 {
-    return QVariant(QVariant::Bitmap, this);
+    return QVariant(QMetaType::QBitmap, this);
 }
 
 static QBitmap makeBitmap(QImage &&image, Qt::ImageConversionFlags flags)
@@ -310,6 +310,7 @@ QBitmap QBitmap::transformed(const QTransform &matrix) const
     return bm;
 }
 
+#if QT_DEPRECATED_SINCE(5, 13)
 /*!
   \overload
   \obsolete
@@ -321,5 +322,6 @@ QBitmap QBitmap::transformed(const QMatrix &matrix) const
 {
     return transformed(QTransform(matrix));
 }
+#endif
 
 QT_END_NAMESPACE

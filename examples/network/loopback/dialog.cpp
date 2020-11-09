@@ -78,7 +78,7 @@ Dialog::Dialog(QWidget *parent)
     connect(&tcpClient, &QAbstractSocket::connected, this, &Dialog::startTransfer);
     connect(&tcpClient, &QIODevice::bytesWritten,
             this, &Dialog::updateClientProgress);
-    connect(&tcpClient, QOverload<QAbstractSocket::SocketError>::of(&QAbstractSocket::error),
+    connect(&tcpClient, &QAbstractSocket::errorOccurred,
             this, &Dialog::displayError);
 
     QVBoxLayout *mainLayout = new QVBoxLayout;
@@ -99,7 +99,7 @@ void Dialog::start()
     startButton->setEnabled(false);
 
 #ifndef QT_NO_CURSOR
-    QApplication::setOverrideCursor(Qt::WaitCursor);
+    QGuiApplication::setOverrideCursor(Qt::WaitCursor);
 #endif
 
     bytesWritten = 0;
@@ -131,8 +131,7 @@ void Dialog::acceptConnection()
 
     connect(tcpServerConnection, &QIODevice::readyRead,
             this, &Dialog::updateServerProgress);
-    connect(tcpServerConnection,
-            QOverload<QAbstractSocket::SocketError>::of(&QAbstractSocket::error),
+    connect(tcpServerConnection, &QAbstractSocket::errorOccurred,
             this, &Dialog::displayError);
     connect(tcpServerConnection, &QTcpSocket::disconnected,
             tcpServerConnection, &QTcpSocket::deleteLater);
@@ -162,7 +161,7 @@ void Dialog::updateServerProgress()
         tcpServerConnection->close();
         startButton->setEnabled(true);
 #ifndef QT_NO_CURSOR
-        QApplication::restoreOverrideCursor();
+        QGuiApplication::restoreOverrideCursor();
 #endif
     }
 }
@@ -198,6 +197,6 @@ void Dialog::displayError(QAbstractSocket::SocketError socketError)
     serverStatusLabel->setText(tr("Server ready"));
     startButton->setEnabled(true);
 #ifndef QT_NO_CURSOR
-    QApplication::restoreOverrideCursor();
+    QGuiApplication::restoreOverrideCursor();
 #endif
 }

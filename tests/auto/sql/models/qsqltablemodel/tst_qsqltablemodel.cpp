@@ -32,6 +32,7 @@
 #include <QtSql>
 #include <QtSql/private/qsqltablemodel_p.h>
 #include <QThread>
+#include <QElapsedTimer>
 
 const QString test(qTableName("test", __FILE__, QSqlDatabase())),
                    test2(qTableName("test2", __FILE__, QSqlDatabase())),
@@ -383,8 +384,6 @@ void tst_QSqlTableModel::selectRow()
     q.exec("UPDATE " + tbl + " SET a = 'Qt' WHERE id = 1");
     QCOMPARE(model.data(idx).toString(), QString("b"));
     model.selectRow(1);
-    if (tst_Databases::getDatabaseType(db) == QSqlDriver::PostgreSQL)
-        QEXPECT_FAIL("", "Currently broken for PostgreSQL due to case sensitivity problems - see QTBUG-65788", Abort);
     QCOMPARE(model.data(idx).toString(), QString("Qt"));
 
     // Check if selectRow() refreshes a changed row.
@@ -441,8 +440,6 @@ void tst_QSqlTableModel::selectRowOverride()
     // both rows should have changed
     QCOMPARE(model.data(idx).toString(), QString("Qt"));
     idx = model.index(2, 1);
-    if (tst_Databases::getDatabaseType(db) == QSqlDriver::PostgreSQL)
-        QEXPECT_FAIL("", "Currently broken for PostgreSQL due to case sensitivity problems - see QTBUG-65788", Abort);
     QCOMPARE(model.data(idx).toString(), QString("Qt"));
 
     q.exec("DELETE FROM " + tbl);
@@ -854,8 +851,6 @@ void tst_QSqlTableModel::insertRowFailure()
 
     // populate 1 row
     const QSqlDriver::DbmsType dbType = tst_Databases::getDatabaseType(db);
-    if (dbType == QSqlDriver::PostgreSQL && submitpolicy != QSqlTableModel::OnManualSubmit)
-        QEXPECT_FAIL("", "Currently broken for PostgreSQL due to case sensitivity problems - see QTBUG-65788", Abort);
     QVERIFY_SQL(model, insertRecord(0, values));
     QVERIFY_SQL(model, submitAll());
     QVERIFY_SQL(model, select());
@@ -899,8 +894,6 @@ void tst_QSqlTableModel::insertRowFailure()
     // restore empty table
     model.revertAll();
     QVERIFY_SQL(model, removeRow(0));
-    if (dbType == QSqlDriver::PostgreSQL)
-        QEXPECT_FAIL("", "Currently broken for PostgreSQL due to case sensitivity problems - see QTBUG-65788", Abort);
     QVERIFY_SQL(model, submitAll());
     QVERIFY_SQL(model, select());
     QCOMPARE(model.rowCount(), 0);
@@ -1812,12 +1805,12 @@ void tst_QSqlTableModel::sqlite_bigTable()
     QSqlQuery q(db);
     QVERIFY_SQL( q, exec("create table "+bigtable+"(id int primary key, name varchar)"));
     QVERIFY_SQL( q, prepare("insert into "+bigtable+"(id, name) values (?, ?)"));
-    QTime startTime;
-    startTime.start();
+    QElapsedTimer timing;
+    timing.start();
     for (int i = 0; i < 10000; ++i) {
         q.addBindValue(i);
         q.addBindValue(QString::number(i));
-        if(i%1000 == 0 && startTime.elapsed() > 5000)
+        if (i % 1000 == 0 && timing.elapsed() > 5000)
             qDebug() << i << "records written";
         QVERIFY_SQL( q, exec());
     }
@@ -2009,8 +2002,6 @@ void tst_QSqlTableModel::tableModifyWithBlank()
     //Should be equivalent to QSqlQuery INSERT INTO... command)
     QVERIFY_SQL(model, insertRow(0));
     QVERIFY_SQL(model, setData(model.index(0,0),timeString));
-    if (tst_Databases::getDatabaseType(db) == QSqlDriver::PostgreSQL)
-        QEXPECT_FAIL("", "Currently broken for PostgreSQL due to case sensitivity problems - see QTBUG-65788", Abort);
     QVERIFY_SQL(model, submitAll());
 
     //set a filter on the table so the only record we get is the one we just made

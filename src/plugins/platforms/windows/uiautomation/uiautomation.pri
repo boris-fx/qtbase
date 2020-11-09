@@ -18,6 +18,8 @@ SOURCES += \
     $$PWD/qwindowsuiatableitemprovider.cpp \
     $$PWD/qwindowsuiagridprovider.cpp \
     $$PWD/qwindowsuiagriditemprovider.cpp \
+    $$PWD/qwindowsuiawindowprovider.cpp \
+    $$PWD/qwindowsuiaexpandcollapseprovider.cpp \
     $$PWD/qwindowsuiautils.cpp
 
 HEADERS += \
@@ -37,7 +39,8 @@ HEADERS += \
     $$PWD/qwindowsuiatableitemprovider.h \
     $$PWD/qwindowsuiagridprovider.h \
     $$PWD/qwindowsuiagriditemprovider.h \
+    $$PWD/qwindowsuiawindowprovider.h \
+    $$PWD/qwindowsuiaexpandcollapseprovider.h \
     $$PWD/qwindowsuiautils.h
 
-mingw: LIBS *= -luuid
-
+mingw: QMAKE_USE *= uuid

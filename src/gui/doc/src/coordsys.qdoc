@@ -70,8 +70,15 @@
     \li \inlineimage coordinatesystem-rect.png
     \li \inlineimage coordinatesystem-line.png
     \row
-    \li QRect(1, 2, 6, 4)
+    \li QRect(QPoint(1, 2), QPoint(7, 6))
+    \li QLine(QPoint(2, 7), QPoint(6, 1))
+    \row
+    \li
     \li QLine(2, 7, 6, 1)
+    \row
+    \li QRect(QPoint(1, 2), QSize(6, 4))
+    \row
+    \li QRect(1, 2, 6, 4)
     \endtable
 
     \section2 Aliased Painting
@@ -427,7 +434,7 @@
     \li
     A vectorial specification of a 2D shape. Painter paths are the
     ultimate painting primitive, in the sense that any shape
-    (rectange, ellipse, spline) or combination of shapes can be
+    (rectangle, ellipse, spline) or combination of shapes can be
     expressed as a path. A path specifies both an outline and an area.
     \row
     \li QRegion

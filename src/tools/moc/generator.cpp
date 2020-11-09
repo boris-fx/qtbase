@@ -77,7 +77,7 @@ static const char *metaTypeEnumValueString(int type)
 QT_FOR_EACH_STATIC_TYPE(RETURN_METATYPENAME_STRING)
     }
 #undef RETURN_METATYPENAME_STRING
-    return 0;
+    return nullptr;
  }
 
 Generator::Generator(ClassDef *classDef, const QVector<QByteArray> &metaTypes, const QHash<QByteArray, QByteArray> &knownQObjectClasses, const QHash<QByteArray, QByteArray> &knownGadgets, FILE *outfile)
@@ -381,7 +381,7 @@ void Generator::generateCode()
             isConstructible ? index : 0);
 
     int flags = 0;
-    if (cdef->hasQGadget) {
+    if (cdef->hasQGadget || cdef->hasQNamespace) {
         // Ideally, all the classes could have that flag. But this broke classes generated
         // by qdbusxml2cpp which generate code that require that we call qt_metacall for properties
         flags |= PropertyAccessInStaticMetaCall;
@@ -462,7 +462,7 @@ void Generator::generateCode()
 // Build extra array
 //
     QVector<QByteArray> extraList;
-    QHash<QByteArray, QByteArray> knownExtraMetaObject = knownGadgets;
+    QMultiHash<QByteArray, QByteArray> knownExtraMetaObject = knownGadgets;
     knownExtraMetaObject.unite(knownQObjectClasses);
 
     for (int i = 0; i < cdef->propertyList.count(); ++i) {
@@ -518,10 +518,15 @@ void Generator::generateCode()
         }
     }
 
+//
+// Generate meta object link to parent meta objects
+//
+
     if (!extraList.isEmpty()) {
-        fprintf(out, "static const QMetaObject * const qt_meta_extradata_%s[] = {\n    ", qualifiedClassNameIdentifier.constData());
+        fprintf(out, "static const QMetaObject::SuperData qt_meta_extradata_%s[] = {\n",
+                qualifiedClassNameIdentifier.constData());
         for (int i = 0; i < extraList.count(); ++i) {
-            fprintf(out, "    &%s::staticMetaObject,\n", extraList.at(i).constData());
+            fprintf(out, "    QMetaObject::SuperData::link<%s::staticMetaObject>(),\n", extraList.at(i).constData());
         }
         fprintf(out, "    nullptr\n};\n\n");
     }
@@ -536,8 +541,10 @@ void Generator::generateCode()
 
     if (isQObject)
         fprintf(out, "    nullptr,\n");
-    else if (cdef->superclassList.size() && (!cdef->hasQGadget || knownGadgets.contains(purestSuperClass)))
-        fprintf(out, "    &%s::staticMetaObject,\n", purestSuperClass.constData());
+    else if (cdef->superclassList.size() && !cdef->hasQGadget && !cdef->hasQNamespace) // for qobject, we know the super class must have a static metaobject
+        fprintf(out, "    QMetaObject::SuperData::link<%s::staticMetaObject>(),\n", purestSuperClass.constData());
+    else if (cdef->superclassList.size()) // for gadgets we need to query at compile time for it
+        fprintf(out, "    QtPrivate::MetaObjectForType<%s>::value(),\n", purestSuperClass.constData());
     else
         fprintf(out, "    nullptr,\n");
     fprintf(out, "    qt_meta_stringdata_%s.data,\n"
@@ -619,7 +626,7 @@ void Generator::generateCode()
         fprintf(out, "//     a) You are using a NOTIFY signal that does not exist. Fix it.\n");
         fprintf(out, "//     b) You are using a NOTIFY signal that does exist (in a parent class) but has a non-empty parameter list. This is a moc limitation.\n");
         fprintf(out, "Q_DECL_UNUSED static void checkNotifySignalValidity_%s(%s *t) {\n", qualifiedClassNameIdentifier.constData(), cdef->qualified.constData());
-        for (const QByteArray &nonClassSignal : cdef->nonClassSignalList)
+        for (const QByteArray &nonClassSignal : qAsConst(cdef->nonClassSignalList))
             fprintf(out, "    t->%s();\n", nonClassSignal.constData());
         fprintf(out, "}\n");
     }
@@ -857,6 +864,8 @@ void Generator::generateProperties()
             flags |= Constant;
         if (p.final)
             flags |= Final;
+        if (p.required)
+            flags |= Required;
 
         fprintf(out, "    %4d, ", stridx(p.name));
         generateTypeInfo(p.type);
@@ -1001,7 +1010,7 @@ void Generator::generateMetacall()
             needUser |= p.user.endsWith(')');
         }
 
-        fprintf(out, "\n#ifndef QT_NO_PROPERTIES\n   ");
+        fprintf(out, "\n#ifndef QT_NO_PROPERTIES\n    ");
         if (needElse)
             fprintf(out, "else ");
         fprintf(out,
@@ -1170,7 +1179,7 @@ void Generator::generateStaticMetacall()
             }
             fprintf(out, ");\n");
             fprintf(out, "            if (_a[0]) *reinterpret_cast<%s**>(_a[0]) = _r; } break;\n",
-                    cdef->hasQGadget ? "void" : "QObject");
+                    (cdef->hasQGadget || cdef->hasQNamespace) ? "void" : "QObject");
         }
         fprintf(out, "        default: break;\n");
         fprintf(out, "        }\n");
@@ -1549,16 +1558,16 @@ void Generator::generateSignal(FunctionDef *def,int index)
         fprintf(out, "nullptr");
     } else {
         if (def->returnTypeIsVolatile)
-             fprintf(out, "const_cast<void*>(reinterpret_cast<const volatile void*>(&_t0))");
+             fprintf(out, "const_cast<void*>(reinterpret_cast<const volatile void*>(std::addressof(_t0)))");
         else
-             fprintf(out, "const_cast<void*>(reinterpret_cast<const void*>(&_t0))");
+             fprintf(out, "const_cast<void*>(reinterpret_cast<const void*>(std::addressof(_t0)))");
     }
     int i;
     for (i = 1; i < offset; ++i)
         if (i <= def->arguments.count() && def->arguments.at(i - 1).type.isVolatile)
-            fprintf(out, ", const_cast<void*>(reinterpret_cast<const volatile void*>(&_t%d))", i);
+            fprintf(out, ", const_cast<void*>(reinterpret_cast<const volatile void*>(std::addressof(_t%d)))", i);
         else
-            fprintf(out, ", const_cast<void*>(reinterpret_cast<const void*>(&_t%d))", i);
+            fprintf(out, ", const_cast<void*>(reinterpret_cast<const void*>(std::addressof(_t%d)))", i);
     fprintf(out, " };\n");
     fprintf(out, "    QMetaObject::activate(%s, &staticMetaObject, %d, _a);\n", thisPtr.constData(), index);
     if (def->normalizedType != "void")
@@ -1650,6 +1659,12 @@ void Generator::generatePluginMetaData()
         dev.nextItem("\"MetaData\"");
         cbor_encode_int(&map, int(QtPluginMetaDataKeys::MetaData));
         jsonObjectToCbor(&map, o);
+    }
+
+    if (!cdef->pluginData.uri.isEmpty()) {
+        dev.nextItem("\"URI\"");
+        cbor_encode_int(&map, int(QtPluginMetaDataKeys::URI));
+        cbor_encode_text_string(&map, cdef->pluginData.uri.constData(), cdef->pluginData.uri.size());
     }
 
     // Add -M args from the command line:

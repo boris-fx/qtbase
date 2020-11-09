@@ -11,6 +11,7 @@ SUBDIRS=\
    qguimetatype \
    qguitimer \
    qguivariant \
+   qhighdpiscaling \
    qinputmethod \
    qkeyevent \
    qkeysequence \
@@ -24,7 +25,8 @@ SUBDIRS=\
    qguiapplication \
    qpixelformat \
    qopenglwindow \
-   qrasterwindow
+   qrasterwindow \
+   qaddpostroutine
 
 win32:!winrt:qtHaveModule(network): SUBDIRS += noqteventloop
 
@@ -34,6 +36,8 @@ win32:!winrt:qtHaveModule(network): SUBDIRS += noqteventloop
 
 !qtHaveModule(network): SUBDIRS -= \
    qguieventloop
+
+!qtConfig(highdpiscaling): SUBDIRS -= qhighdpiscaling
 
 !qtConfig(opengl): SUBDIRS -= qopenglwindow
 

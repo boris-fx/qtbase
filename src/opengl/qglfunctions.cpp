@@ -170,7 +170,8 @@ QGLFunctions::QGLFunctions()
 
 /*!
     Constructs a function resolver for \a context.  If \a context
-    is null, then the resolver will be created for the current QGLContext.
+    is \nullptr, then the resolver will be created for the current
+    QGLContext.
 
     An object constructed in this way can only be used with \a context
     and other contexts that share with it.  Use initializeGLFunctions()
@@ -278,7 +279,7 @@ QGLFunctions::OpenGLFeatures QGLFunctions::openGLFeatures() const
 {
     QGLFunctionsPrivateEx *d = static_cast<QGLFunctionsPrivateEx *>(d_ptr);
     if (!d)
-        return 0;
+        return { };
     if (d->m_features == -1)
         d->m_features = qt_gl_resolve_features();
     return QGLFunctions::OpenGLFeatures(d->m_features);
@@ -305,7 +306,7 @@ bool QGLFunctions::hasOpenGLFeature(QGLFunctions::OpenGLFeature feature) const
 
 /*!
     Initializes GL function resolution for \a context.  If \a context
-    is null, then the current QGLContext will be used.
+    is \nullptr, then the current QGLContext will be used.
 
     After calling this function, the QGLFunctions object can only be
     used with \a context and other contexts that share with it.

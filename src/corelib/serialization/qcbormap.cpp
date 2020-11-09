@@ -834,9 +834,8 @@ QCborValueRef QCborMap::operator[](const QCborValue &key)
  */
 QCborMap::iterator QCborMap::find(qint64 key)
 {
+    detach();
     auto it = constFind(key);
-    if (it != constEnd())
-        detach();
     return { d.data(), it.item.i };
 }
 
@@ -860,9 +859,8 @@ QCborMap::iterator QCborMap::find(qint64 key)
  */
 QCborMap::iterator QCborMap::find(QLatin1String key)
 {
+    detach();
     auto it = constFind(key);
-    if (it != constEnd())
-        detach();
     return { d.data(), it.item.i };
 }
 
@@ -886,9 +884,8 @@ QCborMap::iterator QCborMap::find(QLatin1String key)
  */
 QCborMap::iterator QCborMap::find(const QString & key)
 {
+    detach();
     auto it = constFind(key);
-    if (it != constEnd())
-        detach();
     return { d.data(), it.item.i };
 }
 
@@ -912,9 +909,8 @@ QCborMap::iterator QCborMap::find(const QString & key)
  */
 QCborMap::iterator QCborMap::find(const QCborValue &key)
 {
+    detach();
     auto it = constFind(key);
-    if (it != constEnd())
-        detach();
     return { d.data(), it.item.i };
 }
 
@@ -1760,6 +1756,25 @@ QDebug operator<<(QDebug dbg, const QCborMap &m)
         open = ", {";
     }
     return dbg << '}';
+}
+#endif
+
+#ifndef QT_NO_DATASTREAM
+QDataStream &operator<<(QDataStream &stream, const QCborMap &value)
+{
+    stream << value.toCborValue().toCbor();
+    return stream;
+}
+
+QDataStream &operator>>(QDataStream &stream, QCborMap &value)
+{
+    QByteArray buffer;
+    stream >> buffer;
+    QCborParserError parseError{};
+    value = QCborValue::fromCbor(buffer, &parseError).toMap();
+    if (parseError.error)
+        stream.setStatus(QDataStream::ReadCorruptData);
+    return stream;
 }
 #endif
 

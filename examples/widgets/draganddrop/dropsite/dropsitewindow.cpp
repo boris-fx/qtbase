@@ -82,14 +82,21 @@ DropSiteWindow::DropSiteWindow()
 
 //! [constructor part4]
     clearButton = new QPushButton(tr("Clear"));
+    copyButton = new QPushButton(tr("Copy"));
     quitButton = new QPushButton(tr("Quit"));
 
     buttonBox = new QDialogButtonBox;
     buttonBox->addButton(clearButton, QDialogButtonBox::ActionRole);
+    buttonBox->addButton(copyButton, QDialogButtonBox::ActionRole);
+#if !QT_CONFIG(clipboard)
+    copyButton->setVisible(false);
+#endif
+
     buttonBox->addButton(quitButton, QDialogButtonBox::RejectRole);
 
     connect(quitButton, &QAbstractButton::clicked, this, &QWidget::close);
     connect(clearButton, &QAbstractButton::clicked, dropArea, &DropArea::clear);
+    connect(copyButton, &QAbstractButton::clicked, this, &DropSiteWindow::copy);
 //! [constructor part4]
 
 //! [constructor part5]
@@ -108,12 +115,14 @@ DropSiteWindow::DropSiteWindow()
 void DropSiteWindow::updateFormatsTable(const QMimeData *mimeData)
 {
     formatsTable->setRowCount(0);
+    copyButton->setEnabled(false);
     if (!mimeData)
         return;
 //! [updateFormatsTable() part1]
 
 //! [updateFormatsTable() part2]
-    for (const QString &format : mimeData->formats()) {
+    const QStringList formats = mimeData->formats();
+    for (const QString &format : formats) {
         QTableWidgetItem *formatItem = new QTableWidgetItem(format);
         formatItem->setFlags(Qt::ItemIsEnabled);
         formatItem->setTextAlignment(Qt::AlignTop | Qt::AlignLeft);
@@ -144,5 +153,18 @@ void DropSiteWindow::updateFormatsTable(const QMimeData *mimeData)
     }
 
     formatsTable->resizeColumnToContents(0);
+#if QT_CONFIG(clipboard)
+    copyButton->setEnabled(formatsTable->rowCount() > 0);
+#endif
 }
 //! [updateFormatsTable() part4]
+
+void DropSiteWindow::copy()
+{
+#if QT_CONFIG(clipboard)
+    QString text;
+    for (int row = 0, rowCount = formatsTable->rowCount(); row < rowCount; ++row)
+        text += formatsTable->item(row, 0)->text() + ": " + formatsTable->item(row, 1)->text() + '\n';
+    QGuiApplication::clipboard()->setText(text);
+#endif
+}

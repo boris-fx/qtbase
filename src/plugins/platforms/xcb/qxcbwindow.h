@@ -68,7 +68,8 @@ public:
         NetWmStateMaximizedVert = 0x10,
         NetWmStateModal = 0x20,
         NetWmStateStaysOnTop = 0x40,
-        NetWmStateDemandsAttention = 0x80
+        NetWmStateDemandsAttention = 0x80,
+        NetWmStateHidden = 0x100
     };
 
     Q_DECLARE_FLAGS(NetWmStates, NetWmState)
@@ -107,8 +108,8 @@ public:
 
     bool windowEvent(QEvent *event) override;
 
-    bool startSystemResize(const QPoint &pos, Qt::Corner corner) override;
-    bool startSystemMove(const QPoint &pos) override;
+    bool startSystemResize(Qt::Edges edges) override;
+    bool startSystemMove() override;
 
     void setOpacity(qreal level) override;
     void setMask(const QRegion &region) override;
@@ -137,10 +138,8 @@ public:
     void handleFocusInEvent(const xcb_focus_in_event_t *event) override;
     void handleFocusOutEvent(const xcb_focus_out_event_t *event) override;
     void handlePropertyNotifyEvent(const xcb_property_notify_event_t *event) override;
-#if QT_CONFIG(xcb_xinput)
     void handleXIMouseEvent(xcb_ge_event_t *, Qt::MouseEventSource source = Qt::MouseEventNotSynthesized) override;
     void handleXIEnterLeave(xcb_ge_event_t *) override;
-#endif
 
     QXcbWindow *toWindow() override;
 
@@ -166,12 +165,12 @@ public:
     bool needsSync() const;
 
     void postSyncWindowRequest();
-    void clearSyncWindowRequest() { m_pendingSyncRequest = 0; }
+    void clearSyncWindowRequest() { m_pendingSyncRequest = nullptr; }
 
     QXcbScreen *xcbScreen() const;
 
-    bool startSystemMoveResize(const QPoint &pos, int corner);
-    void doStartSystemMoveResize(const QPoint &globalPos, int corner);
+    bool startSystemMoveResize(const QPoint &pos, int edges);
+    void doStartSystemMoveResize(const QPoint &globalPos, int edges);
 
     static bool isTrayIconWindow(QWindow *window)
     {
@@ -183,6 +182,9 @@ public:
 
     static void setWindowTitle(const QXcbConnection *conn, xcb_window_t window, const QString &title);
     static QString windowTitle(const QXcbConnection *conn, xcb_window_t window);
+
+    int swapInterval() const { return m_swapInterval; }
+    void setSwapInterval(int swapInterval) { m_swapInterval = swapInterval; }
 
 public Q_SLOTS:
     void updateSyncRequestCounter();
@@ -263,6 +265,7 @@ protected:
 
     QRegion m_exposeRegion;
     QSize m_oldWindowSize;
+    QPoint m_lastPointerPosition;
 
     xcb_visualid_t m_visualId = 0;
     // Last sent state. Initialized to an invalid state, on purpose.
@@ -276,6 +279,9 @@ protected:
     SyncState m_syncState = NoSyncNeeded;
 
     QXcbSyncWindowRequest *m_pendingSyncRequest = nullptr;
+    int m_swapInterval = -1;
+
+    qreal m_sizeHintsScaleFactor = 1.0;
 };
 
 class QXcbForeignWindow : public QXcbWindow

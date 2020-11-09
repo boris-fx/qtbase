@@ -45,6 +45,7 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
+import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.res.AssetManager;
@@ -82,6 +83,7 @@ import android.view.inputmethod.InputMethodManager;
 import android.view.ViewTreeObserver;
 import android.widget.ImageView;
 import android.widget.PopupMenu;
+import android.hardware.display.DisplayManager;
 
 import java.io.BufferedReader;
 import java.io.DataOutputStream;
@@ -161,15 +163,13 @@ public class QtActivityDelegate
             m_activity.getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
             m_activity.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_FORCE_NOT_FULLSCREEN);
             try {
-                if (Build.VERSION.SDK_INT >= 19) {
-                    int flags = View.SYSTEM_UI_FLAG_HIDE_NAVIGATION;
-                    flags |= View.SYSTEM_UI_FLAG_LAYOUT_STABLE;
-                    flags |= View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION;
-                    flags |= View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN;
-                    flags |= View.SYSTEM_UI_FLAG_FULLSCREEN;
-                    flags |= View.class.getDeclaredField("SYSTEM_UI_FLAG_IMMERSIVE_STICKY").getInt(null);
-                    m_activity.getWindow().getDecorView().setSystemUiVisibility(flags | View.INVISIBLE);
-                }
+                int flags = View.SYSTEM_UI_FLAG_HIDE_NAVIGATION;
+                flags |= View.SYSTEM_UI_FLAG_LAYOUT_STABLE;
+                flags |= View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION;
+                flags |= View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN;
+                flags |= View.SYSTEM_UI_FLAG_FULLSCREEN;
+                flags |= View.class.getDeclaredField("SYSTEM_UI_FLAG_IMMERSIVE_STICKY").getInt(null);
+                m_activity.getWindow().getDecorView().setSystemUiVisibility(flags | View.INVISIBLE);
             } catch (Exception e) {
                 e.printStackTrace();
             }
@@ -553,16 +553,8 @@ public class QtActivityDelegate
             editButtons &= ~EditContextView.PASTE_BUTTON;
 
         if ((mode & CursorHandleShowEdit) == CursorHandleShowEdit && editButtons != 0) {
-            editY -= m_editPopupMenu.getHeight();
-            if (editY < 0) {
-                if (m_cursorHandle != null)
-                    editY = m_cursorHandle.bottom();
-                else if (m_leftSelectionHandle != null && m_rightSelectionHandle != null)
-                    editY = Math.max(m_leftSelectionHandle.bottom(), m_rightSelectionHandle.bottom());
-                else
-                    return;
-            }
-            m_editPopupMenu.setPosition(editX, editY, editButtons);
+            m_editPopupMenu.setPosition(editX, editY, editButtons, m_cursorHandle, m_leftSelectionHandle,
+                                        m_rightSelectionHandle);
         } else {
             if (m_editPopupMenu != null)
                 m_editPopupMenu.hide();
@@ -594,12 +586,14 @@ public class QtActivityDelegate
                       Method m = initClass.getMethod("setActivity", Activity.class, Object.class);
                       m.invoke(staticInitDataObject, m_activity, this);
                   } catch (Exception e) {
+                      e.printStackTrace();
                   }
 
                   try {
                       Method m = initClass.getMethod("setContext", Context.class);
                       m.invoke(staticInitDataObject, (Context)m_activity);
                   } catch (Exception e) {
+                      e.printStackTrace();
                   }
                 } catch (Exception e) {
                     e.printStackTrace();
@@ -669,6 +663,28 @@ public class QtActivityDelegate
         } catch (Exception e) {
             e.printStackTrace();
         }
+
+        DisplayManager.DisplayListener displayListener = new DisplayManager.DisplayListener() {
+            @Override
+            public void onDisplayAdded(int displayId) { }
+
+            @Override
+            public void onDisplayChanged(int displayId) {
+                m_currentRotation = m_activity.getWindowManager().getDefaultDisplay().getRotation();
+                QtNative.handleOrientationChanged(m_currentRotation, m_nativeOrientation);
+            }
+
+            @Override
+            public void onDisplayRemoved(int displayId) { }
+        };
+
+        try {
+            DisplayManager displayManager = (DisplayManager) m_activity.getSystemService(Context.DISPLAY_SERVICE);
+            displayManager.registerDisplayListener(displayListener, null);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
         m_mainLib = QtNative.loadMainLibrary(m_mainLib, nativeLibsDir);
         return m_mainLib != null;
     }
@@ -681,12 +697,9 @@ public class QtActivityDelegate
             Bundle extras = m_activity.getIntent().getExtras();
             if (extras != null) {
                 try {
-                    // do NOT remove !!!!
-                    final String dc = "--Added-by-androiddeployqt--/debugger.command";
-                    new BufferedReader(new InputStreamReader(m_activity.getAssets().open(dc))).readLine();
-                    // do NOT remove !!!!
-                    // The previous lines are needed to check if the debug mode is enabled.
-                    // We are not allowed to use extraenvvars or extraappparams in a non debuggable environment.
+                    final boolean isDebuggable = (m_activity.getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0;
+                    if (!isDebuggable)
+                        throw new Exception();
 
                     if (extras.containsKey("extraenvvars")) {
                         try {
@@ -704,6 +717,8 @@ public class QtActivityDelegate
                         }
                     }
                 } catch (Exception e) {
+                    Log.e(QtNative.QtTAG, "Not in debug mode! It is not allowed to use " +
+                                          "extra arguments in non-debug mode.");
                     // This is not an error, so keep it silent
                     // e.printStackTrace();
                 }
@@ -865,13 +880,6 @@ public class QtActivityDelegate
         } catch (Exception e) {
             e.printStackTrace();
         }
-
-        int rotation = m_activity.getWindowManager().getDefaultDisplay().getRotation();
-        if (rotation != m_currentRotation) {
-            QtNative.handleOrientationChanged(rotation, m_nativeOrientation);
-        }
-
-        m_currentRotation = rotation;
     }
 
     public void onDestroy()
@@ -886,7 +894,8 @@ public class QtActivityDelegate
 
     public void onPause()
     {
-        QtNative.setApplicationState(ApplicationInactive);
+        if (Build.VERSION.SDK_INT < 24 || !m_activity.isInMultiWindowMode())
+            QtNative.setApplicationState(ApplicationInactive);
     }
 
     public void onResume()

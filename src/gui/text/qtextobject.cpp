@@ -596,7 +596,7 @@ void QTextFramePrivate::remove_me()
     parentFrame->d_func()->childFrames.removeAt(index);
 
     childFrames.clear();
-    parentFrame = 0;
+    parentFrame = nullptr;
 }
 
 /*!
@@ -654,10 +654,10 @@ QTextFrame::iterator QTextFrame::end() const
 */
 QTextFrame::iterator::iterator()
 {
-    f = 0;
+    f = nullptr;
     b = 0;
     e = 0;
-    cf = 0;
+    cf = nullptr;
     cb = 0;
 }
 
@@ -669,7 +669,7 @@ QTextFrame::iterator::iterator(QTextFrame *frame, int block, int begin, int end)
     f = frame;
     b = begin;
     e = end;
-    cf = 0;
+    cf = nullptr;
     cb = block;
 }
 
@@ -678,7 +678,7 @@ QTextFrame::iterator::iterator(QTextFrame *frame, int block, int begin, int end)
 /*!
     Copy constructor. Constructs a copy of the \a other iterator.
 */
-QTextFrame::iterator::iterator(const iterator &other) Q_DECL_NOTHROW
+QTextFrame::iterator::iterator(const iterator &other) noexcept
 {
     f = other.f;
     b = other.b;
@@ -691,7 +691,7 @@ QTextFrame::iterator::iterator(const iterator &other) Q_DECL_NOTHROW
     Assigns \a other to this iterator and returns a reference to
     this iterator.
 */
-QTextFrame::iterator &QTextFrame::iterator::operator=(const iterator &other) Q_DECL_NOTHROW
+QTextFrame::iterator &QTextFrame::iterator::operator=(const iterator &other) noexcept
 {
     f = other.f;
     b = other.b;
@@ -704,8 +704,8 @@ QTextFrame::iterator &QTextFrame::iterator::operator=(const iterator &other) Q_D
 #endif
 
 /*!
-    Returns the current frame pointed to by the iterator, or 0 if the
-    iterator currently points to a block.
+    Returns the current frame pointed to by the iterator, or \nullptr
+    if the iterator currently points to a block.
 
     \sa currentBlock()
 */
@@ -739,7 +739,7 @@ QTextFrame::iterator &QTextFrame::iterator::operator++()
     if (cf) {
         int end = cf->lastPosition() + 1;
         cb = map.findNode(end);
-        cf = 0;
+        cf = nullptr;
     } else if (cb) {
         cb = map.next(cb);
         if (cb == e)
@@ -777,7 +777,7 @@ QTextFrame::iterator &QTextFrame::iterator::operator--()
     if (cf) {
         int start = cf->firstPosition() - 1;
         cb = map.findNode(start);
-        cf = 0;
+        cf = nullptr;
     } else {
         if (cb == b)
             goto end;
@@ -907,7 +907,7 @@ QTextBlockUserData::~QTextBlockUserData()
 
 bool QTextBlock::isValid() const
 {
-    return p != 0 && p->blockMap().isValid(n);
+    return p != nullptr && p->blockMap().isValid(n);
 }
 
 /*!
@@ -1079,7 +1079,7 @@ bool QTextBlock::contains(int position) const
 QTextLayout *QTextBlock::layout() const
 {
     if (!p || !n)
-        return 0;
+        return nullptr;
 
     const QTextBlockData *b = p->blockMap().fragment(n);
     if (!b->layout)
@@ -1291,12 +1291,12 @@ QVector<QTextLayout::FormatRange> QTextBlock::textFormats() const
 }
 
 /*!
-    Returns the text document this text block belongs to, or 0 if the
-    text block does not belong to any document.
+    Returns the text document this text block belongs to, or \nullptr
+    if the text block does not belong to any document.
 */
 const QTextDocument *QTextBlock::document() const
 {
-    return p ? p->document() : 0;
+    return p ? p->document() : nullptr;
 }
 
 /*!
@@ -1306,7 +1306,7 @@ const QTextDocument *QTextBlock::document() const
 QTextList *QTextBlock::textList() const
 {
     if (!isValid())
-        return 0;
+        return nullptr;
 
     const QTextBlockFormat fmt = blockFormat();
     QTextObject *obj = p->document()->objectForFormat(fmt);
@@ -1316,13 +1316,13 @@ QTextList *QTextBlock::textList() const
 /*!
     \since 4.1
 
-    Returns a pointer to a QTextBlockUserData object if previously set with
-    setUserData() or a null pointer.
+    Returns a pointer to a QTextBlockUserData object,
+    if one has been set with setUserData(), or \nullptr.
 */
 QTextBlockUserData *QTextBlock::userData() const
 {
     if (!p || !n)
-        return 0;
+        return nullptr;
 
     const QTextBlockData *b = p->blockMap().fragment(n);
     return b->userData;

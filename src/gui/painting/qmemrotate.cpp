@@ -44,7 +44,7 @@ QT_BEGIN_NAMESPACE
 static const int tileSize = 32;
 
 template <class T>
-Q_STATIC_TEMPLATE_FUNCTION
+static
 inline void qt_memrotate90_tiled(const T *src, int w, int h, int sstride, T *dest, int dstride)
 {
     sstride /= sizeof(T);
@@ -103,7 +103,7 @@ inline void qt_memrotate90_tiled(const T *src, int w, int h, int sstride, T *des
 }
 
 template <class T>
-Q_STATIC_TEMPLATE_FUNCTION
+static
 inline void qt_memrotate90_tiled_unpacked(const T *src, int w, int h, int sstride, T *dest,
                                           int dstride)
 {
@@ -131,7 +131,7 @@ inline void qt_memrotate90_tiled_unpacked(const T *src, int w, int h, int sstrid
 }
 
 template <class T>
-Q_STATIC_TEMPLATE_FUNCTION
+static
 inline void qt_memrotate270_tiled(const T *src, int w, int h, int sstride, T *dest, int dstride)
 {
     sstride /= sizeof(T);
@@ -190,7 +190,7 @@ inline void qt_memrotate270_tiled(const T *src, int w, int h, int sstride, T *de
 }
 
 template <class T>
-Q_STATIC_TEMPLATE_FUNCTION
+static
 inline void qt_memrotate270_tiled_unpacked(const T *src, int w, int h, int sstride, T *dest,
                                            int dstride)
 {
@@ -219,7 +219,7 @@ inline void qt_memrotate270_tiled_unpacked(const T *src, int w, int h, int sstri
 
 
 template <class T>
-Q_STATIC_TEMPLATE_FUNCTION
+static
 inline void qt_memrotate90_template(const T *src, int srcWidth, int srcHeight, int srcStride,
                                     T *dest, int dstStride)
 {
@@ -246,7 +246,7 @@ inline void qt_memrotate90_template<quint64>(const quint64 *src, int w, int h, i
 }
 
 template <class T>
-Q_STATIC_TEMPLATE_FUNCTION
+static
 inline void qt_memrotate180_template(const T *src, int w, int h, int sstride, T *dest, int dstride)
 {
     const char *s = (const char*)(src) + (h - 1) * sstride;
@@ -261,7 +261,7 @@ inline void qt_memrotate180_template(const T *src, int w, int h, int sstride, T 
 }
 
 template <class T>
-Q_STATIC_TEMPLATE_FUNCTION
+static
 inline void qt_memrotate270_template(const T *src, int srcWidth, int srcHeight, int srcStride,
                                      T *dest, int dstStride)
 {
@@ -406,9 +406,9 @@ void qt_memrotate270_64(const uchar *srcPixels, int w, int h, int sbpl, uchar *d
 MemRotateFunc qMemRotateFunctions[QPixelLayout::BPPCount][3] =
 // 90, 180, 270
 {
-    { 0, 0, 0 },      // BPPNone,
-    { 0, 0, 0 },      // BPP1MSB,
-    { 0, 0, 0 },      // BPP1LSB,
+    { nullptr, nullptr, nullptr },      // BPPNone,
+    { nullptr, nullptr, nullptr },      // BPP1MSB,
+    { nullptr, nullptr, nullptr },      // BPP1LSB,
     { qt_memrotate90_8, qt_memrotate180_8, qt_memrotate270_8 },         // BPP8,
     { qt_memrotate90_16, qt_memrotate180_16, qt_memrotate270_16 },      // BPP16,
     { qt_memrotate90_24, qt_memrotate180_24, qt_memrotate270_24 },      // BPP24

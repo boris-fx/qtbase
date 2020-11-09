@@ -118,9 +118,9 @@ void ClassWizard::accept()
     block += "public:\n";
 
     if (field("qobjectCtor").toBool()) {
-        block += "    " + className + "(QObject *parent = 0);\n";
+        block += "    " + className + "(QObject *parent = nullptr);\n";
     } else if (field("qwidgetCtor").toBool()) {
-        block += "    " + className + "(QWidget *parent = 0);\n";
+        block += "    " + className + "(QWidget *parent = nullptr);\n";
     } else if (field("defaultCtor").toBool()) {
         block += "    " + className + "();\n";
         if (field("copyCtor").toBool()) {
@@ -139,7 +139,7 @@ void ClassWizard::accept()
 
     QFile headerFile(outputDir + '/' + header);
     if (!headerFile.open(QFile::WriteOnly | QFile::Text)) {
-        QMessageBox::warning(0, QObject::tr("Simple Wizard"),
+        QMessageBox::warning(nullptr, QObject::tr("Simple Wizard"),
                              QObject::tr("Cannot write file %1:\n%2")
                              .arg(headerFile.fileName())
                              .arg(headerFile.errorString()));
@@ -195,7 +195,7 @@ void ClassWizard::accept()
 
     QFile implementationFile(outputDir + '/' + implementation);
     if (!implementationFile.open(QFile::WriteOnly | QFile::Text)) {
-        QMessageBox::warning(0, QObject::tr("Simple Wizard"),
+        QMessageBox::warning(nullptr, QObject::tr("Simple Wizard"),
                              QObject::tr("Cannot write file %1:\n%2")
                              .arg(implementationFile.fileName())
                              .arg(implementationFile.errorString()));

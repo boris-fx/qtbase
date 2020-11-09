@@ -43,6 +43,7 @@
 #include <QtCore/qrect.h>
 #include <QtCore/qline.h>
 #include <QtCore/qmutex.h>
+#include <QtCore/private/qlocking_p.h>
 
 #include <algorithm>
 
@@ -208,7 +209,7 @@ void QVariantAnimationPrivate::updateInterpolator()
     if (type == currentInterval.end.second.userType())
         interpolator = getInterpolator(type);
     else
-        interpolator = 0;
+        interpolator = nullptr;
 
     //we make sure that the interpolator is always set to something
     if (!interpolator)
@@ -283,11 +284,11 @@ void QVariantAnimationPrivate::setCurrentValueForProgress(const qreal progress)
     qSwap(currentValue, ret);
     q->updateCurrentValue(currentValue);
     static QBasicAtomicInt changedSignalIndex = Q_BASIC_ATOMIC_INITIALIZER(0);
-    if (!changedSignalIndex.load()) {
+    if (!changedSignalIndex.loadRelaxed()) {
         //we keep the mask so that we emit valueChanged only when needed (for performance reasons)
         changedSignalIndex.testAndSetRelaxed(0, signalIndex("valueChanged(QVariant)"));
     }
-    if (isSignalConnected(changedSignalIndex.load()) && currentValue != ret) {
+    if (isSignalConnected(changedSignalIndex.loadRelaxed()) && currentValue != ret) {
         //the value has changed
         emit q->valueChanged(currentValue);
     }
@@ -399,7 +400,7 @@ static QBasicMutex registeredInterpolatorsMutex;
 
     Registers a custom interpolator \a func for the template type \c{T}.
     The interpolator has to be registered before the animation is constructed.
-    To unregister (and use the default interpolator) set \a func to 0.
+    To unregister (and use the default interpolator) set \a func to \nullptr.
  */
 
 /*!
@@ -416,7 +417,7 @@ static QBasicMutex registeredInterpolatorsMutex;
  * \internal
  * Registers a custom interpolator \a func for the specific \a interpolationType.
  * The interpolator has to be registered before the animation is constructed.
- * To unregister (and use the default interpolator) set \a func to 0.
+ * To unregister (and use the default interpolator) set \a func to \nullptr.
  */
 void QVariantAnimation::registerInterpolator(QVariantAnimation::Interpolator func, int interpolationType)
 {
@@ -426,7 +427,7 @@ void QVariantAnimation::registerInterpolator(QVariantAnimation::Interpolator fun
     // in such an order that we get here with interpolators == NULL,
     // to continue causes the app to crash on exit with a SEGV
     if (interpolators) {
-        QMutexLocker locker(&registeredInterpolatorsMutex);
+        const auto locker = qt_scoped_lock(registeredInterpolatorsMutex);
         if (int(interpolationType) >= interpolators->count())
             interpolators->resize(int(interpolationType) + 1);
         interpolators->replace(interpolationType, func);
@@ -443,8 +444,8 @@ QVariantAnimation::Interpolator QVariantAnimationPrivate::getInterpolator(int in
 {
     {
         QInterpolatorVector *interpolators = registeredInterpolators();
-        QMutexLocker locker(&registeredInterpolatorsMutex);
-        QVariantAnimation::Interpolator ret = 0;
+        const auto locker = qt_scoped_lock(registeredInterpolatorsMutex);
+        QVariantAnimation::Interpolator ret = nullptr;
         if (interpolationType < interpolators->count()) {
             ret = interpolators->at(interpolationType);
             if (ret) return ret;
@@ -478,7 +479,7 @@ QVariantAnimation::Interpolator QVariantAnimationPrivate::getInterpolator(int in
     case QMetaType::QRectF:
         return castToInterpolator(_q_interpolateVariant<QRectF>);
     default:
-        return 0; //this type is not handled
+        return nullptr; //this type is not handled
     }
 }
 

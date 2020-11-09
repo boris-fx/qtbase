@@ -64,7 +64,8 @@ class QQnxWindow : public QPlatformWindow
 {
 friend class QQnxScreen;
 public:
-    QQnxWindow(QWindow *window, screen_context_t context, bool needRootWindow);
+    explicit QQnxWindow(QWindow *window, screen_context_t context, bool needRootWindow);
+    explicit QQnxWindow(QWindow *window, screen_context_t context, screen_window_t screenWindow);
     virtual ~QQnxWindow();
 
     void setGeometry(const QRect &rect) override;
@@ -113,6 +114,7 @@ public:
     bool shouldMakeFullScreen() const;
 
     void windowPosted();
+    void handleActivationEvent();
 
 protected:
     virtual int pixelFormat() const = 0;
@@ -123,6 +125,7 @@ protected:
     screen_context_t m_screenContext;
 
 private:
+    void collectWindowGroup();
     void createWindowGroup();
     void setGeometryHelper(const QRect &rect);
     void removeFromParent();
@@ -131,6 +134,11 @@ private:
     void updateZorder(screen_window_t window, int &zOrder);
     void applyWindowState();
     void setFocus(screen_window_t newFocusWindow);
+    bool showWithoutActivating() const;
+    bool focusable() const;
+
+    void addContextPermission();
+    void removeContextPermission();
 
     screen_window_t m_window;
     QSize m_bufferSize;
@@ -141,6 +149,7 @@ private:
     QScopedPointer<QQnxAbstractCover> m_cover;
     bool m_visible;
     bool m_exposed;
+    bool m_foreign;
     QRect m_unmaximizedGeometry;
     Qt::WindowStates m_windowState;
     QString m_mmRendererWindowName;
@@ -152,6 +161,7 @@ private:
     QByteArray m_parentGroupName;
 
     bool m_isTopLevel;
+    bool m_firstActivateHandled;
 };
 
 QT_END_NAMESPACE

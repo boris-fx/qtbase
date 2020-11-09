@@ -48,9 +48,9 @@
 **
 ****************************************************************************/
 
-//! [1]
 #include "googlesuggest.h"
 
+//! [1]
 const QString gsuggestUrl(QStringLiteral("http://google.com/complete/search?output=toolbar&q=%1"));
 //! [1]
 
@@ -74,16 +74,18 @@ GSuggestCompletion::GSuggestCompletion(QLineEdit *parent): QObject(parent), edit
 
     popup->installEventFilter(this);
 
-    connect(popup, SIGNAL(itemClicked(QTreeWidgetItem*,int)),
-            SLOT(doneCompletion()));
+    connect(popup, &QTreeWidget::itemClicked,
+            this, &GSuggestCompletion::doneCompletion);
 
     timer.setSingleShot(true);
     timer.setInterval(500);
-    connect(&timer, SIGNAL(timeout()), SLOT(autoSuggest()));
-    connect(editor, SIGNAL(textEdited(QString)), &timer, SLOT(start()));
+    connect(&timer, &QTimer::timeout,
+            this, &GSuggestCompletion::autoSuggest);
+    connect(editor, &QLineEdit::textEdited,
+            &timer, QOverload<>::of(&QTimer::start));
 
-    connect(&networkManager, SIGNAL(finished(QNetworkReply*)),
-            this, SLOT(handleNetworkData(QNetworkReply*)));
+    connect(&networkManager, &QNetworkAccessManager::finished,
+            this, &GSuggestCompletion::handleNetworkData);
 
 }
 //! [2]
@@ -160,7 +162,7 @@ void GSuggestCompletion::showCompletion(const QVector<QString> &choices)
     for (const auto &choice : choices) {
         auto item  = new QTreeWidgetItem(popup);
         item->setText(0, choice);
-        item->setTextColor(0, color);
+        item->setForeground(0, color);
     }
 
     popup->setCurrentItem(popup->topLevelItem(0));

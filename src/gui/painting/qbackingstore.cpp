@@ -95,6 +95,11 @@ public:
 QBackingStore::QBackingStore(QWindow *window)
     : d_ptr(new QBackingStorePrivate(window))
 {
+    if (window->handle()) {
+        // Create platform backingstore up front if we have a platform window,
+        // otherwise delay the creation until absolutely necessary.
+        handle();
+    }
 }
 
 /*!
@@ -186,7 +191,7 @@ QPaintDevice *QBackingStore::paintDevice()
 void QBackingStore::endPaint()
 {
     if (paintDevice()->paintingActive())
-        qWarning() << "QBackingStore::endPaint() called with active painter on backingstore paint device";
+        qWarning("QBackingStore::endPaint() called with active painter; did you forget to destroy it or call QPainter::end() on it?");
 
     handle()->endPaint();
 }
@@ -208,15 +213,13 @@ static bool isRasterSurface(QWindow *window)
 
     The \a window must either be the top level window represented by
     this backingstore, or a non-transient child of that window. Passing
-    \c nullptr falls back to using the backingstore's top level window.
+    \nullptr falls back to using the backingstore's top level window.
 
     If the \a window is a child window, the \a region should be in child window
     coordinates, and the \a offset should be the child window's offset in relation
     to the backingstore's top level window.
 
     You should call this function after ending painting with endPaint().
-
-    \sa QWindow::transientParent()
 */
 void QBackingStore::flush(const QRegion &region, QWindow *window, const QPoint &offset)
 {
@@ -278,7 +281,7 @@ QSize QBackingStore::size() const
 bool QBackingStore::scroll(const QRegion &area, int dx, int dy)
 {
     // Disable scrolling for non-integer scroll deltas. For this case
-    // the the existing rendered pixels can't be re-used, and we return
+    // the existing rendered pixels can't be re-used, and we return
     // false to signal that a repaint is needed.
     const qreal nativeDx = QHighDpi::toNativePixels(qreal(dx), d_ptr->window);
     const qreal nativeDy = QHighDpi::toNativePixels(qreal(dy), d_ptr->window);

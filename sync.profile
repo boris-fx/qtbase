@@ -18,6 +18,7 @@
     "QtEventDispatcherSupport" => "$basedir/src/platformsupport/eventdispatchers",
     "QtFontDatabaseSupport" => "$basedir/src/platformsupport/fontdatabases",
     "QtInputSupport" => "$basedir/src/platformsupport/input",
+    "QtXkbCommonSupport" => "$basedir/src/platformsupport/input/xkbcommon",
     "QtPlatformCompositorSupport" => "$basedir/src/platformsupport/platformcompositor",
     "QtServiceSupport" => "$basedir/src/platformsupport/services",
     "QtThemeSupport" => "$basedir/src/platformsupport/themes",
@@ -36,6 +37,9 @@
     "QtZlib" => "!>$basedir/src/corelib;$basedir/src/3rdparty/zlib",
     "QtOpenGLExtensions" => "$basedir/src/openglextensions",
     "QtEglFSDeviceIntegration" => "$basedir/src/plugins/platforms/eglfs",
+    "QtMockPlugins1" => "$basedir/tests/auto/cmake/mockplugins/mockplugins1",
+    "QtMockPlugins2" => "$basedir/tests/auto/cmake/mockplugins/mockplugins2",
+    "QtMockPlugins3" => "$basedir/tests/auto/cmake/mockplugins/mockplugins3",
 );
 %moduleheaders = ( # restrict the module headers to those found in relative path
     "QtEglFSDeviceIntegration" => "api",
@@ -62,6 +66,7 @@
     "qtconcurrentmap.h" => "QtConcurrentMap",
     "qtconcurrentfilter.h" => "QtConcurrentFilter",
     "qtconcurrentrun.h" => "QtConcurrentRun",
+    "qpassworddigestor.h" => "QPasswordDigestor",
 );
 %deprecatedheaders = (
     "QtGui" =>  {

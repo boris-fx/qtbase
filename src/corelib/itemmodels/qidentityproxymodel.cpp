@@ -95,7 +95,7 @@ class QIdentityProxyModelPrivate : public QAbstractProxyModelPrivate
     need to implement all data handling in the same class that creates the structure of the model, and can also be used to create
     re-usable components.
 
-    This also provides a way to change the data in the case where a source model is supplied by a third party which can not be modified.
+    This also provides a way to change the data in the case where a source model is supplied by a third party which cannot be modified.
 
     \snippet code/src_gui_itemviews_qidentityproxymodel.cpp 0
 
@@ -313,6 +313,30 @@ bool QIdentityProxyModel::removeRows(int row, int count, const QModelIndex& pare
 
 /*!
     \reimp
+    \since 5.15
+ */
+bool QIdentityProxyModel::moveRows(const QModelIndex &sourceParent, int sourceRow, int count, const QModelIndex &destinationParent, int destinationChild)
+{
+    Q_ASSERT(sourceParent.isValid() ? sourceParent.model() == this : true);
+    Q_ASSERT(destinationParent.isValid() ? destinationParent.model() == this : true);
+    Q_D(QIdentityProxyModel);
+    return d->model->moveRows(mapToSource(sourceParent), sourceRow, count, mapToSource(destinationParent), destinationChild);
+}
+
+/*!
+    \reimp
+    \since 5.15
+ */
+bool QIdentityProxyModel::moveColumns(const QModelIndex &sourceParent, int sourceColumn, int count, const QModelIndex &destinationParent, int destinationChild)
+{
+    Q_ASSERT(sourceParent.isValid() ? sourceParent.model() == this : true);
+    Q_ASSERT(destinationParent.isValid() ? destinationParent.model() == this : true);
+    Q_D(QIdentityProxyModel);
+    return d->model->moveColumns(mapToSource(sourceParent), sourceColumn, count, mapToSource(destinationParent), destinationChild);
+}
+
+/*!
+    \reimp
  */
 int QIdentityProxyModel::rowCount(const QModelIndex& parent) const
 {
@@ -480,13 +504,13 @@ void QIdentityProxyModelPrivate::_q_sourceDataChanged(const QModelIndex &topLeft
     Q_ASSERT(topLeft.isValid() ? topLeft.model() == model : true);
     Q_ASSERT(bottomRight.isValid() ? bottomRight.model() == model : true);
     Q_Q(QIdentityProxyModel);
-    q->dataChanged(q->mapFromSource(topLeft), q->mapFromSource(bottomRight), roles);
+    emit q->dataChanged(q->mapFromSource(topLeft), q->mapFromSource(bottomRight), roles);
 }
 
 void QIdentityProxyModelPrivate::_q_sourceHeaderDataChanged(Qt::Orientation orientation, int first, int last)
 {
     Q_Q(QIdentityProxyModel);
-    q->headerDataChanged(orientation, first, last);
+    emit q->headerDataChanged(orientation, first, last);
 }
 
 void QIdentityProxyModelPrivate::_q_sourceLayoutAboutToBeChanged(const QList<QPersistentModelIndex> &sourceParents, QAbstractItemModel::LayoutChangeHint hint)
@@ -505,10 +529,10 @@ void QIdentityProxyModelPrivate::_q_sourceLayoutAboutToBeChanged(const QList<QPe
         parents << mappedParent;
     }
 
-    q->layoutAboutToBeChanged(parents, hint);
+    emit q->layoutAboutToBeChanged(parents, hint);
 
     const auto proxyPersistentIndexes = q->persistentIndexList();
-    for (const QPersistentModelIndex &proxyPersistentIndex : proxyPersistentIndexes) {
+    for (const QModelIndex &proxyPersistentIndex : proxyPersistentIndexes) {
         proxyIndexes << proxyPersistentIndex;
         Q_ASSERT(proxyPersistentIndex.isValid());
         const QPersistentModelIndex srcPersistentIndex = q->mapToSource(proxyPersistentIndex);
@@ -540,7 +564,7 @@ void QIdentityProxyModelPrivate::_q_sourceLayoutChanged(const QList<QPersistentM
         parents << mappedParent;
     }
 
-    q->layoutChanged(parents, hint);
+    emit q->layoutChanged(parents, hint);
 }
 
 void QIdentityProxyModelPrivate::_q_sourceModelAboutToBeReset()

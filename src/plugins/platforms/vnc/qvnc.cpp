@@ -537,7 +537,7 @@ QVncClientCursor::QVncClientCursor()
 {
     QWindow *w = QGuiApplication::focusWindow();
     QCursor c = w ? w->cursor() : QCursor(Qt::ArrowCursor);
-    changeCursor(&c, 0);
+    changeCursor(&c, nullptr);
 }
 
 QVncClientCursor::~QVncClientCursor()
@@ -595,12 +595,12 @@ void QVncClientCursor::changeCursor(QCursor *widgetCursor, QWindow *window)
         cursor = widgetCursor->pixmap().toImage();
     } else {
         // system cursor
-        QPlatformCursorImage platformImage(0, 0, 0, 0, 0, 0);
+        QPlatformCursorImage platformImage(nullptr, nullptr, 0, 0, 0, 0);
         platformImage.set(shape);
         cursor = *platformImage.image();
         hotspot = platformImage.hotspot();
     }
-    for (auto client : clients)
+    for (auto client : qAsConst(clients))
         client->setDirtyCursor();
 }
 
@@ -638,16 +638,14 @@ void QVncServer::init()
 
 QVncServer::~QVncServer()
 {
-    for (auto client : clients) {
-        delete client;
-    }
+    qDeleteAll(clients);
 }
 
 void QVncServer::setDirty()
 {
-    for (auto client : clients) {
+    for (auto client : qAsConst(clients))
         client->setDirty(qvnc_screen->dirtyRegion);
-    }
+
     qvnc_screen->clearDirty();
 }
 

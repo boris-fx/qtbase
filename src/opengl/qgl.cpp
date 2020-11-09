@@ -83,7 +83,8 @@ QT_BEGIN_NAMESPACE
 class QGLDefaultExtensions
 {
 public:
-    QGLDefaultExtensions() : extensions(0) {
+    QGLDefaultExtensions()
+    {
         QGLTemporaryContext tempContext;
         Q_ASSERT(QOpenGLContext::currentContext());
         QOpenGLExtensions *ext = qgl_extensions();
@@ -397,7 +398,7 @@ QGLFormat::QGLFormat(QGL::FormatOptions options, int plane)
 */
 void QGLFormat::detach()
 {
-    if (d->ref.load() != 1) {
+    if (d->ref.loadRelaxed() != 1) {
         QGLFormatPrivate *newd = new QGLFormatPrivate(d);
         if (!d->ref.deref())
             delete d;
@@ -1667,11 +1668,6 @@ bool operator!=(const QGLFormat& a, const QGLFormat& b)
 }
 
 struct QGLContextGroupList {
-    QGLContextGroupList()
-        : m_mutex(QMutex::Recursive)
-    {
-    }
-
     void append(QGLContextGroup *group) {
         QMutexLocker locker(&m_mutex);
         m_list.append(group);
@@ -1683,7 +1679,7 @@ struct QGLContextGroupList {
     }
 
     QList<QGLContextGroup *> m_list;
-    QMutex m_mutex;
+    QRecursiveMutex m_mutex;
 };
 
 Q_GLOBAL_STATIC(QGLContextGroupList, qt_context_groups)
@@ -3880,12 +3876,9 @@ void QGLContext::doneCurrent()
 */
 
 QGLWidget::QGLWidget(QWidget *parent, const QGLWidget* shareWidget, Qt::WindowFlags f)
-    : QWidget(*(new QGLWidgetPrivate), parent, f | Qt::MSWindowsOwnDC)
+    : QWidget(*(new QGLWidgetPrivate), parent, f)
 {
     Q_D(QGLWidget);
-    setAttribute(Qt::WA_PaintOnScreen);
-    setAttribute(Qt::WA_NoSystemBackground);
-    setAutoFillBackground(true); // for compatibility
     d->init(new QGLContext(QGLFormat::defaultFormat(), this), shareWidget);
 }
 
@@ -3893,12 +3886,9 @@ QGLWidget::QGLWidget(QWidget *parent, const QGLWidget* shareWidget, Qt::WindowFl
   \internal
  */
 QGLWidget::QGLWidget(QGLWidgetPrivate &dd, const QGLFormat &format, QWidget *parent, const QGLWidget *shareWidget, Qt::WindowFlags f)
-    : QWidget(dd, parent, f | Qt::MSWindowsOwnDC)
+    : QWidget(dd, parent, f)
 {
     Q_D(QGLWidget);
-    setAttribute(Qt::WA_PaintOnScreen);
-    setAttribute(Qt::WA_NoSystemBackground);
-    setAutoFillBackground(true); // for compatibility
     d->init(new QGLContext(format, this), shareWidget);
 
 }
@@ -3935,12 +3925,9 @@ QGLWidget::QGLWidget(QGLWidgetPrivate &dd, const QGLFormat &format, QWidget *par
 
 QGLWidget::QGLWidget(const QGLFormat &format, QWidget *parent, const QGLWidget* shareWidget,
                      Qt::WindowFlags f)
-    : QWidget(*(new QGLWidgetPrivate), parent, f | Qt::MSWindowsOwnDC)
+    : QWidget(*(new QGLWidgetPrivate), parent, f)
 {
     Q_D(QGLWidget);
-    setAttribute(Qt::WA_PaintOnScreen);
-    setAttribute(Qt::WA_NoSystemBackground);
-    setAutoFillBackground(true); // for compatibility
     d->init(new QGLContext(format, this), shareWidget);
 }
 
@@ -3971,12 +3958,9 @@ QGLWidget::QGLWidget(const QGLFormat &format, QWidget *parent, const QGLWidget* 
 */
 QGLWidget::QGLWidget(QGLContext *context, QWidget *parent, const QGLWidget *shareWidget,
                      Qt::WindowFlags f)
-    : QWidget(*(new QGLWidgetPrivate), parent, f | Qt::MSWindowsOwnDC)
+    : QWidget(*(new QGLWidgetPrivate), parent, f)
 {
     Q_D(QGLWidget);
-    setAttribute(Qt::WA_PaintOnScreen);
-    setAttribute(Qt::WA_NoSystemBackground);
-    setAutoFillBackground(true); // for compatibility
     d->init(context, shareWidget);
 }
 
@@ -4035,7 +4019,7 @@ QGLWidget::~QGLWidget()
     \fn QFunctionPointer QGLContext::getProcAddress(const QString &proc) const
 
     Returns a function pointer to the GL extension function passed in
-    \a proc. 0 is returned if a pointer to the function could not be
+    \a proc. \nullptr is returned if a pointer to the function could not be
     obtained.
 */
 QFunctionPointer QGLContext::getProcAddress(const QString &procName) const
@@ -4131,14 +4115,14 @@ void QGLWidget::swapBuffers()
 /*!
     \fn const QGLContext* QGLWidget::overlayContext() const
 
-    Returns the overlay context of this widget, or 0 if this widget
-    has no overlay.
+    Returns the overlay context of this widget, or \nullptr if this
+    widget has no overlay.
 
     \sa context()
 */
 const QGLContext* QGLWidget::overlayContext() const
 {
-    return 0;
+    return nullptr;
 }
 
 /*!
@@ -4979,7 +4963,7 @@ void QGLWidget::renderText(double x, double y, double z, const QString &str, con
         // The only option in Qt 5 is the shader-based OpenGL 2 paint engine.
         // Setting fixed pipeline transformations is futile. Instead, pass the
         // extra values directly and let the engine figure the matrices out.
-        static_cast<QGL2PaintEngineEx *>(p->paintEngine())->setTranslateZ(-win_z);
+        static_cast<QGL2PaintEngineEx *>(p->paintEngine())->setTranslateZ(-2 * win_z);
 
         qt_gl_draw_text(p, qRound(win_x), qRound(win_y), str, font);
 
@@ -5169,6 +5153,15 @@ QPaintEngine *QGLWidget::paintEngine() const
 
 void QGLWidgetPrivate::init(QGLContext *context, const QGLWidget *shareWidget)
 {
+    Q_Q(QGLWidget);
+    q->setAttribute(Qt::WA_PaintOnScreen);
+    q->setAttribute(Qt::WA_NoSystemBackground);
+    q->setAutoFillBackground(true); // for compatibility
+
+    mustHaveWindowHandle = 1;
+    q->setAttribute(Qt::WA_NativeWindow);
+    q->setWindowFlag(Qt::MSWindowsOwnDC);
+
     initContext(context, shareWidget);
 }
 
@@ -5211,7 +5204,7 @@ void QGLContextGroup::addShare(const QGLContext *context, const QGLContext *shar
         return;
 
     // Make sure 'context' is not already shared with another group of contexts.
-    Q_ASSERT(context->d_ptr->group->m_refs.load() == 1);
+    Q_ASSERT(context->d_ptr->group->m_refs.loadRelaxed() == 1);
 
     // Free 'context' group resources and make it use the same resources as 'share'.
     QGLContextGroup *group = share->d_ptr->group;

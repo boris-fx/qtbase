@@ -48,9 +48,11 @@
 **
 ****************************************************************************/
 
-#include <QtWidgets>
-
 #include "stylesheeteditor.h"
+
+#include <QFile>
+#include <QRegularExpression>
+#include <QStyleFactory>
 
 StyleSheetEditor::StyleSheetEditor(QWidget *parent)
     : QDialog(parent)

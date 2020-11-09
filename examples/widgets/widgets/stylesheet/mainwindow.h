@@ -51,7 +51,7 @@
 #ifndef MAINWINDOW_H
 #define MAINWINDOW_H
 
-#include <QtWidgets>
+#include <QMainWindow>
 
 #include "ui_mainwindow.h"
 
@@ -62,7 +62,7 @@ class MainWindow : public QMainWindow
     Q_OBJECT
 
 public:
-    MainWindow();
+    MainWindow(QWidget *parent = nullptr);
 
 private slots:
     void on_editStyleAction_triggered();

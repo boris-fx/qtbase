@@ -52,18 +52,17 @@
 #include "boat.h"
 #include "boat_p.h"
 #include "bomb.h"
-#include "pixmapitem.h"
 #include "graphicsscene.h"
 #include "animationmanager.h"
 #include "qanimationstate.h"
 
 //Qt
-#include <QtCore/QPropertyAnimation>
-#include <QtCore/QStateMachine>
-#include <QtCore/QHistoryState>
-#include <QtCore/QFinalState>
-#include <QtCore/QState>
-#include <QtCore/QSequentialAnimationGroup>
+#include <QFinalState>
+#include <QHistoryState>
+#include <QPropertyAnimation>
+#include <QSequentialAnimationGroup>
+#include <QState>
+#include <QStateMachine>
 
 static QAbstractAnimation *setupDestroyAnimation(Boat *boat)
 {
@@ -92,8 +91,9 @@ static QAbstractAnimation *setupDestroyAnimation(Boat *boat)
 
 
 
-Boat::Boat() : PixmapItem(QString("boat"), GraphicsScene::Big),
-    speed(0), bombsAlreadyLaunched(0), direction(Boat::None), movementAnimation(0)
+Boat::Boat()
+    : PixmapItem(QString("boat"), GraphicsScene::Big),
+      speed(0), bombsAlreadyLaunched(0), direction(Boat::None)
 {
     setZValue(4);
     setFlags(QGraphicsItem::ItemIsFocusable);
@@ -148,8 +148,8 @@ Boat::Boat() : PixmapItem(QString("boat"), GraphicsScene::Big),
     stopState->addTransition(leftMoveStop);
 
     //The animation is finished, it means we reached the border of the screen, the boat is stopped so we move to the stop state
-    moveStateLeft->addTransition(movementAnimation, SIGNAL(finished()), stopState);
-    moveStateRight->addTransition(movementAnimation, SIGNAL(finished()), stopState);
+    moveStateLeft->addTransition(movementAnimation, &QAbstractAnimation::finished, stopState);
+    moveStateRight->addTransition(movementAnimation, &QAbstractAnimation::finished, stopState);
 
     //We set up the keys for dropping bombs
     KeyLaunchTransition *upFireLeft = new KeyLaunchTransition(this, QEvent::KeyPress, Qt::Key_Up);
@@ -180,20 +180,20 @@ Boat::Boat() : PixmapItem(QString("boat"), GraphicsScene::Big),
     launchStateLeft->addTransition(historyState);
     launchStateRight->addTransition(historyState);
 
-    QFinalState *final = new QFinalState(machine);
+    QFinalState *finalState = new QFinalState(machine);
 
     //This state play the destroyed animation
     QAnimationState *destroyedState = new QAnimationState(machine);
     destroyedState->setAnimation(destroyAnimation);
 
     //Play a nice animation when the boat is destroyed
-    moving->addTransition(this, SIGNAL(boatDestroyed()), destroyedState);
+    moving->addTransition(this, &Boat::boatDestroyed, destroyedState);
 
     //Transition to final state when the destroyed animation is finished
-    destroyedState->addTransition(destroyedState, SIGNAL(animationFinished()), final);
+    destroyedState->addTransition(destroyedState, &QAnimationState::animationFinished, finalState);
 
     //The machine has finished to be executed, then the boat is dead
-    connect(machine,SIGNAL(finished()), this, SIGNAL(boatExecutionFinished()));
+    connect(machine, &QState::finished, this, &Boat::boatExecutionFinished);
 
 }
 

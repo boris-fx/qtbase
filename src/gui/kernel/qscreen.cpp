@@ -71,10 +71,31 @@ QT_BEGIN_NAMESPACE
 */
 
 QScreen::QScreen(QPlatformScreen *screen)
-    : QObject(*new QScreenPrivate(), 0)
+    : QObject(*new QScreenPrivate(), nullptr)
 {
     Q_D(QScreen);
     d->setPlatformScreen(screen);
+}
+
+void QScreenPrivate::updateGeometriesWithSignals()
+{
+    const QRect oldGeometry = geometry;
+    const QRect oldAvailableGeometry = availableGeometry;
+    updateHighDpi();
+    emitGeometryChangeSignals(oldGeometry != geometry, oldAvailableGeometry != availableGeometry);
+}
+
+void QScreenPrivate::emitGeometryChangeSignals(bool geometryChanged, bool availableGeometryChanged)
+{
+    Q_Q(QScreen);
+    if (availableGeometryChanged)
+        emit q->availableGeometryChanged(availableGeometry);
+
+    if (geometryChanged || availableGeometryChanged) {
+        const auto siblings = q->virtualSiblings();
+        for (QScreen* sibling : siblings)
+            emit sibling->virtualGeometryChanged(sibling->virtualGeometry());
+    }
 }
 
 void QScreenPrivate::setPlatformScreen(QPlatformScreen *screen)
@@ -83,9 +104,9 @@ void QScreenPrivate::setPlatformScreen(QPlatformScreen *screen)
     platformScreen = screen;
     platformScreen->d_func()->screen = q;
     orientation = platformScreen->orientation();
-    geometry = platformScreen->deviceIndependentGeometry();
-    availableGeometry = QHighDpi::fromNative(platformScreen->availableGeometry(), QHighDpiScaling::factor(platformScreen), geometry.topLeft());
-    logicalDpi = platformScreen->logicalDpi();
+
+    logicalDpi = QPlatformScreen::overrideDpi(platformScreen->logicalDpi());
+
     refreshRate = platformScreen->refreshRate();
     // safeguard ourselves against buggy platform behavior...
     if (refreshRate < 1.0)
@@ -106,8 +127,17 @@ void QScreenPrivate::setPlatformScreen(QPlatformScreen *screen)
  */
 QScreen::~QScreen()
 {
-    if (!qApp)
+    // Remove screen
+    const bool wasPrimary = QGuiApplication::primaryScreen() == this;
+    QGuiApplicationPrivate::screen_list.removeOne(this);
+    QGuiApplicationPrivate::resetCachedDevicePixelRatio();
+
+    if (!qGuiApp)
         return;
+
+    QScreen *newPrimaryScreen = QGuiApplication::primaryScreen();
+    if (wasPrimary && newPrimaryScreen)
+        emit qGuiApp->primaryScreenChanged(newPrimaryScreen);
 
     // Allow clients to manage windows that are affected by the screen going
     // away, before we fall back to moving them to the primary screen.
@@ -116,11 +146,8 @@ QScreen::~QScreen()
     if (QGuiApplication::closingDown())
         return;
 
-    QScreen *primaryScreen = QGuiApplication::primaryScreen();
-    if (this == primaryScreen)
-        return;
-
-    bool movingFromVirtualSibling = primaryScreen && primaryScreen->handle()->virtualSiblings().contains(handle());
+    bool movingFromVirtualSibling = newPrimaryScreen
+        && newPrimaryScreen->handle()->virtualSiblings().contains(handle());
 
     // Move any leftover windows to the primary screen
     const auto allWindows = QGuiApplication::allWindows();
@@ -129,7 +156,7 @@ QScreen::~QScreen()
             continue;
 
         const bool wasVisible = window->isVisible();
-        window->setScreen(primaryScreen);
+        window->setScreen(newPrimaryScreen);
 
         // Re-show window if moved from a virtual sibling screen. Otherwise
         // leave it up to the application developer to show the window.
@@ -140,6 +167,8 @@ QScreen::~QScreen()
 
 /*!
   Get the platform screen handle.
+
+  \sa {Qt Platform Abstraction}{Qt Platform Abstraction (QPA)}
 */
 QPlatformScreen *QScreen::handle() const
 {
@@ -279,7 +308,7 @@ qreal QScreen::logicalDotsPerInchX() const
 {
     Q_D(const QScreen);
     if (QHighDpiScaling::isActive())
-        return QHighDpiScaling::logicalDpi().first;
+        return QHighDpiScaling::logicalDpi(this).first;
     return d->logicalDpi.first;
 }
 
@@ -295,7 +324,7 @@ qreal QScreen::logicalDotsPerInchY() const
 {
     Q_D(const QScreen);
     if (QHighDpiScaling::isActive())
-        return QHighDpiScaling::logicalDpi().second;
+        return QHighDpiScaling::logicalDpi(this).second;
     return d->logicalDpi.second;
 }
 
@@ -314,7 +343,7 @@ qreal QScreen::logicalDotsPerInchY() const
 qreal QScreen::logicalDotsPerInch() const
 {
     Q_D(const QScreen);
-    QDpi dpi = QHighDpiScaling::isActive() ? QHighDpiScaling::logicalDpi() : d->logicalDpi;
+    QDpi dpi = QHighDpiScaling::isActive() ? QHighDpiScaling::logicalDpi(this) : d->logicalDpi;
     return (dpi.first + dpi.second) * qreal(0.5);
 }
 
@@ -691,6 +720,25 @@ void QScreenPrivate::updatePrimaryOrientation()
 }
 
 /*!
+    Returns the screen at \a point within the set of \l QScreen::virtualSiblings(),
+    or \c nullptr if outside of any screen.
+
+    The \a point is in relation to the virtualGeometry() of each set of virtual
+    siblings.
+
+    \since 5.15
+*/
+QScreen *QScreen::virtualSiblingAt(QPoint point)
+{
+    const auto &siblings = virtualSiblings();
+    for (QScreen *sibling : siblings) {
+        if (sibling->geometry().contains(point))
+            return sibling;
+    }
+    return nullptr;
+}
+
+/*!
     Creates and returns a pixmap constructed by grabbing the contents
     of the given \a window restricted by QRect(\a x, \a y, \a width,
     \a height).
@@ -762,7 +810,7 @@ QPixmap QScreen::grabWindow(WId window, int x, int y, int width, int height)
 static inline void formatRect(QDebug &debug, const QRect r)
 {
     debug << r.width() << 'x' << r.height()
-        << forcesign << r.x() << r.y() << noforcesign;
+        << Qt::forcesign << r.x() << r.y() << Qt::noforcesign;
 }
 
 Q_GUI_EXPORT QDebug operator<<(QDebug debug, const QScreen *screen)

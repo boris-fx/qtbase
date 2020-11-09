@@ -28,19 +28,24 @@
 ****************************************************************************/
 
 #include "qwasmcursor.h"
+#include "qwasmscreen.h"
+#include "qwasmstring.h"
 
 #include <QtCore/qdebug.h>
+#include <QtGui/qwindow.h>
 
 #include <emscripten/emscripten.h>
+#include <emscripten/bind.h>
+
+using namespace emscripten;
 
 void QWasmCursor::changeCursor(QCursor *windowCursor, QWindow *window)
 {
-    if (windowCursor == nullptr)
+    if (!windowCursor || !window)
         return;
-
-    // FIXME: The HTML5 plugin sets the cursor on the native canvas; when using multiple windows
-    // multiple cursors need to be managed taking mouse postion and stacking into account.
-    Q_UNUSED(window);
+    QScreen *screen = window->screen();
+    if (!screen)
+        return;
 
     // Bitmap and custom cursors are not implemented (will fall back to "auto")
     if (windowCursor->shape() == Qt::BitmapCursor || windowCursor->shape() >= Qt::CustomCursor)
@@ -51,12 +56,10 @@ void QWasmCursor::changeCursor(QCursor *windowCursor, QWindow *window)
     if (htmlCursorName.isEmpty())
         htmlCursorName = "auto";
 
-    // Set cursor on the main canvas
-    EM_ASM_ARGS({
-        if (Module['canvas']) {
-            Module['canvas'].style['cursor'] = Pointer_stringify($0);
-        }
-    }, htmlCursorName.constData());
+    // Set cursor on the canvas
+    val canvas = QWasmScreen::get(screen)->canvas();
+    val canvasStyle = canvas["style"];
+    canvasStyle.set("cursor", val(htmlCursorName.constData()));
 }
 
 QByteArray QWasmCursor::cursorShapeToHtml(Qt::CursorShape shape)
@@ -68,6 +71,7 @@ QByteArray QWasmCursor::cursorShapeToHtml(Qt::CursorShape shape)
         cursorName = "default";
         break;
     case Qt::UpArrowCursor:
+        cursorName = "n-resize";
         break;
     case Qt::CrossCursor:
         cursorName = "crosshair";
@@ -91,7 +95,8 @@ QByteArray QWasmCursor::cursorShapeToHtml(Qt::CursorShape shape)
         cursorName = "nwse-resize";
         break;
     case Qt::SizeAllCursor:
-        break; // no equivalent?
+        cursorName = "move";
+        break;
     case Qt::BlankCursor:
         cursorName = "none";
         break;
@@ -111,18 +116,23 @@ QByteArray QWasmCursor::cursorShapeToHtml(Qt::CursorShape shape)
         cursorName = "help";
         break;
     case Qt::BusyCursor:
-        cursorName = "wait";
+        cursorName = "progress";
         break;
     case Qt::OpenHandCursor:
-        break; // no equivalent?
+        cursorName = "grab";
+        break;
     case Qt::ClosedHandCursor:
-        break; // no equivalent?
+        cursorName = "grabbing";
+        break;
     case Qt::DragCopyCursor:
-        break; // no equivalent?
+        cursorName = "copy";
+        break;
     case Qt::DragMoveCursor:
-        break; // no equivalent?
+        cursorName = "default";
+        break;
     case Qt::DragLinkCursor:
-        break; // no equivalent?
+        cursorName = "alias";
+        break;
     default:
         break;
     }

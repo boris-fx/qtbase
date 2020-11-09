@@ -48,12 +48,15 @@
 **
 ****************************************************************************/
 
-#ifndef QT_NO_PRINTER
-#include <QPrinter>
-#endif
-#include <QStyleOptionViewItem>
-
 #include "printview.h"
+
+#if defined(QT_PRINTSUPPORT_LIB)
+#  include <QtPrintSupport/qtprintsupportglobal.h>
+
+#  if QT_CONFIG(printer)
+#    include <QPrinter>
+#  endif
+#endif
 
 PrintView::PrintView()
 {
@@ -63,9 +66,11 @@ PrintView::PrintView()
 
 void PrintView::print(QPrinter *printer)
 {
-#ifndef QT_NO_PRINTER
+#if defined(QT_PRINTSUPPORT_LIB) && QT_CONFIG(printer)
     resize(printer->width(), printer->height());
     render(printer);
+#else
+    Q_UNUSED(printer)
 #endif
 }
 

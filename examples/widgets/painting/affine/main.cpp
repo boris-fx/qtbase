@@ -55,15 +55,17 @@
 int main(int argc, char **argv)
 {
     Q_INIT_RESOURCE(affine);
-
+#ifdef Q_OS_ANDROID
+    qputenv("QT_SCALE_FACTOR", "2");
+#endif
     QApplication app(argc, argv);
 
-    XFormWidget xformWidget(0);
-    QStyle *arthurStyle = new ArthurStyle();
+    XFormWidget xformWidget(nullptr);
+    QStyle *arthurStyle = new ArthurStyle;
     xformWidget.setStyle(arthurStyle);
 
-    QList<QWidget *> widgets = xformWidget.findChildren<QWidget *>();
-    foreach (QWidget *w, widgets) {
+    const QList<QWidget *> widgets = xformWidget.findChildren<QWidget *>();
+    for (QWidget *w : widgets) {
         w->setStyle(arthurStyle);
         w->setAttribute(Qt::WA_AcceptTouchEvents);
     }

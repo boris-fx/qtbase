@@ -49,6 +49,8 @@
 
 QT_BEGIN_NAMESPACE
 
+#ifndef QT_NO_PDF
+
 // This map is used for symbol fonts to get the correct glyph names for the latin range
 static const unsigned short symbol_map[0x100] = {
     0x0000, 0x0001, 0x0002, 0x0003, 0x0004, 0x0005, 0x0006, 0x0007,
@@ -90,7 +92,7 @@ static const unsigned short symbol_map[0x100] = {
 
 // ---------------------------- PS/PDF helper methods -----------------------------------
 
-#ifndef QT_NO_PDF
+
 
 QByteArray QFontSubset::glyphName(unsigned short unicode, bool symbol)
 {
@@ -788,7 +790,7 @@ static void convertPath(const QPainterPath &path, QVector<TTF_POINT> *points, QV
                         // see if we can optimize out the last onCurve point
                         int mx = (points->at(points->size() - 2).x + base[2].x) >> 1;
                         int my = (points->at(points->size() - 2).y + base[2].y) >> 1;
-                        if (qAbs(mx - base[3].x) <= split_limit && qAbs(my = base[3].y) <= split_limit)
+                        if (qAbs(mx - base[3].x) <= split_limit && qAbs(my - base[3].y) <= split_limit)
                             points->takeLast();
                         try_reduce = false;
                     }

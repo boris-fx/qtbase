@@ -50,6 +50,7 @@
 #include <QDomDocument>
 #include "common.h"
 
+// #define DEBUG_WRITE_OUTPUT
 
 QT_FORWARD_DECLARE_CLASS(QTextDocument)
 
@@ -104,6 +105,7 @@ private slots:
     void toHtmlBodyBgColorTransparent();
     void toHtmlRootFrameProperties();
     void toHtmlLineHeightProperties();
+    void toHtmlDefaultFontSpacingProperties();
     void capitalizationHtmlInExport();
     void wordspacingHtmlExport();
 
@@ -124,6 +126,7 @@ private slots:
     void clonePreservesResources();
     void clonePreservesUserStates();
     void clonePreservesIndentWidth();
+    void clonePreservesFormatsWhenEmpty();
     void blockCount();
     void defaultStyleSheet();
 
@@ -188,10 +191,17 @@ private slots:
 
     void lineHeightType();
     void cssLineHeightMultiplier();
+
+    void fontTagFace();
+
+    void clearUndoRedoStacks();
+    void mergeFontFamilies();
+
 private:
     void backgroundImage_checkExpectedHtml(const QTextDocument &doc);
     void buildRegExpData();
     static QString cssFontSizeString(const QFont &font);
+    void writeActualAndExpected(const char* testTag, const QString &actual, const QString &expected);
 
     QTextDocument *doc;
     QTextCursor cursor;
@@ -218,6 +228,27 @@ QString tst_QTextDocument::cssFontSizeString(const QFont &font)
     return font.pointSize() >= 0
             ? QString::number(font.pointSizeF()) + QStringLiteral("pt")
             : QString::number(font.pixelSize()) + QStringLiteral("px");
+}
+
+void tst_QTextDocument::writeActualAndExpected(const char *testTag, const QString &actual, const QString &expected)
+{
+#ifdef DEBUG_WRITE_OUTPUT
+    {
+        QFile out(QDir::temp().absoluteFilePath(QLatin1String(testTag) + QLatin1String("-actual.html")));
+        out.open(QFile::WriteOnly);
+        out.write(actual.toUtf8());
+        out.close();
+    } {
+        QFile out(QDir::temp().absoluteFilePath(QLatin1String(testTag) + QLatin1String("-expected.html")));
+        out.open(QFile::WriteOnly);
+        out.write(expected.toUtf8());
+        out.close();
+    }
+#else
+    Q_UNUSED(testTag)
+    Q_UNUSED(actual)
+    Q_UNUSED(expected)
+#endif
 }
 
 // Testing get/set functions
@@ -319,6 +350,15 @@ void tst_QTextDocument::find_data()
     QTest::newRow("nbsp") << "Hello" + QString(QChar(QChar::Nbsp)) +"World" << " " << int(QTextDocument::FindCaseSensitively) << 0 << 5 << 6;
 
     QTest::newRow("from-the-end") << "Hello World" << "Hello World" << int(QTextDocument::FindCaseSensitively| QTextDocument::FindBackward) << 11 << 0 << 11;
+
+    QTest::newRow("bw-cross-paras-1") << "a1\na2\nb1" << "a" << int(QTextDocument::FindBackward) << 7 << 3 << 4;
+    QTest::newRow("bw-cross-paras-2") << "a1\na2\nb1" << "a" << int(QTextDocument::FindBackward) << 6 << 3 << 4;
+    QTest::newRow("bw-cross-paras-3") << "a1\na2\nb1" << "a" << int(QTextDocument::FindBackward) << 5 << 3 << 4;
+    QTest::newRow("bw-cross-paras-4") << "a1\na2\nb1" << "a" << int(QTextDocument::FindBackward) << 3 << 0 << 1;
+    QTest::newRow("bw-cross-paras-5") << "xa\n\nb1" << "a" << int(QTextDocument::FindBackward) << 5 << 1 << 2;
+    QTest::newRow("bw-cross-paras-6") << "xa\n\nb1" << "a" << int(QTextDocument::FindBackward) << 4 << 1 << 2;
+    QTest::newRow("bw-cross-paras-7") << "xa\n\nb1" << "a" << int(QTextDocument::FindBackward) << 3 << 1 << 2;
+    QTest::newRow("bw-cross-paras-8") << "xa\n\nb1" << "a" << int(QTextDocument::FindBackward) << 2 << 1 << 2;
 }
 
 void tst_QTextDocument::find()
@@ -855,6 +895,18 @@ void tst_QTextDocument::toHtml_data()
     {
         CREATE_DOC_AND_CURSOR();
 
+        QTextCharFormat fmt;
+        fmt.setFontFamily("Times");
+        fmt.setFontFamilies(QStringList{ "Times", "serif" });
+        cursor.insertText("Blah", fmt);
+
+        QTest::newRow("font-family-with-fallback") << QTextDocumentFragment(&doc)
+                                  << QString("<p DEFAULTBLOCKSTYLE><span style=\" font-family:'Times','serif';\">Blah</span></p>");
+    }
+
+    {
+        CREATE_DOC_AND_CURSOR();
+
         QTextBlockFormat fmt;
         fmt.setNonBreakableLines(true);
         cursor.insertBlock(fmt);
@@ -1128,7 +1180,7 @@ void tst_QTextDocument::toHtml_data()
 
         QTextCharFormat fmt;
         fmt.setAnchor(true);
-        fmt.setAnchorName("blub");
+        fmt.setAnchorNames({"blub"});
         cursor.insertText("Blah", fmt);
 
         QTest::newRow("named anchor") << QTextDocumentFragment(&doc)
@@ -1740,9 +1792,17 @@ void tst_QTextDocument::toHtml()
 
     QString output = doc->toHtml();
 
+    writeActualAndExpected(QTest::currentDataTag(), output, expectedOutput);
+
     QCOMPARE(output, expectedOutput);
 
     QDomDocument document;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    QEXPECT_FAIL("charfmt-for-list-item",
+                 "The attribute \"style\" is redefined in the generated HTML, which is not valid "
+                 "according to XML standard. The new QDomDocument implementation follows the XML "
+                 "standard.", Continue);
+#endif
     QVERIFY2(document.setContent(output), "Output was not valid XML");
 }
 
@@ -1937,6 +1997,8 @@ void tst_QTextDocument::toHtmlRootFrameProperties()
     expectedOutput.replace("DEFAULTBLOCKSTYLE", "style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\"");
     expectedOutput.append(htmlTail);
 
+    writeActualAndExpected(QTest::currentTestFunction(), doc.toHtml(), expectedOutput);
+
     QCOMPARE(doc.toHtml(), expectedOutput);
 }
 
@@ -1956,6 +2018,35 @@ void tst_QTextDocument::toHtmlLineHeightProperties()
     expectedOutput.replace("DEFAULTBLOCKSTYLE", "style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;");
     expectedOutput.append(htmlTail);
 
+    QCOMPARE(doc.toHtml(), expectedOutput);
+}
+
+void tst_QTextDocument::toHtmlDefaultFontSpacingProperties()
+{
+    CREATE_DOC_AND_CURSOR();
+
+    cursor.insertText("Blah");
+
+    QFont fnt = doc.defaultFont();
+    fnt.setLetterSpacing(QFont::AbsoluteSpacing, 13);
+    fnt.setWordSpacing(15);
+    doc.setDefaultFont(fnt);
+
+    QString expectedOutput = QString("<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.0//EN\" "
+                                     "\"http://www.w3.org/TR/REC-html40/strict.dtd\">\n"
+                                     "<html><head><meta name=\"qrichtext\" content=\"1\" />"
+                                     "<style type=\"text/css\">\n"
+                                     "p, li { white-space: pre-wrap; }\n"
+                                     "</style></head>"
+                                     "<body style=\" font-family:'%1'; font-size:%2; "
+                                     "font-weight:%3; font-style:%4; letter-spacing:13px; "
+                                     "word-spacing:15px;\">\n"
+                                     "<p style=\" margin-top:0px; margin-bottom:0px; margin-left:0px; margin-right:0px; -qt-block-indent:0; text-indent:0px;\">Blah</p>"
+                                     "</body></html>");
+    expectedOutput = expectedOutput.arg(defaultFont.family())
+                                   .arg(cssFontSizeString(defaultFont))
+                                   .arg(defaultFont.weight() * 8)
+                                   .arg((defaultFont.italic() ? "italic" : "normal"));
     QCOMPARE(doc.toHtml(), expectedOutput);
 }
 
@@ -2288,6 +2379,32 @@ void tst_QTextDocument::clonePreservesIndentWidth()
     QTextDocument *clone = doc->clone();
     QCOMPARE(clone->indentWidth(), qreal(42));
     delete clone;
+}
+
+void tst_QTextDocument::clonePreservesFormatsWhenEmpty()
+{
+    QTextDocument document;
+    QTextCursor cursor(&document);
+
+    // Change a few char format attributes
+    QTextCharFormat charFormat;
+    charFormat.setFontPointSize(charFormat.fontPointSize() + 1);
+    charFormat.setFontWeight(charFormat.fontWeight() + 1);
+    cursor.setBlockCharFormat(charFormat);
+
+    // Change a few block format attributes
+    QTextBlockFormat blockFormat;
+    blockFormat.setAlignment(Qt::AlignRight); // The default is Qt::AlignLeft
+    blockFormat.setIndent(blockFormat.indent() + 1);
+    cursor.setBlockFormat(blockFormat);
+
+    auto clone = document.clone();
+    QTextCursor cloneCursor(clone);
+
+    QCOMPARE(cloneCursor.blockCharFormat().fontPointSize(), charFormat.fontPointSize());
+    QCOMPARE(cloneCursor.blockCharFormat().fontWeight(), charFormat.fontWeight());
+    QCOMPARE(cloneCursor.blockFormat().alignment(), blockFormat.alignment());
+    QCOMPARE(cloneCursor.blockFormat().indent(), blockFormat.indent());
 }
 
 void tst_QTextDocument::blockCount()
@@ -2708,6 +2825,8 @@ void tst_QTextDocument::backgroundImage_checkExpectedHtml(const QTextDocument &d
                     .arg(cssFontSizeString(defaultFont))
                     .arg(defaultFont.weight() * 8)
                     .arg((defaultFont.italic() ? "italic" : "normal"));
+
+    writeActualAndExpected(QTest::currentTestFunction(), doc.toHtml(), expectedHtml);
 
     QCOMPARE(doc.toHtml(), expectedHtml);
 }
@@ -3476,6 +3595,68 @@ void tst_QTextDocument::cssLineHeightMultiplier()
         QCOMPARE(format.lineHeight(), 138.0);
     }
 }
+
+void tst_QTextDocument::fontTagFace()
+{
+    {
+        QTextDocument td;
+        td.setHtml("<html><body><font face='Times'>Foobar</font></body></html>");
+        QTextFragment fragment = td.begin().begin().fragment();
+        QTextCharFormat format = fragment.charFormat();
+        QCOMPARE(format.fontFamily(), QLatin1String("Times"));
+    }
+
+    {
+        QTextDocument td;
+        td.setHtml("<html><body><font face='Times, serif'>Foobar</font></body></html>");
+        QTextFragment fragment = td.begin().begin().fragment();
+        QTextCharFormat format = fragment.charFormat();
+        QCOMPARE(format.fontFamily(), QLatin1String("Times"));
+        QStringList expectedFamilies = { QLatin1String("Times"), QLatin1String("serif") };
+        QCOMPARE(format.fontFamilies().toStringList(), expectedFamilies);
+    }
+}
+
+void tst_QTextDocument::mergeFontFamilies()
+{
+    QTextDocument td;
+    td.setHtml(QLatin1String(
+                   "<html><body>"
+                   "<span style=\" font-family:'MS Shell Dlg 2';\">Hello world</span>"
+                   "</body></html>"));
+
+    QTextCharFormat newFormat;
+    newFormat.setFontFamily(QLatin1String("Jokerman"));
+
+    QTextCursor cursor = QTextCursor(&td);
+    cursor.setPosition(0);
+    cursor.setPosition(QByteArray("Hello World").length(), QTextCursor::KeepAnchor);
+    cursor.mergeCharFormat(newFormat);
+
+    QVERIFY(td.toHtml().contains(QLatin1String("font-family:'MS Shell Dlg 2','Jokerman';")));
+
+    QTextCharFormat newFormatFamilies;
+    newFormatFamilies.setFontFamilies({ QLatin1String("Arial"), QLatin1String("Helvetica") });
+    cursor.mergeCharFormat(newFormatFamilies);
+
+    QVERIFY(td.toHtml().contains(QLatin1String("font-family:'Arial','Helvetica','Jokerman'")));
+
+    newFormatFamilies.setFontFamilies({ QLatin1String("Arial"), QLatin1String("Jokerman"), QLatin1String("Helvetica") });
+    cursor.mergeCharFormat(newFormatFamilies);
+
+    QVERIFY(td.toHtml().contains(QLatin1String("font-family:'Arial','Jokerman','Helvetica'")));
+}
+
+void tst_QTextDocument::clearUndoRedoStacks()
+{
+    QTextDocument doc;
+    QTextCursor c(&doc);
+    c.insertText(QStringLiteral("lorem ipsum"));
+    QVERIFY(doc.isUndoAvailable());
+    doc.clearUndoRedoStacks(QTextDocument::UndoStack); // Don't crash
+    QVERIFY(!doc.isUndoAvailable());
+}
+
 
 QTEST_MAIN(tst_QTextDocument)
 #include "tst_qtextdocument.moc"

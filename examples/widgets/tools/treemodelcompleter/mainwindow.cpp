@@ -48,21 +48,36 @@
 **
 ****************************************************************************/
 
-#include <QtWidgets>
-#include "treemodelcompleter.h"
 #include "mainwindow.h"
+#include "treemodelcompleter.h"
+
+#include <QAbstractProxyModel>
+#include <QAction>
+#include <QApplication>
+#include <QCheckBox>
+#include <QComboBox>
+#include <QFile>
+#include <QGridLayout>
+#include <QHeaderView>
+#include <QLabel>
+#include <QLineEdit>
+#include <QMenuBar>
+#include <QMessageBox>
+#include <QStandardItemModel>
+#include <QStringListModel>
+#include <QTreeView>
 
 //! [0]
 MainWindow::MainWindow(QWidget *parent)
-    : QMainWindow(parent), completer(0), lineEdit(0)
+    : QMainWindow(parent)
 {
     createMenu();
 
     completer = new TreeModelCompleter(this);
     completer->setModel(modelFromFile(":/resources/treemodel.txt"));
     completer->setSeparator(QLatin1String("."));
-    QObject::connect(completer, SIGNAL(highlighted(QModelIndex)),
-                     this, SLOT(highlight(QModelIndex)));
+    QObject::connect(completer, QOverload<const QModelIndex &>::of(&TreeModelCompleter::highlighted),
+                     this, &MainWindow::highlight);
 
     QWidget *centralWidget = new QWidget;
 
@@ -91,18 +106,18 @@ MainWindow::MainWindow(QWidget *parent)
 
     QLineEdit *separatorLineEdit = new QLineEdit;
     separatorLineEdit->setText(completer->separator());
-    connect(separatorLineEdit, SIGNAL(textChanged(QString)),
-            completer, SLOT(setSeparator(QString)));
+    connect(separatorLineEdit, &QLineEdit::textChanged,
+            completer, &TreeModelCompleter::setSeparator);
 
     QCheckBox *wrapCheckBox = new QCheckBox;
     wrapCheckBox->setText(tr("Wrap around completions"));
     wrapCheckBox->setChecked(completer->wrapAround());
-    connect(wrapCheckBox, SIGNAL(clicked(bool)), completer, SLOT(setWrapAround(bool)));
+    connect(wrapCheckBox, &QAbstractButton::clicked, completer, &QCompleter::setWrapAround);
 
     contentsLabel = new QLabel;
     contentsLabel->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-    connect(separatorLineEdit, SIGNAL(textChanged(QString)),
-            this, SLOT(updateContentsLabel(QString)));
+    connect(separatorLineEdit, &QLineEdit::textChanged,
+            this, &MainWindow::updateContentsLabel);
 
     treeView = new QTreeView;
     treeView->setModel(completer->model());
@@ -111,8 +126,10 @@ MainWindow::MainWindow(QWidget *parent)
 //! [1]
 
 //! [2]
-    connect(modeCombo, SIGNAL(activated(int)), this, SLOT(changeMode(int)));
-    connect(caseCombo, SIGNAL(activated(int)), this, SLOT(changeCase(int)));
+    connect(modeCombo, QOverload<int>::of(&QComboBox::activated),
+            this, &MainWindow::changeMode);
+    connect(caseCombo, QOverload<int>::of(&QComboBox::activated),
+            this, &MainWindow::changeMode);
 
     lineEdit = new QLineEdit;
     lineEdit->setCompleter(completer);
@@ -145,14 +162,14 @@ void MainWindow::createMenu()
     QAction *aboutAct = new QAction(tr("About"), this);
     QAction *aboutQtAct = new QAction(tr("About Qt"), this);
 
-    connect(exitAction, SIGNAL(triggered()), qApp, SLOT(quit()));
-    connect(aboutAct, SIGNAL(triggered()), this, SLOT(about()));
-    connect(aboutQtAct, SIGNAL(triggered()), qApp, SLOT(aboutQt()));
+    connect(exitAction, &QAction::triggered, qApp, &QApplication::quit);
+    connect(aboutAct, &QAction::triggered, this, &MainWindow::about);
+    connect(aboutQtAct, &QAction::triggered, qApp, &QApplication::aboutQt);
 
-    QMenu* fileMenu = menuBar()->addMenu(tr("File"));
+    QMenu *fileMenu = menuBar()->addMenu(tr("File"));
     fileMenu->addAction(exitAction);
 
-    QMenu* helpMenu = menuBar()->addMenu(tr("About"));
+    QMenu *helpMenu = menuBar()->addMenu(tr("About"));
     helpMenu->addAction(aboutAct);
     helpMenu->addAction(aboutQtAct);
 }
@@ -173,52 +190,48 @@ void MainWindow::changeMode(int index)
 }
 //! [5]
 
-QAbstractItemModel *MainWindow::modelFromFile(const QString& fileName)
+QAbstractItemModel *MainWindow::modelFromFile(const QString &fileName)
 {
     QFile file(fileName);
     if (!file.open(QFile::ReadOnly))
         return new QStringListModel(completer);
 
 #ifndef QT_NO_CURSOR
-    QApplication::setOverrideCursor(QCursor(Qt::WaitCursor));
+    QGuiApplication::setOverrideCursor(QCursor(Qt::WaitCursor));
 #endif
-    QStringList words;
 
     QStandardItemModel *model = new QStandardItemModel(completer);
     QVector<QStandardItem *> parents(10);
     parents[0] = model->invisibleRootItem();
 
+    QRegularExpression re("^\\s+");
     while (!file.atEnd()) {
-        QString line = file.readLine();
-        QString trimmedLine = line.trimmed();
-        if (line.isEmpty() || trimmedLine.isEmpty())
+        const QString line = QString::fromUtf8(file.readLine()).trimmed();
+        const QString trimmedLine = line.trimmed();
+        if (trimmedLine.isEmpty())
             continue;
 
-        QRegularExpression re("^\\s+");
-        QRegularExpressionMatch match = re.match(line);
+        const QRegularExpressionMatch match = re.match(line);
         int nonws = match.capturedStart();
         int level = 0;
         if (nonws == -1) {
             level = 0;
         } else {
-            if (line.startsWith("\t")) {
-                level = match.capturedLength();
-            } else {
-                level = match.capturedLength()/4;
-            }
+            const int capLen = match.capturedLength();
+            level = line.startsWith(QLatin1Char('\t')) ? capLen / 4 : capLen;
         }
 
-        if (level+1 >= parents.size())
-            parents.resize(parents.size()*2);
+        if (level + 1 >= parents.size())
+            parents.resize(parents.size() * 2);
 
         QStandardItem *item = new QStandardItem;
         item->setText(trimmedLine);
         parents[level]->appendRow(item);
-        parents[level+1] = item;
+        parents[level + 1] = item;
     }
 
 #ifndef QT_NO_CURSOR
-    QApplication::restoreOverrideCursor();
+    QGuiApplication::restoreOverrideCursor();
 #endif
 
     return model;
@@ -250,7 +263,7 @@ void MainWindow::changeCase(int cs)
 }
 //! [7]
 
-void MainWindow::updateContentsLabel(const QString& sep)
+void MainWindow::updateContentsLabel(const QString &sep)
 {
     contentsLabel->setText(tr("Type path from model above with items at each level separated by a '%1'").arg(sep));
 }

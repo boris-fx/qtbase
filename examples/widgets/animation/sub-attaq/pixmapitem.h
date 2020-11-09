@@ -48,19 +48,19 @@
 **
 ****************************************************************************/
 
-#ifndef __PIXMAPITEM__H__
-#define __PIXMAPITEM__H__
+#ifndef PIXMAPITEM_H
+#define PIXMAPITEM_H
 
 //Own
 #include "graphicsscene.h"
 
 //Qt
-#include <QtWidgets/QGraphicsObject>
+#include <QGraphicsObject>
 
 class PixmapItem : public QGraphicsObject
 {
 public:
-    PixmapItem(const QString &fileName, GraphicsScene::Mode mode, QGraphicsItem * parent = 0);
+    PixmapItem(const QString &fileName, GraphicsScene::Mode mode, QGraphicsItem *parent = nullptr);
     PixmapItem(const QString &fileName, QGraphicsScene *scene);
     QSizeF size() const;
     QRectF boundingRect() const override;
@@ -69,4 +69,4 @@ private:
     QPixmap pix;
 };
 
-#endif //__PIXMAPITEM__H__
+#endif // PIXMAPITEM_H

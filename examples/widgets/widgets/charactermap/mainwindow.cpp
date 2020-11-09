@@ -48,16 +48,32 @@
 **
 ****************************************************************************/
 
-#include <QtWidgets>
-
-#include "characterwidget.h"
 #include "mainwindow.h"
+#include "characterwidget.h"
+
+#include <QApplication>
+#include <QBoxLayout>
+#include <QCheckBox>
+#include <QClipboard>
+#include <QDesktopWidget>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QFontComboBox>
+#include <QLabel>
+#include <QLineEdit>
+#include <QMenuBar>
+#include <QPlainTextEdit>
+#include <QPushButton>
+#include <QScreen>
+#include <QScrollArea>
+#include <QStatusBar>
+#include <QTextStream>
 
 //! [0]
-
 Q_DECLARE_METATYPE(QFontComboBox::FontFilter)
 
-MainWindow::MainWindow()
+MainWindow::MainWindow(QWidget *parent)
+    : QMainWindow(parent)
 {
     QMenu *fileMenu = menuBar()->addMenu(tr("File"));
     fileMenu->addAction(tr("Quit"), this, &QWidget::close);
@@ -113,9 +129,9 @@ MainWindow::MainWindow()
             this, &MainWindow::findSizes);
     connect(fontCombo, &QFontComboBox::currentFontChanged,
             characterWidget, &CharacterWidget::updateFont);
-    connect(sizeCombo, QOverload<const QString &>::of(&QComboBox::currentIndexChanged),
+    connect(sizeCombo, &QComboBox::currentTextChanged,
             characterWidget, &CharacterWidget::updateSize);
-    connect(styleCombo, QOverload<const QString &>::of(&QComboBox::currentIndexChanged),
+    connect(styleCombo, &QComboBox::currentTextChanged,
             characterWidget, &CharacterWidget::updateStyle);
 //! [4] //! [5]
     connect(characterWidget, &CharacterWidget::characterSelected,
@@ -169,8 +185,8 @@ void MainWindow::findStyles(const QFont &font)
 //! [7]
 
 //! [8]
-    QString style;
-    foreach (style, fontDatabase.styles(font.family()))
+    const QStringList styles = fontDatabase.styles(font.family());
+    for (const QString &style : styles)
         styleCombo->addItem(style);
 
     int styleIndex = styleCombo->findText(currentItem);
@@ -185,9 +201,9 @@ void MainWindow::findStyles(const QFont &font)
 void MainWindow::filterChanged(int f)
 {
     const QFontComboBox::FontFilter filter =
-        filterCombo->itemData(f).value<QFontComboBox::FontFilter>();
+        qvariant_cast<QFontComboBox::FontFilter>(filterCombo->itemData(f));
     fontCombo->setFontFilters(filter);
-    statusBar()->showMessage(tr("%n font(s) found", 0, fontCombo->count()));
+    statusBar()->showMessage(tr("%n font(s) found", nullptr, fontCombo->count()));
 }
 
 void MainWindow::findSizes(const QFont &font)
@@ -200,15 +216,16 @@ void MainWindow::findSizes(const QFont &font)
         // sizeCombo signals are now blocked until end of scope
         sizeCombo->clear();
 
-        int size;
         if (fontDatabase.isSmoothlyScalable(font.family(), fontDatabase.styleString(font))) {
-            foreach (size, QFontDatabase::standardSizes()) {
+            const QList<int> sizes = QFontDatabase::standardSizes();
+            for (const int size : sizes) {
                 sizeCombo->addItem(QVariant(size).toString());
                 sizeCombo->setEditable(true);
             }
 
         } else {
-            foreach (size, fontDatabase.smoothSizes(font.family(), fontDatabase.styleString(font))) {
+            const QList<int> sizes = fontDatabase.smoothSizes(font.family(), fontDatabase.styleString(font));
+            for (const int size : sizes ) {
                 sizeCombo->addItem(QVariant(size).toString());
                 sizeCombo->setEditable(false);
             }
@@ -286,7 +303,7 @@ QString FontInfoDialog::text() const
 
 void MainWindow::showInfo()
 {
-    const QRect screenGeometry = QApplication::desktop()->screenGeometry(this);
+    const QRect screenGeometry = screen()->geometry();
     FontInfoDialog *dialog = new FontInfoDialog(this);
     dialog->setWindowTitle(tr("Fonts"));
     dialog->setAttribute(Qt::WA_DeleteOnClose);

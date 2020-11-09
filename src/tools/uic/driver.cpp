@@ -30,8 +30,12 @@
 #include "uic.h"
 #include "ui4.h"
 
+#include <language.h>
+
 #include <qfileinfo.h>
 #include <qdebug.h>
+
+#include <algorithm>
 
 QT_BEGIN_NAMESPACE
 
@@ -43,39 +47,62 @@ Driver::Driver()
 
 Driver::~Driver() = default;
 
-QString Driver::findOrInsertWidget(DomWidget *ui_widget)
-{
-    if (!m_widgets.contains(ui_widget))
-        m_widgets.insert(ui_widget, unique(ui_widget->attributeName(), ui_widget->attributeClass()));
+static inline QString spacerItemClass()  { return QStringLiteral("QSpacerItem"); }
+static inline QString actionGroupClass() { return QStringLiteral("QActionGroup"); }
+static inline QString actionClass()      { return QStringLiteral("QAction"); }
+static inline QString buttonGroupClass() { return QStringLiteral("QButtonGroup"); }
 
-    return m_widgets.value(ui_widget);
-}
-
-QString Driver::findOrInsertSpacer(DomSpacer *ui_spacer)
+template <class DomClass>
+Driver::DomObjectHashConstIt<DomClass>
+    Driver::findByAttributeNameIt(const DomObjectHash<DomClass> &domHash,
+                                  const QString &name) const
 {
-    if (!m_spacers.contains(ui_spacer)) {
-        QString name;
-        if (ui_spacer->hasAttributeName())
-            name = ui_spacer->attributeName();
-        m_spacers.insert(ui_spacer, unique(name, QLatin1String("QSpacerItem")));
+    const auto end = domHash.cend();
+    for (auto it = domHash.cbegin(); it != end; ++it) {
+        if (it.key()->attributeName() == name)
+            return it;
     }
-
-    return m_spacers.value(ui_spacer);
+    return end;
 }
 
-QString Driver::findOrInsertLayout(DomLayout *ui_layout)
+template <class DomClass>
+const DomClass *Driver::findByAttributeName(const DomObjectHash<DomClass> &domHash,
+                                            const QString &name) const
 {
-    if (!m_layouts.contains(ui_layout)) {
-        QString name;
-        if (ui_layout->hasAttributeName())
-            name = ui_layout->attributeName();
-        m_layouts.insert(ui_layout, unique(name, ui_layout->attributeClass()));
-    }
-
-    return m_layouts.value(ui_layout);
+    auto it = findByAttributeNameIt(domHash, name);
+    return it != domHash.cend() ? it.key() : nullptr;
 }
 
-QString Driver::findOrInsertLayoutItem(DomLayoutItem *ui_layoutItem)
+template <class DomClass>
+QString Driver::findOrInsert(DomObjectHash<DomClass> *domHash, const DomClass *dom,
+                             const QString &className, bool isMember)
+{
+    auto it = domHash->find(dom);
+    if (it == domHash->end()) {
+        const QString name = this->unique(dom->attributeName(), className);
+        it = domHash->insert(dom, isMember ? language::self + name : name);
+    }
+    return it.value();
+}
+
+QString Driver::findOrInsertWidget(const DomWidget *ui_widget)
+{
+    // Top level is passed into setupUI(), everything else is a member variable
+    const bool isMember = !m_widgets.isEmpty();
+    return findOrInsert(&m_widgets, ui_widget, ui_widget->attributeClass(), isMember);
+}
+
+QString Driver::findOrInsertSpacer(const DomSpacer *ui_spacer)
+{
+    return findOrInsert(&m_spacers, ui_spacer, spacerItemClass());
+}
+
+QString Driver::findOrInsertLayout(const DomLayout *ui_layout)
+{
+    return findOrInsert(&m_layouts, ui_layout, ui_layout->attributeClass());
+}
+
+QString Driver::findOrInsertLayoutItem(const DomLayoutItem *ui_layoutItem)
 {
     switch (ui_layoutItem->kind()) {
         case DomLayoutItem::Widget:
@@ -93,38 +120,25 @@ QString Driver::findOrInsertLayoutItem(DomLayoutItem *ui_layoutItem)
     return QString();
 }
 
-QString Driver::findOrInsertActionGroup(DomActionGroup *ui_group)
+QString Driver::findOrInsertActionGroup(const DomActionGroup *ui_group)
 {
-    if (!m_actionGroups.contains(ui_group))
-        m_actionGroups.insert(ui_group, unique(ui_group->attributeName(), QLatin1String("QActionGroup")));
-
-    return m_actionGroups.value(ui_group);
+    return findOrInsert(&m_actionGroups, ui_group, actionGroupClass());
 }
 
-QString Driver::findOrInsertAction(DomAction *ui_action)
+QString Driver::findOrInsertAction(const DomAction *ui_action)
 {
-    if (!m_actions.contains(ui_action))
-        m_actions.insert(ui_action, unique(ui_action->attributeName(), QLatin1String("QAction")));
-
-    return m_actions.value(ui_action);
+    return findOrInsert(&m_actions, ui_action, actionClass());
 }
 
 QString Driver::findOrInsertButtonGroup(const DomButtonGroup *ui_group)
 {
-    ButtonGroupNameHash::iterator it = m_buttonGroups.find(ui_group);
-    if (it == m_buttonGroups.end())
-        it = m_buttonGroups.insert(ui_group, unique(ui_group->attributeName(), QLatin1String("QButtonGroup")));
-    return it.value();
+    return findOrInsert(&m_buttonGroups, ui_group, buttonGroupClass());
 }
 
 // Find a group by its non-uniqified name
 const DomButtonGroup *Driver::findButtonGroup(const QString &attributeName) const
 {
-    const ButtonGroupNameHash::const_iterator cend = m_buttonGroups.constEnd();
-    for (ButtonGroupNameHash::const_iterator it = m_buttonGroups.constBegin(); it != cend; ++it)
-        if (it.key()->attributeName() == attributeName)
-            return it.key();
-    return 0;
+    return findByAttributeName(m_buttonGroups, attributeName);
 }
 
 
@@ -136,11 +150,9 @@ QString Driver::findOrInsertName(const QString &name)
 QString Driver::normalizedName(const QString &name)
 {
     QString result = name;
-    QChar *data = result.data();
-    for (int i = name.size(); --i >= 0; ++data) {
-        if (!data->isLetterOrNumber())
-            *data = QLatin1Char('_');
-    }
+    std::replace_if(result.begin(), result.end(),
+                    [] (QChar c) { return !c.isLetterOrNumber(); },
+                    QLatin1Char('_'));
     return result;
 }
 
@@ -149,23 +161,21 @@ QString Driver::unique(const QString &instanceName, const QString &className)
     QString name;
     bool alreadyUsed = false;
 
-    if (instanceName.size()) {
-        int id = 1;
-        name = instanceName;
-        name = normalizedName(name);
+    if (!instanceName.isEmpty()) {
+        name = normalizedName(instanceName);
         QString base = name;
 
-        while (m_nameRepository.contains(name)) {
+        for (int id = 1; m_nameRepository.contains(name); ++id) {
             alreadyUsed = true;
-            name = base + QString::number(id++);
+            name = base + QString::number(id);
         }
-    } else if (className.size()) {
+    } else if (!className.isEmpty()) {
         name = unique(qtify(className));
     } else {
         name = unique(QLatin1String("var"));
     }
 
-    if (alreadyUsed && className.size()) {
+    if (alreadyUsed && !className.isEmpty()) {
         fprintf(stderr, "%s: Warning: The name '%s' (%s) is already in use, defaulting to '%s'.\n",
                 qPrintable(m_option.messagePrefix()),
                 qPrintable(instanceName), qPrintable(className),
@@ -181,17 +191,10 @@ QString Driver::qtify(const QString &name)
     QString qname = name;
 
     if (qname.at(0) == QLatin1Char('Q') || qname.at(0) == QLatin1Char('K'))
-        qname = qname.mid(1);
+        qname.remove(0, 1);
 
-    int i=0;
-    while (i < qname.length()) {
-        if (qname.at(i).toLower() != qname.at(i))
-            qname[i] = qname.at(i).toLower();
-        else
-            break;
-
-        ++i;
-    }
+    for (int i = 0, size = qname.size(); i < size && qname.at(i).isUpper(); ++i)
+        qname[i] = qname.at(i).toLower();
 
     return qname;
 }
@@ -253,7 +256,7 @@ bool Driver::uic(const QString &fileName, DomUI *ui, QTextStream *out)
 
     QTextStream *oldOutput = m_output;
 
-    m_output = out != 0 ? out : &m_stdout;
+    m_output = out != nullptr ? out : &m_stdout;
 
     Uic tool(this);
     const bool result = tool.write(ui);
@@ -306,58 +309,25 @@ bool Driver::uic(const QString &fileName, QTextStream *out)
     return rtn;
 }
 
-void Driver::reset()
+const DomWidget *Driver::widgetByName(const QString &attributeName) const
 {
-    Q_ASSERT( m_output == 0 );
-
-    m_option = Option();
-    m_output = 0;
-    m_problems.clear();
-
-    QStringList m_problems;
-
-    m_widgets.clear();
-    m_spacers.clear();
-    m_layouts.clear();
-    m_actionGroups.clear();
-    m_actions.clear();
-    m_nameRepository.clear();
-    m_pixmaps.clear();
+    return findByAttributeName(m_widgets, attributeName);
 }
 
-void Driver::insertPixmap(const QString &pixmap)
+QString Driver::widgetVariableName(const QString &attributeName) const
 {
-    m_pixmaps.insert(pixmap, true);
+    auto it = findByAttributeNameIt(m_widgets, attributeName);
+    return it != m_widgets.cend() ? it.value() : QString();
 }
 
-bool Driver::containsPixmap(const QString &pixmap) const
+const DomActionGroup *Driver::actionGroupByName(const QString &attributeName) const
 {
-    return m_pixmaps.contains(pixmap);
+    return findByAttributeName(m_actionGroups, attributeName);
 }
 
-DomWidget *Driver::widgetByName(const QString &name) const
+const DomAction *Driver::actionByName(const QString &attributeName) const
 {
-    return m_widgets.key(name);
-}
-
-DomSpacer *Driver::spacerByName(const QString &name) const
-{
-    return m_spacers.key(name);
-}
-
-DomLayout *Driver::layoutByName(const QString &name) const
-{
-    return m_layouts.key(name);
-}
-
-DomActionGroup *Driver::actionGroupByName(const QString &name) const
-{
-    return m_actionGroups.key(name);
-}
-
-DomAction *Driver::actionByName(const QString &name) const
-{
-    return m_actions.key(name);
+    return findByAttributeName(m_actions, attributeName);
 }
 
 QT_END_NAMESPACE

@@ -193,7 +193,7 @@ GLXFBConfig qglx_findConfig(Display *display, int screen , QSurfaceFormat format
 {
     QXcbSoftwareOpenGLEnforcer softwareOpenGLEnforcer;
 
-    GLXFBConfig config = 0;
+    GLXFBConfig config = nullptr;
 
     do {
         const QVector<int> spec = qglx_buildSpec(format, drawableBit, flags);
@@ -224,13 +224,18 @@ GLXFBConfig qglx_findConfig(Display *display, int screen , QSurfaceFormat format
             }
 
             QXlibPointer<XVisualInfo> visual(glXGetVisualFromFBConfig(display, candidate));
-            if (visual.isNull())
+            if (!visual)
                 continue;
-
-            const int actualRed = qPopulationCount(visual->red_mask);
-            const int actualGreen = qPopulationCount(visual->green_mask);
-            const int actualBlue = qPopulationCount(visual->blue_mask);
-            const int actualAlpha = visual->depth - actualRed - actualGreen - actualBlue;
+            int actualRed;
+            int actualGreen;
+            int actualBlue;
+            int actualAlpha;
+            glXGetFBConfigAttrib(display, candidate, GLX_RED_SIZE, &actualRed);
+            glXGetFBConfigAttrib(display, candidate, GLX_GREEN_SIZE, &actualGreen);
+            glXGetFBConfigAttrib(display, candidate, GLX_BLUE_SIZE, &actualBlue);
+            glXGetFBConfigAttrib(display, candidate, GLX_ALPHA_SIZE, &actualAlpha);
+            // Sometimes the visuals don't have a depth that includes the alpha channel.
+            actualAlpha = qMin(actualAlpha, visual->depth - actualRed - actualGreen - actualBlue);
 
             if (requestedRed && actualRed < requestedRed)
                 continue;
@@ -258,8 +263,10 @@ GLXFBConfig qglx_findConfig(Display *display, int screen , QSurfaceFormat format
             qCDebug(lcGlx) << "qglx_findConfig: Found non-matching but compatible FBConfig";
             return compatibleCandidate;
         }
-        qCWarning(lcGlx, "qglx_findConfig: Failed to finding matching FBConfig (%d %d %d %d)", requestedRed, requestedGreen, requestedBlue, requestedAlpha);
     } while (qglx_reduceFormat(&format));
+
+    if (!config)
+        qCWarning(lcGlx) << "qglx_findConfig: Failed to finding matching FBConfig for" << format;
 
     return config;
 }
@@ -268,7 +275,7 @@ XVisualInfo *qglx_findVisualInfo(Display *display, int screen, QSurfaceFormat *f
 {
     Q_ASSERT(format);
 
-    XVisualInfo *visualInfo = 0;
+    XVisualInfo *visualInfo = nullptr;
 
     GLXFBConfig config = qglx_findConfig(display, screen, *format, false, drawableBit, flags);
     if (config)
@@ -312,7 +319,7 @@ void qglx_surfaceFormatFromGLXFBConfig(QSurfaceFormat *format, Display *display,
     glXGetFBConfigAttrib(display, config, GLX_ALPHA_SIZE,   &alphaSize);
     glXGetFBConfigAttrib(display, config, GLX_DEPTH_SIZE,   &depthSize);
     glXGetFBConfigAttrib(display, config, GLX_STENCIL_SIZE, &stencilSize);
-    glXGetFBConfigAttrib(display, config, GLX_SAMPLES_ARB,  &sampleBuffers);
+    glXGetFBConfigAttrib(display, config, GLX_SAMPLE_BUFFERS_ARB, &sampleBuffers);
     glXGetFBConfigAttrib(display, config, GLX_STEREO,       &stereo);
     if (flags & QGLX_SUPPORTS_SRGB)
         glXGetFBConfigAttrib(display, config, GLX_FRAMEBUFFER_SRGB_CAPABLE_ARB, &srgbCapable);
@@ -351,7 +358,7 @@ void qglx_surfaceFormatFromVisualInfo(QSurfaceFormat *format, Display *display, 
     glXGetConfig(display, visualInfo, GLX_ALPHA_SIZE,   &alphaSize);
     glXGetConfig(display, visualInfo, GLX_DEPTH_SIZE,   &depthSize);
     glXGetConfig(display, visualInfo, GLX_STENCIL_SIZE, &stencilSize);
-    glXGetConfig(display, visualInfo, GLX_SAMPLES_ARB,  &sampleBuffers);
+    glXGetConfig(display, visualInfo, GLX_SAMPLE_BUFFERS_ARB, &sampleBuffers);
     glXGetConfig(display, visualInfo, GLX_STEREO,       &stereo);
     if (flags & QGLX_SUPPORTS_SRGB)
         glXGetConfig(display, visualInfo, GLX_FRAMEBUFFER_SRGB_CAPABLE_ARB, &srgbCapable);

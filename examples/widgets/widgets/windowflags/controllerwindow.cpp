@@ -48,12 +48,18 @@
 **
 ****************************************************************************/
 
-#include <QtWidgets>
-
 #include "controllerwindow.h"
 
+#include <QCheckBox>
+#include <QCoreApplication>
+#include <QGroupBox>
+#include <QHBoxLayout>
+#include <QPushButton>
+#include <QRadioButton>
+
 //! [0]
-ControllerWindow::ControllerWindow()
+ControllerWindow::ControllerWindow(QWidget *parent)
+    : QWidget(parent)
 {
     previewWindow = new PreviewWindow(this);
 
@@ -61,7 +67,8 @@ ControllerWindow::ControllerWindow()
     createHintsGroupBox();
 
     quitButton = new QPushButton(tr("&Quit"));
-    connect(quitButton, SIGNAL(clicked()), qApp, SLOT(quit()));
+    connect(quitButton, &QPushButton::clicked,
+            qApp, &QCoreApplication::quit);
 
     QHBoxLayout *bottomLayout = new QHBoxLayout;
     bottomLayout->addStretch();
@@ -81,26 +88,25 @@ ControllerWindow::ControllerWindow()
 //! [1]
 void ControllerWindow::updatePreview()
 {
-    Qt::WindowFlags flags = 0;
+    Qt::WindowFlags flags;
 
-    if (windowRadioButton->isChecked()) {
+    if (windowRadioButton->isChecked())
         flags = Qt::Window;
-    } else if (dialogRadioButton->isChecked()) {
+    else if (dialogRadioButton->isChecked())
         flags = Qt::Dialog;
-    } else if (sheetRadioButton->isChecked()) {
+    else if (sheetRadioButton->isChecked())
         flags = Qt::Sheet;
-    } else if (drawerRadioButton->isChecked()) {
+    else if (drawerRadioButton->isChecked())
         flags = Qt::Drawer;
-    } else if (popupRadioButton->isChecked()) {
+    else if (popupRadioButton->isChecked())
         flags = Qt::Popup;
-    } else if (toolRadioButton->isChecked()) {
+    else if (toolRadioButton->isChecked())
         flags = Qt::Tool;
-    } else if (toolTipRadioButton->isChecked()) {
+    else if (toolTipRadioButton->isChecked())
         flags = Qt::ToolTip;
-    } else if (splashScreenRadioButton->isChecked()) {
+    else if (splashScreenRadioButton->isChecked())
         flags = Qt::SplashScreen;
 //! [1] //! [2]
-    }
 //! [2] //! [3]
 
     if (msWindowsFixedSizeDialogCheckBox->isChecked())
@@ -219,7 +225,8 @@ void ControllerWindow::createHintsGroupBox()
 QCheckBox *ControllerWindow::createCheckBox(const QString &text)
 {
     QCheckBox *checkBox = new QCheckBox(text);
-    connect(checkBox, SIGNAL(clicked()), this, SLOT(updatePreview()));
+    connect(checkBox, &QCheckBox::clicked,
+            this, &ControllerWindow::updatePreview);
     return checkBox;
 }
 //! [7]
@@ -228,7 +235,8 @@ QCheckBox *ControllerWindow::createCheckBox(const QString &text)
 QRadioButton *ControllerWindow::createRadioButton(const QString &text)
 {
     QRadioButton *button = new QRadioButton(text);
-    connect(button, SIGNAL(clicked()), this, SLOT(updatePreview()));
+    connect(button, &QRadioButton::clicked,
+            this, &ControllerWindow::updatePreview);
     return button;
 }
 //! [8]

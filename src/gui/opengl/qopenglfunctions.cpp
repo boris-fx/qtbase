@@ -182,7 +182,7 @@ struct QOpenGLFunctionsPrivateEx : public QOpenGLExtensionsPrivate, public QOpen
 
 Q_GLOBAL_STATIC(QOpenGLMultiGroupSharedResource, qt_gl_functions_resource)
 
-static QOpenGLFunctionsPrivateEx *qt_gl_functions(QOpenGLContext *context = 0)
+static QOpenGLFunctionsPrivateEx *qt_gl_functions(QOpenGLContext *context = nullptr)
 {
     if (!context)
         context = QOpenGLContext::currentContext();
@@ -200,13 +200,14 @@ static QOpenGLFunctionsPrivateEx *qt_gl_functions(QOpenGLContext *context = 0)
     \sa initializeOpenGLFunctions()
 */
 QOpenGLFunctions::QOpenGLFunctions()
-    : d_ptr(0)
+    : d_ptr(nullptr)
 {
 }
 
 /*!
     Constructs a function resolver for \a context.  If \a context
-    is null, then the resolver will be created for the current QOpenGLContext.
+    is \nullptr, then the resolver will be created for the current
+    QOpenGLContext.
 
     The context or another context in the group must be current.
 
@@ -217,7 +218,7 @@ QOpenGLFunctions::QOpenGLFunctions()
     \sa initializeOpenGLFunctions()
 */
 QOpenGLFunctions::QOpenGLFunctions(QOpenGLContext *context)
-    : d_ptr(0)
+    : d_ptr(nullptr)
 {
     if (context && QOpenGLContextGroup::currentContextGroup() == context->shareGroup())
         d_ptr = qt_gl_functions(context);
@@ -387,8 +388,12 @@ static int qt_gl_resolve_extensions()
                 | QOpenGLExtensions::MapBufferRange
                 | QOpenGLExtensions::FramebufferBlit
                 | QOpenGLExtensions::FramebufferMultisample
-                | QOpenGLExtensions::Sized8Formats
-                | QOpenGLExtensions::TextureSwizzle;
+                | QOpenGLExtensions::Sized8Formats;
+#ifndef Q_OS_WASM
+            // WebGL 2.0 specification explicitly does not support texture swizzles
+            // https://www.khronos.org/registry/webgl/specs/latest/2.0/#5.19
+            extensions |= QOpenGLExtensions::TextureSwizzle;
+#endif
         } else {
             // Recognize features by extension name.
             if (extensionMatcher.match("GL_OES_packed_depth_stencil"))
@@ -488,7 +493,7 @@ QOpenGLFunctions::OpenGLFeatures QOpenGLFunctions::openGLFeatures() const
 {
     QOpenGLFunctionsPrivateEx *d = static_cast<QOpenGLFunctionsPrivateEx *>(d_ptr);
     if (!d)
-        return 0;
+        return { };
     if (d->m_features == -1)
         d->m_features = qt_gl_resolve_features();
     return QOpenGLFunctions::OpenGLFeatures(d->m_features);
@@ -526,7 +531,7 @@ QOpenGLExtensions::OpenGLExtensions QOpenGLExtensions::openGLExtensions()
 {
     QOpenGLFunctionsPrivateEx *d = static_cast<QOpenGLFunctionsPrivateEx *>(d_ptr);
     if (!d)
-        return 0;
+        return { };
     if (d->m_extensions == -1)
         d->m_extensions = qt_gl_resolve_extensions();
     return QOpenGLExtensions::OpenGLExtensions(d->m_extensions);
@@ -5035,8 +5040,8 @@ QOpenGLExtraFunctions::QOpenGLExtraFunctions()
 }
 
 /*!
-    Constructs a function resolver for context. If \a context is null, then
-    the resolver will be created for the current QOpenGLContext.
+    Constructs a function resolver for context. If \a context is \nullptr,
+    then the resolver will be created for the current QOpenGLContext.
 
     The context or another context in the group must be current.
 

@@ -46,6 +46,8 @@
 #include "qwindow.h"
 #include "qplatformwindow.h"
 
+#include <private/qwindow_p.h>
+
 QT_BEGIN_NAMESPACE
 
 /*!
@@ -97,10 +99,10 @@ public:
     QOffscreenSurfacePrivate()
         : QObjectPrivate()
         , surfaceType(QSurface::OpenGLSurface)
-        , platformOffscreenSurface(0)
-        , offscreenWindow(0)
+        , platformOffscreenSurface(nullptr)
+        , offscreenWindow(nullptr)
         , requestedFormat(QSurfaceFormat::defaultFormat())
-        , screen(0)
+        , screen(nullptr)
         , size(1, 1)
         , nativeHandle(nullptr)
     {
@@ -199,12 +201,18 @@ void QOffscreenSurface::create()
             if (QThread::currentThread() != qGuiApp->thread())
                 qWarning("Attempting to create QWindow-based QOffscreenSurface outside the gui thread. Expect failures.");
             d->offscreenWindow = new QWindow(d->screen);
+            // Make the window frameless to prevent Windows from enlarging it, should it
+            // violate the minimum title bar width on the platform.
+            d->offscreenWindow->setFlags(d->offscreenWindow->flags()
+                                         | Qt::CustomizeWindowHint | Qt::FramelessWindowHint);
             d->offscreenWindow->setObjectName(QLatin1String("QOffscreenSurface"));
             // Remove this window from the global list since we do not want it to be destroyed when closing the app.
             // The QOffscreenSurface has to be usable even after exiting the event loop.
             QGuiApplicationPrivate::window_list.removeOne(d->offscreenWindow);
             d->offscreenWindow->setSurfaceType(QWindow::OpenGLSurface);
             d->offscreenWindow->setFormat(d->requestedFormat);
+            // Prevent QPlatformWindow::initialGeometry() and platforms from setting a default geometry.
+            qt_window_private(d->offscreenWindow)->setAutomaticPositionAndResizeEnabled(false);
             d->offscreenWindow->setGeometry(0, 0, d->size.width(), d->size.height());
             d->offscreenWindow->create();
         }
@@ -227,11 +235,11 @@ void QOffscreenSurface::destroy()
     QGuiApplication::sendEvent(this, &e);
 
     delete d->platformOffscreenSurface;
-    d->platformOffscreenSurface = 0;
+    d->platformOffscreenSurface = nullptr;
     if (d->offscreenWindow) {
         d->offscreenWindow->destroy();
         delete d->offscreenWindow;
-        d->offscreenWindow = 0;
+        d->offscreenWindow = nullptr;
     }
 
     d->nativeHandle = nullptr;
@@ -333,7 +341,7 @@ void QOffscreenSurface::setScreen(QScreen *newScreen)
     if (!newScreen)
         newScreen = QCoreApplication::instance() ? QGuiApplication::primaryScreen() : nullptr;
     if (newScreen != d->screen) {
-        const bool wasCreated = d->platformOffscreenSurface != 0 || d->offscreenWindow != 0;
+        const bool wasCreated = d->platformOffscreenSurface != nullptr || d->offscreenWindow != nullptr;
         if (wasCreated)
             destroy();
         if (d->screen)
@@ -377,7 +385,7 @@ void QOffscreenSurface::screenDestroyed(QObject *object)
 {
     Q_D(QOffscreenSurface);
     if (object == static_cast<QObject *>(d->screen))
-        setScreen(0);
+        setScreen(nullptr);
 }
 
 /*!

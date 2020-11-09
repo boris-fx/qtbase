@@ -42,6 +42,7 @@
 #include "qwindowsintegration.h"
 #include "qwindowswindow.h"
 #include "qwindowskeymapper.h"
+#include "qwindowsnativeinterface.h"
 #include "qwindowsmousehandler.h"
 #include "qwindowspointerhandler.h"
 #include "qtwindowsglobal.h"
@@ -72,12 +73,15 @@
 
 #include <QtCore/qset.h>
 #include <QtCore/qhash.h>
+#include <QtCore/qlibraryinfo.h>
 #include <QtCore/qstringlist.h>
 #include <QtCore/qdebug.h>
 #include <QtCore/qoperatingsystemversion.h>
 #include <QtCore/qsysinfo.h>
 #include <QtCore/qscopedpointer.h>
+#include <QtCore/quuid.h>
 #include <QtCore/private/qsystemlibrary_p.h>
+#include <QtCore/private/qwinregistry_p.h>
 
 #include <QtEventDispatcherSupport/private/qwindowsguieventdispatcher_p.h>
 
@@ -133,8 +137,8 @@ static inline bool useRTL_Extensions()
 #if QT_CONFIG(sessionmanager)
 static inline QWindowsSessionManager *platformSessionManager()
 {
-    QGuiApplicationPrivate *guiPrivate = static_cast<QGuiApplicationPrivate*>(QObjectPrivate::get(qApp));
-    QSessionManagerPrivate *managerPrivate = static_cast<QSessionManagerPrivate*>(QObjectPrivate::get(guiPrivate->session_manager));
+    auto *guiPrivate = static_cast<QGuiApplicationPrivate*>(QObjectPrivate::get(qApp));
+    auto *managerPrivate = static_cast<QSessionManagerPrivate*>(QObjectPrivate::get(guiPrivate->session_manager));
     return static_cast<QWindowsSessionManager *>(managerPrivate->platformSessionManager);
 }
 
@@ -181,7 +185,6 @@ static bool enableNonClientDpiScaling(HWND hwnd)
     \sa QWindowsShell32DLL
 
     \internal
-    \ingroup qt-lighthouse-win
 */
 
 void QWindowsUser32DLL::init()
@@ -210,6 +213,7 @@ void QWindowsUser32DLL::init()
 
     if (QOperatingSystemVersion::current()
         >= QOperatingSystemVersion(QOperatingSystemVersion::Windows, 10, 0, 14393)) {
+        adjustWindowRectExForDpi = (AdjustWindowRectExForDpi)library.resolve("AdjustWindowRectExForDpi");
         enableNonClientDpiScaling = (EnableNonClientDpiScaling)library.resolve("EnableNonClientDpiScaling");
         getWindowDpiAwarenessContext = (GetWindowDpiAwarenessContext)library.resolve("GetWindowDpiAwarenessContext");
         getAwarenessFromDpiAwarenessContext = (GetAwarenessFromDpiAwarenessContext)library.resolve("GetAwarenessFromDpiAwarenessContext");
@@ -246,7 +250,6 @@ QWindowsContext *QWindowsContext::m_instance = nullptr;
     Holds state information formerly stored in \c qapplication_win.cpp.
 
     \internal
-    \ingroup qt-lighthouse-win
 */
 
 typedef QHash<HWND, QWindowsWindow *> HandleBaseWindowHash;
@@ -271,7 +274,12 @@ struct QWindowsContextPrivate {
     const HRESULT m_oleInitializeResult;
     QWindow *m_lastActiveWindow = nullptr;
     bool m_asyncExpose = false;
+    HPOWERNOTIFY m_powerNotification = nullptr;
+    HWND m_powerDummyWindow = nullptr;
+    static bool m_darkMode;
 };
+
+bool QWindowsContextPrivate::m_darkMode = false;
 
 QWindowsContextPrivate::QWindowsContextPrivate()
     : m_oleInitializeResult(OleInitialize(nullptr))
@@ -287,6 +295,7 @@ QWindowsContextPrivate::QWindowsContextPrivate()
         m_systemInfo |= QWindowsContext::SI_RTL_Extensions;
         m_keyMapper.setUseRTLExtensions(true);
     }
+    m_darkMode = QWindowsTheme::queryDarkMode();
     if (FAILED(m_oleInitializeResult)) {
        qWarning() << "QWindowsContext: OleInitialize() failed: "
            << QWindowsContext::comErrorString(m_oleInitializeResult);
@@ -311,11 +320,20 @@ QWindowsContext::~QWindowsContext()
 #if QT_CONFIG(tabletevent)
     d->m_tabletSupport.reset(); // Destroy internal window before unregistering classes.
 #endif
+
+    if (d->m_powerNotification)
+        UnregisterPowerSettingNotification(d->m_powerNotification);
+
+    if (d->m_powerDummyWindow)
+        DestroyWindow(d->m_powerDummyWindow);
+
     unregisterWindowClasses();
     if (d->m_oleInitializeResult == S_OK || d->m_oleInitializeResult == S_FALSE)
         OleUninitialize();
 
     d->m_screenManager.clearScreens(); // Order: Potentially calls back to the windows.
+    if (d->m_displayContext)
+        ReleaseDC(nullptr, d->m_displayContext);
     m_instance = nullptr;
 }
 
@@ -376,6 +394,55 @@ bool QWindowsContext::initPointer(unsigned integrationOptions)
     return true;
 }
 
+extern "C" LRESULT QT_WIN_CALLBACK qWindowsPowerWindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
+{
+    if (message != WM_POWERBROADCAST || wParam != PBT_POWERSETTINGCHANGE)
+        return DefWindowProc(hwnd, message, wParam, lParam);
+
+    static bool initialized = false; // ignore the initial change
+    if (!initialized) {
+        initialized = true;
+        return DefWindowProc(hwnd, message, wParam, lParam);
+    }
+
+    auto setting = reinterpret_cast<const POWERBROADCAST_SETTING *>(lParam);
+    if (setting) {
+        auto data = reinterpret_cast<const DWORD *>(&setting->Data);
+        if (*data == 1) {
+            // Repaint the windows when returning from sleeping display mode.
+            const auto tlw = QGuiApplication::topLevelWindows();
+            for (auto w : tlw) {
+                if (w->isVisible() && w->windowState() != Qt::WindowMinimized) {
+                    if (auto tw = QWindowsWindow::windowsWindowOf(w)) {
+                        if (HWND hwnd = tw->handle()) {
+                            InvalidateRect(hwnd, nullptr, false);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return DefWindowProc(hwnd, message, wParam, lParam);
+}
+
+bool QWindowsContext::initPowerNotificationHandler()
+{
+    if (d->m_powerNotification)
+        return false;
+
+    d->m_powerDummyWindow = createDummyWindow(QStringLiteral("PowerDummyWindow"), L"QtPowerDummyWindow", qWindowsPowerWindowProc);
+    if (!d->m_powerDummyWindow)
+        return false;
+
+    d->m_powerNotification = RegisterPowerSettingNotification(d->m_powerDummyWindow, &GUID_MONITOR_POWER_ON, DEVICE_NOTIFY_WINDOW_HANDLE);
+    if (!d->m_powerNotification) {
+        DestroyWindow(d->m_powerDummyWindow);
+        d->m_powerDummyWindow = nullptr;
+        return false;
+    }
+    return true;
+}
+
 void QWindowsContext::setTabletAbsoluteRange(int a)
 {
 #if QT_CONFIG(tabletevent)
@@ -419,6 +486,11 @@ void QWindowsContext::setProcessDpiAwareness(QtWindows::ProcessDpiAwareness dpiA
                 qErrnoWarning("SetProcessDPIAware() failed");
         }
     }
+}
+
+bool QWindowsContext::isDarkMode()
+{
+    return QWindowsContextPrivate::m_darkMode;
 }
 
 QWindowsContext *QWindowsContext::instance()
@@ -471,6 +543,23 @@ QWindow *QWindowsContext::keyGrabber() const
 void QWindowsContext::setKeyGrabber(QWindow *w)
 {
     d->m_keyMapper.setKeyGrabber(w);
+}
+
+QString QWindowsContext::classNamePrefix()
+{
+    static QString result;
+    if (result.isEmpty()) {
+        QTextStream str(&result);
+        str << "Qt" << QT_VERSION_MAJOR << QT_VERSION_MINOR << QT_VERSION_PATCH;
+        if (QLibraryInfo::isDebugBuild())
+            str << 'd';
+#ifdef QT_NAMESPACE
+#  define xstr(s) str(s)
+#  define str(s) #s
+        str << xstr(QT_NAMESPACE);
+#endif
+    }
+    return result;
 }
 
 // Window class registering code (from qapplication_win.cpp)
@@ -541,18 +630,16 @@ QString QWindowsContext::registerWindowClass(QString cname,
     // each one has to have window class names with a unique name
     // The first instance gets the unmodified name; if the class
     // has already been registered by another instance of Qt then
-    // add an instance-specific ID, the address of the window proc.
-    static int classExists = -1;
-
-    const HINSTANCE appInstance = static_cast<HINSTANCE>(GetModuleHandle(nullptr));
-    if (classExists == -1) {
-        WNDCLASS wcinfo;
-        classExists = GetClassInfo(appInstance, reinterpret_cast<LPCWSTR>(cname.utf16()), &wcinfo);
-        classExists = classExists && wcinfo.lpfnWndProc != proc;
-    }
+    // add a UUID. The check needs to be performed for each name
+    // in case new message windows are added (QTBUG-81347).
+    // Note: GetClassInfo() returns != 0 when a class exists.
+    const auto appInstance = static_cast<HINSTANCE>(GetModuleHandle(nullptr));
+    WNDCLASS wcinfo;
+    const bool classExists = GetClassInfo(appInstance, reinterpret_cast<LPCWSTR>(cname.utf16()), &wcinfo) != FALSE
+        && wcinfo.lpfnWndProc != proc;
 
     if (classExists)
-        cname += QString::number(reinterpret_cast<quintptr>(proc));
+        cname += QUuid::createUuid().toString();
 
     if (d->m_registeredWindowClassNames.contains(cname))        // already registered in our list
         return cname;
@@ -590,14 +677,14 @@ QString QWindowsContext::registerWindowClass(QString cname,
 
     d->m_registeredWindowClassNames.insert(cname);
     qCDebug(lcQpaWindows).nospace() << __FUNCTION__ << ' ' << cname
-        << " style=0x" << hex << style << dec
+        << " style=0x" << Qt::hex << style << Qt::dec
         << " brush=" << brush << " icon=" << icon << " atom=" << atom;
     return cname;
 }
 
 void QWindowsContext::unregisterWindowClasses()
 {
-    const HINSTANCE appInstance = static_cast<HINSTANCE>(GetModuleHandle(nullptr));
+    const auto appInstance = static_cast<HINSTANCE>(GetModuleHandle(nullptr));
 
     for (const QString &name : qAsConst(d->m_registeredWindowClassNames)) {
         if (!UnregisterClass(reinterpret_cast<LPCWSTR>(name.utf16()), appInstance) && QWindowsContext::verbose)
@@ -712,7 +799,7 @@ static inline bool findPlatformWindowHelper(const POINT &screenPoint, unsigned c
                                             HWND *hwnd, QWindowsWindow **result)
 {
     POINT point = screenPoint;
-    ScreenToClient(*hwnd, &point);
+    screenToClient(*hwnd, &point);
     // Returns parent if inside & none matched.
     const HWND child = ChildWindowFromPointEx(*hwnd, point, cwexFlags);
     if (!child || child == *hwnd)
@@ -748,6 +835,12 @@ QWindowsWindow *QWindowsContext::findPlatformWindowAt(HWND parent,
     QWindowsWindow *result = nullptr;
     const POINT screenPoint = { screenPointIn.x(), screenPointIn.y() };
     while (findPlatformWindowHelper(screenPoint, cwex_flags, this, &parent, &result)) {}
+    // QTBUG-40815: ChildWindowFromPointEx() can hit on special windows from
+    // screen recorder applications like ScreenToGif. Fall back to WindowFromPoint().
+    if (result == nullptr) {
+        if (const HWND window = WindowFromPoint(screenPoint))
+            result = findPlatformWindow(window);
+    }
     return result;
 }
 
@@ -812,7 +905,7 @@ HWND QWindowsContext::createDummyWindow(const QString &classNameIn,
 {
     if (!wndProc)
         wndProc = DefWindowProc;
-    QString className = registerWindowClass(classNameIn, wndProc);
+    QString className = registerWindowClass(classNamePrefix() + classNameIn, wndProc);
     return CreateWindowEx(0, reinterpret_cast<LPCWSTR>(className.utf16()),
                           windowName, style,
                           CW_USEDEFAULT, CW_USEDEFAULT,
@@ -912,6 +1005,13 @@ QByteArray QWindowsContext::comErrorString(HRESULT hr)
     return result;
 }
 
+void QWindowsContext::forceNcCalcSize(HWND hwnd)
+{
+    // Force WM_NCCALCSIZE to adjust margin
+    SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
+                 SWP_FRAMECHANGED | SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER);
+}
+
 bool QWindowsContext::systemParametersInfo(unsigned action, unsigned param, void *out,
                                            unsigned dpi)
 {
@@ -924,7 +1024,7 @@ bool QWindowsContext::systemParametersInfo(unsigned action, unsigned param, void
 bool QWindowsContext::systemParametersInfoForScreen(unsigned action, unsigned param, void *out,
                                                     const QPlatformScreen *screen)
 {
-    return systemParametersInfo(action, param, out, screen ? screen->logicalDpi().first : 0);
+    return systemParametersInfo(action, param, out, screen ? unsigned(screen->logicalDpi().first) : 0u);
 }
 
 bool QWindowsContext::systemParametersInfoForWindow(unsigned action, unsigned param, void *out,
@@ -943,7 +1043,8 @@ bool QWindowsContext::nonClientMetrics(NONCLIENTMETRICS *ncm, unsigned dpi)
 bool QWindowsContext::nonClientMetricsForScreen(NONCLIENTMETRICS *ncm,
                                                 const QPlatformScreen *screen)
 {
-    return nonClientMetrics(ncm, screen ? screen->logicalDpi().first : 0);
+    const int dpi = screen ? qRound(screen->logicalDpi().first) : 0;
+    return nonClientMetrics(ncm, unsigned(dpi));
 }
 
 bool QWindowsContext::nonClientMetricsForWindow(NONCLIENTMETRICS *ncm, const QPlatformWindow *win)
@@ -977,7 +1078,7 @@ static inline bool resizeOnDpiChanged(const QWindow *w)
     return result;
 }
 
-static bool shouldHaveNonClientDpiScaling(const QWindow *window)
+bool QWindowsContext::shouldHaveNonClientDpiScaling(const QWindow *window)
 {
     return QOperatingSystemVersion::current() >= QOperatingSystemVersion::Windows10
         && window->isTopLevel()
@@ -1042,7 +1143,7 @@ bool QWindowsContext::windowsProc(HWND hwnd, UINT message,
         // For non-client-area messages, these are screen coordinates (as expected
         // in the MSG structure), otherwise they are client coordinates.
         if (!(et & QtWindows::NonClientEventFlag)) {
-            ClientToScreen(msg.hwnd, &msg.pt);
+            clientToScreen(msg.hwnd, &msg.pt);
         }
     } else {
         GetCursorPos(&msg.pt);
@@ -1118,9 +1219,27 @@ bool QWindowsContext::windowsProc(HWND hwnd, UINT message,
             t->displayChanged();
         QWindowsWindow::displayChanged();
         return d->m_screenManager.handleDisplayChange(wParam, lParam);
-    case QtWindows::SettingChangedEvent:
+    case QtWindows::SettingChangedEvent: {
         QWindowsWindow::settingsChanged();
+        const bool darkMode = QWindowsTheme::queryDarkMode();
+        if (darkMode != QWindowsContextPrivate::m_darkMode) {
+            QWindowsContextPrivate::m_darkMode = darkMode;
+            auto nativeInterface =
+                static_cast<QWindowsNativeInterface *>(QWindowsIntegration::instance()->nativeInterface());
+            emit nativeInterface->darkModeChanged(darkMode);
+            const auto options = QWindowsIntegration::instance()->options();
+            if ((options & QWindowsIntegration::DarkModeWindowFrames) != 0) {
+                for (QWindowsWindow *w : d->m_windows)
+                    w->setDarkBorder(QWindowsContextPrivate::m_darkMode);
+            }
+            if ((options & QWindowsIntegration::DarkModeStyle) != 0) {
+                QWindowsTheme::instance()->refresh();
+                for (QWindowsWindow *w : d->m_windows)
+                    QWindowSystemInterface::handleThemeChange(w->window());
+            }
+        }
         return d->m_screenManager.handleScreenChanges();
+    }
     default:
         break;
     }
@@ -1133,13 +1252,11 @@ bool QWindowsContext::windowsProc(HWND hwnd, UINT message,
         case QtWindows::QuerySizeHints:
             d->m_creationContext->applyToMinMaxInfo(reinterpret_cast<MINMAXINFO *>(lParam));
             return true;
-        case QtWindows::ResizeEvent: {
-            const QSize size(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) - d->m_creationContext->menuHeight);
-            d->m_creationContext->obtainedGeometry.setSize(size);
-        }
+        case QtWindows::ResizeEvent:
+            d->m_creationContext->obtainedSize = QSize(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
             return true;
         case QtWindows::MoveEvent:
-            d->m_creationContext->obtainedGeometry.moveTo(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
+            d->m_creationContext->obtainedPos = QPoint(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
             return true;
         case QtWindows::NonClientCreate:
             if (shouldHaveNonClientDpiScaling(d->m_creationContext->window))
@@ -1321,15 +1438,24 @@ bool QWindowsContext::windowsProc(HWND hwnd, UINT message,
 #endif
     }   break;
     case QtWindows::DpiChangedEvent: {
-        if (!resizeOnDpiChanged(platformWindow->window()))
-            return false;
-        platformWindow->setFlag(QWindowsWindow::WithinDpiChanged);
-        const RECT *prcNewWindow = reinterpret_cast<RECT *>(lParam);
-        SetWindowPos(hwnd, nullptr, prcNewWindow->left, prcNewWindow->top,
-                     prcNewWindow->right - prcNewWindow->left,
-                     prcNewWindow->bottom - prcNewWindow->top, SWP_NOZORDER | SWP_NOACTIVATE);
-        platformWindow->clearFlag(QWindowsWindow::WithinDpiChanged);
-        return true;
+        // Try to apply the suggested size first and then notify ScreenChanged
+        // so that the resize event sent from QGuiApplication incorporates it
+        // WM_DPICHANGED is sent with a size that avoids resize loops (by
+        // snapping back to the previous screen, see QTBUG-65580).
+        const bool doResize = resizeOnDpiChanged(platformWindow->window());
+        if (doResize) {
+            platformWindow->setFlag(QWindowsWindow::WithinDpiChanged);
+            platformWindow->updateFullFrameMargins();
+            const auto prcNewWindow = reinterpret_cast<RECT *>(lParam);
+            qCDebug(lcQpaWindows) << __FUNCTION__ << "WM_DPICHANGED"
+                << platformWindow->window() << *prcNewWindow;
+            SetWindowPos(hwnd, nullptr, prcNewWindow->left, prcNewWindow->top,
+                         prcNewWindow->right - prcNewWindow->left,
+                         prcNewWindow->bottom - prcNewWindow->top, SWP_NOZORDER | SWP_NOACTIVATE);
+            platformWindow->clearFlag(QWindowsWindow::WithinDpiChanged);
+        }
+        platformWindow->checkForScreenChanged(QWindowsWindow::FromDpiChange);
+        return doResize;
     }
 #if QT_CONFIG(sessionmanager)
     case QtWindows::QueryEndSessionApplicationEvent: {
@@ -1343,7 +1469,7 @@ bool QWindowsContext::windowsProc(HWND hwnd, UINT message,
         sessionManager->blocksInteraction();
         sessionManager->clearCancellation();
 
-        QGuiApplicationPrivate *qGuiAppPriv = static_cast<QGuiApplicationPrivate*>(QObjectPrivate::get(qApp));
+        auto *qGuiAppPriv = static_cast<QGuiApplicationPrivate*>(QObjectPrivate::get(qApp));
         qGuiAppPriv->commitData();
 
         if (lParam & ENDSESSION_LOGOFF)
@@ -1361,7 +1487,7 @@ bool QWindowsContext::windowsProc(HWND hwnd, UINT message,
 
         // we receive the message for each toplevel window included internal hidden ones,
         // but the aboutToQuit signal should be emitted only once.
-        QGuiApplicationPrivate *qGuiAppPriv = static_cast<QGuiApplicationPrivate*>(QObjectPrivate::get(qApp));
+        auto *qGuiAppPriv = static_cast<QGuiApplicationPrivate*>(QObjectPrivate::get(qApp));
         if (endsession && !qGuiAppPriv->aboutToQuitEmitted) {
             qGuiAppPriv->aboutToQuitEmitted = true;
             int index = QGuiApplication::staticMetaObject.indexOfSignal("aboutToQuit()");
@@ -1478,6 +1604,10 @@ void QWindowsContext::handleExitSizeMove(QWindow *window)
                                                      keyboardModifiers);
         }
     }
+    if (d->m_systemInfo & QWindowsContext::SI_SupportsPointer)
+        d->m_pointerHandler.clearEvents();
+    else
+        d->m_mouseHandler.clearEvents();
 }
 
 bool QWindowsContext::asyncExpose() const
@@ -1496,28 +1626,13 @@ QTouchDevice *QWindowsContext::touchDevice() const
         d->m_pointerHandler.touchDevice() : d->m_mouseHandler.touchDevice();
 }
 
-static DWORD readDwordRegistrySetting(const wchar_t *regKey, const wchar_t *subKey, DWORD defaultValue)
-{
-    DWORD result = defaultValue;
-    HKEY handle;
-    if (RegOpenKeyEx(HKEY_CURRENT_USER, regKey, 0, KEY_READ, &handle) == ERROR_SUCCESS) {
-        DWORD type;
-        if (RegQueryValueEx(handle, subKey, nullptr, &type, nullptr, nullptr) == ERROR_SUCCESS
-            && type == REG_DWORD) {
-            DWORD value;
-            DWORD size = sizeof(result);
-            if (RegQueryValueEx(handle, subKey, nullptr, nullptr, reinterpret_cast<unsigned char *>(&value), &size) == ERROR_SUCCESS)
-                result = value;
-        }
-        RegCloseKey(handle);
-    }
-    return result;
-}
-
 DWORD QWindowsContext::readAdvancedExplorerSettings(const wchar_t *subKey, DWORD defaultValue)
 {
-    return readDwordRegistrySetting(L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced",
-                                    subKey, defaultValue);
+    const auto value =
+        QWinRegistryKey(HKEY_CURRENT_USER,
+                        LR"(Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced)")
+                       .dwordValue(subKey);
+    return value.second ? value.first : defaultValue;
 }
 
 static inline bool isEmptyRect(const RECT &rect)
@@ -1557,7 +1672,6 @@ static inline bool isTopLevel(HWND hwnd)
     There is another one for timers, sockets, etc in
     QEventDispatcherWin32.
 
-    \ingroup qt-lighthouse-win
 */
 
 extern "C" LRESULT QT_WIN_CALLBACK qWindowsWndProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
@@ -1570,7 +1684,7 @@ extern "C" LRESULT QT_WIN_CALLBACK qWindowsWndProc(HWND hwnd, UINT message, WPAR
     if (QWindowsContext::verbose > 1 && lcQpaEvents().isDebugEnabled()) {
         if (const char *eventName = QWindowsGuiEventDispatcher::windowsMessageName(message)) {
             qCDebug(lcQpaEvents).nospace() << "EVENT: hwd=" << hwnd << ' ' << eventName
-                << " msg=0x" << hex << message << " et=0x" << et << dec << " wp="
+                << " msg=0x" << Qt::hex << message << " et=0x" << et << Qt::dec << " wp="
                 << int(wParam) << " at " << GET_X_LPARAM(lParam) << ','
                 << GET_Y_LPARAM(lParam) << " handled=" << handled;
         }
@@ -1587,6 +1701,7 @@ extern "C" LRESULT QT_WIN_CALLBACK qWindowsWndProc(HWND hwnd, UINT message, WPAR
             marginsFromRects(ncCalcSizeFrame, rectFromNcCalcSize(message, wParam, lParam, 0));
         if (margins.left() >= 0) {
             if (platformWindow) {
+                qCDebug(lcQpaWindows) << __FUNCTION__ << "WM_NCCALCSIZE for" << hwnd << margins;
                 platformWindow->setFullFrameMargins(margins);
             } else {
                 const QSharedPointer<QWindowCreationContext> ctx = QWindowsContext::instance()->windowCreationContext();
@@ -1605,7 +1720,11 @@ static inline QByteArray nativeEventType() { return QByteArrayLiteral("windows_g
 bool QWindowsContext::filterNativeEvent(MSG *msg, LRESULT *result)
 {
     QAbstractEventDispatcher *dispatcher = QAbstractEventDispatcher::instance();
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    qintptr filterResult = 0;
+#else
     long filterResult = 0;
+#endif
     if (dispatcher && dispatcher->filterNativeEvent(nativeEventType(), msg, &filterResult)) {
         *result = LRESULT(filterResult);
         return true;
@@ -1616,7 +1735,11 @@ bool QWindowsContext::filterNativeEvent(MSG *msg, LRESULT *result)
 // Send to QWindowSystemInterface
 bool QWindowsContext::filterNativeEvent(QWindow *window, MSG *msg, LRESULT *result)
 {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    qintptr filterResult = 0;
+#else
     long filterResult = 0;
+#endif
     if (QWindowSystemInterface::handleNativeEvent(window, nativeEventType(), msg, &filterResult)) {
         *result = LRESULT(filterResult);
         return true;

@@ -49,6 +49,8 @@ private slots:
     void construct();
     void constructCopy_data();
     void constructCopy();
+    void saveAndLoadBuiltin_data();
+    void saveAndLoadBuiltin();
 };
 
 #define FOR_EACH_GUI_METATYPE_BASE(F) \
@@ -189,11 +191,16 @@ template<> struct TestValueFactory<QMetaType::QTextLength> {
     static QTextLength *create() { return new QTextLength(QTextLength::PercentageLength, 50); }
 };
 template<> struct TestValueFactory<QMetaType::QTextFormat> {
-    static QTextFormat *create() { return new QTextFormat(QTextFormat::TableFormat); }
+    static QTextFormat *create() { return new QTextFormat(QTextFormat::FrameFormat); }
 };
+#if QT_DEPRECATED_SINCE(5, 15)
+QT_WARNING_PUSH
+QT_WARNING_DISABLE_DEPRECATED
 template<> struct TestValueFactory<QMetaType::QMatrix> {
     static QMatrix *create() { return new QMatrix(10, 20, 30, 40, 50, 60); }
 };
+QT_WARNING_POP
+#endif
 template<> struct TestValueFactory<QMetaType::QTransform> {
     static QTransform *create() { return new QTransform(10, 20, 30, 40, 50, 60); }
 };
@@ -440,6 +447,50 @@ FOR_EACH_GUI_METATYPE(RETURN_CONSTRUCT_COPY_FUNCTION)
 
     QFETCH(QMetaType::Type, type);
     TypeTestFunctionGetter::get(type)();
+}
+
+template <typename T>
+struct StreamingTraits
+{
+    // Streamable by default, as currently all gui built-in types are streamable
+    enum { isStreamable = 1 };
+};
+
+void tst_QGuiMetaType::saveAndLoadBuiltin_data()
+{
+    QTest::addColumn<int>("type");
+    QTest::addColumn<bool>("isStreamable");
+
+#define ADD_METATYPE_TEST_ROW(MetaTypeName, MetaTypeId, RealType) \
+    QTest::newRow(#RealType) << MetaTypeId << bool(StreamingTraits<RealType>::isStreamable);
+    QT_FOR_EACH_STATIC_GUI_CLASS(ADD_METATYPE_TEST_ROW)
+#undef ADD_METATYPE_TEST_ROW
+}
+
+void tst_QGuiMetaType::saveAndLoadBuiltin()
+{
+    QFETCH(int, type);
+    QFETCH(bool, isStreamable);
+
+    void *value = QMetaType::create(type);
+
+    QByteArray ba;
+    QDataStream stream(&ba, QIODevice::ReadWrite);
+    QCOMPARE(QMetaType::save(stream, type, value), isStreamable);
+    QCOMPARE(stream.status(), QDataStream::Ok);
+
+    if (isStreamable)
+        QVERIFY(QMetaType::load(stream, type, value));
+
+    stream.device()->seek(0);
+    stream.resetStatus();
+    QCOMPARE(QMetaType::load(stream, type, value), isStreamable);
+    QCOMPARE(stream.status(), QDataStream::Ok);
+
+    if (isStreamable)
+        QVERIFY(QMetaType::load(stream, type, value));
+
+    QMetaType::destroy(type, value);
 }
 
 QTEST_MAIN(tst_QGuiMetaType)

@@ -47,6 +47,7 @@
 #include "qcoreapplication.h"
 #include "qcoreevent.h"
 #include <private/qobject_p.h>
+#include <private/qlocking_p.h>
 
 #ifndef QT_NO_DBUS
 
@@ -81,8 +82,7 @@ QT_BEGIN_NAMESPACE
           provide a method of detaching the copies (since they refer
           to the same pending call)
 
-    \sa QDBusPendingReply, QDBusPendingCallWatcher,
-        QDBusAbstractInterface::asyncCall()
+    \sa QDBusPendingReply, QDBusPendingCallWatcher
 */
 
 /*!
@@ -114,7 +114,7 @@ QT_BEGIN_NAMESPACE
     (one string and one QByteArray), QDBusPendingReply::isError() will
     return true.
 
-    \sa QDBusPendingReply, QDBusAbstractInterface::asyncCall()
+    \sa QDBusPendingReply
 */
 
 /*!
@@ -181,7 +181,7 @@ bool QDBusPendingCallPrivate::setReplyCallback(QObject *target, const char *memb
     if (metaTypes.at(count) == QDBusMetaTypeId::message())
         --count;
 
-    setMetaTypes(count, count ? metaTypes.constData() + 1 : 0);
+    setMetaTypes(count, count ? metaTypes.constData() + 1 : nullptr);
     return true;
 }
 
@@ -221,8 +221,8 @@ void QDBusPendingCallPrivate::checkReceivedSignature()
 
     // can't use startsWith here because a null string doesn't start or end with an empty string
     if (replyMessage.signature().indexOf(expectedReplySignature) != 0) {
-        QString errorMsg = QLatin1String("Unexpected reply signature: got \"%1\", "
-                                         "expected \"%2\"");
+        const auto errorMsg = QLatin1String("Unexpected reply signature: got \"%1\", "
+                                            "expected \"%2\"");
         replyMessage = QDBusMessage::createError(
             QDBusError::InvalidSignature,
             errorMsg.arg(replyMessage.signature(), expectedReplySignature));
@@ -232,7 +232,7 @@ void QDBusPendingCallPrivate::checkReceivedSignature()
 
 void QDBusPendingCallPrivate::waitForFinished()
 {
-    QMutexLocker locker(&mutex);
+    const auto locker = qt_scoped_lock(mutex);
 
     if (replyMessage.type() != QDBusMessage::InvalidMessage)
         return;                 // already finished
@@ -311,7 +311,7 @@ QDBusPendingCall &QDBusPendingCall::operator=(const QDBusPendingCall &other)
     \sa QDBusPendingReply::isFinished()
 */
 /*!
-    \fn bool QDBusPendingReply::isFinished() const
+    \fn template <typename T1, typename T2, typename T3, typename T4, typename T5, typename T6, typename T7, typename T8> bool QDBusPendingReply<T1, T2, T3, T4, T5, T6, T7, T8>::isFinished() const
 
     Returns \c true if the pending call has finished processing and the
     reply has been received. If this function returns \c true, the
@@ -330,7 +330,7 @@ bool QDBusPendingCall::isFinished() const
     if (!d)
         return true; // considered finished
 
-    QMutexLocker locker(&d->mutex);
+    const auto locker = qt_scoped_lock(d->mutex);
     return d->replyMessage.type() != QDBusMessage::InvalidMessage;
 }
 
@@ -340,7 +340,7 @@ void QDBusPendingCall::waitForFinished()
 }
 
 /*!
-    \fn bool QDBusPendingReply::isValid() const
+    \fn template<typename T1, typename T2, typename T3, typename T4, typename T5, typename T6, typename T7, typename T8> bool QDBusPendingReply<T1, T2, T3, T4, T5, T6, T7, T8>::isValid() const
 
     Returns \c true if the reply contains a normal reply message, false
     if it contains anything else.
@@ -352,12 +352,12 @@ bool QDBusPendingCall::isValid() const
 {
     if (!d)
         return false;
-    QMutexLocker locker(&d->mutex);
+    const auto locker = qt_scoped_lock(d->mutex);
     return d->replyMessage.type() == QDBusMessage::ReplyMessage;
 }
 
 /*!
-    \fn bool QDBusPendingReply::isError() const
+    \fn template<typename T1, typename T2, typename T3, typename T4, typename T5, typename T6, typename T7, typename T8> bool QDBusPendingReply<T1, T2, T3, T4, T5, T6, T7, T8>::isError() const
 
     Returns \c true if the reply contains an error message, false if it
     contains a normal method reply.
@@ -369,12 +369,12 @@ bool QDBusPendingCall::isError() const
 {
     if (!d)
         return true; // considered finished and an error
-    QMutexLocker locker(&d->mutex);
+    const auto locker = qt_scoped_lock(d->mutex);
     return d->replyMessage.type() == QDBusMessage::ErrorMessage;
 }
 
 /*!
-    \fn QDBusError QDBusPendingReply::error() const
+    \fn template<typename T1, typename T2, typename T3, typename T4, typename T5, typename T6, typename T7, typename T8> QDBusError QDBusPendingReply<T1, T2, T3, T4, T5, T6, T7, T8>::error() const
 
     Retrieves the error content of the reply message, if it has
     finished processing. If the reply message has not finished
@@ -384,7 +384,7 @@ bool QDBusPendingCall::isError() const
 QDBusError QDBusPendingCall::error() const
 {
     if (d) {
-        QMutexLocker locker(&d->mutex);
+        const auto locker = qt_scoped_lock(d->mutex);
         return QDBusError(d->replyMessage);
     }
 
@@ -395,7 +395,7 @@ QDBusError QDBusPendingCall::error() const
 }
 
 /*!
-    \fn QDBusMessage QDBusPendingReply::reply() const
+    \fn template<typename T1, typename T2, typename T3, typename T4, typename T5, typename T6, typename T7, typename T8> QDBusMessage QDBusPendingReply<T1, T2, T3, T4, T5, T6, T7, T8>::reply() const
 
     Retrieves the reply message received for the asynchronous call
     that was sent, if it has finished processing. If the pending call
@@ -409,7 +409,7 @@ QDBusMessage QDBusPendingCall::reply() const
 {
     if (!d)
         return QDBusMessage::createError(error());
-    QMutexLocker locker(&d->mutex);
+    const auto locker = qt_scoped_lock(d->mutex);
     return d->replyMessage;
 }
 
@@ -445,7 +445,7 @@ bool QDBusPendingCall::setReplyCallback(QObject *target, const char *member)
     \since 4.6
     Creates a QDBusPendingCall object based on the error condition
     \a error. The resulting pending call object will be in the
-    "finished" state and QDBusPendingReply::isError() will return true.
+    "finished" state and QDBusPendingReply<T1, T2, T3, T4, T5, T6, T7, T8>::isError() will return true.
 
     \sa fromCompletedCall()
 */
@@ -468,12 +468,12 @@ QDBusPendingCall QDBusPendingCall::fromError(const QDBusError &error)
 */
 QDBusPendingCall QDBusPendingCall::fromCompletedCall(const QDBusMessage &msg)
 {
-    QDBusPendingCallPrivate *d = 0;
+    QDBusPendingCallPrivate *d = nullptr;
     if (msg.type() == QDBusMessage::ErrorMessage ||
         msg.type() == QDBusMessage::ReplyMessage) {
-        d = new QDBusPendingCallPrivate(QDBusMessage(), 0);
+        d = new QDBusPendingCallPrivate(QDBusMessage(), nullptr);
         d->replyMessage = msg;
-        d->ref.store(1);
+        d->ref.storeRelaxed(1);
     }
 
     return QDBusPendingCall(d);
@@ -503,7 +503,7 @@ QDBusPendingCallWatcher::QDBusPendingCallWatcher(const QDBusPendingCall &call, Q
     : QObject(*new QDBusPendingCallWatcherPrivate, parent), QDBusPendingCall(call)
 {
     if (d) {                    // QDBusPendingCall::d
-        QMutexLocker locker(&d->mutex);
+        const auto locker = qt_scoped_lock(d->mutex);
         if (!d->watcherHelper) {
             d->watcherHelper = new QDBusPendingCallWatcherHelper;
             if (d->replyMessage.type() != QDBusMessage::InvalidMessage) {

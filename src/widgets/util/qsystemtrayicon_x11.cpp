@@ -92,15 +92,12 @@ protected:
     virtual void resizeEvent(QResizeEvent *) override;
     virtual void moveEvent(QMoveEvent *) override;
 
-private slots:
-    void systemTrayWindowChanged(QScreen *screen);
-
 private:
     QSystemTrayIcon *q;
 };
 
 QSystemTrayIconSys::QSystemTrayIconSys(QSystemTrayIcon *qIn)
-    : QWidget(0, Qt::Window | Qt::FramelessWindowHint | Qt::BypassWindowManagerHint)
+    : QWidget(nullptr, Qt::Window | Qt::FramelessWindowHint | Qt::BypassWindowManagerHint)
     , q(qIn)
 {
     setObjectName(QStringLiteral("QSystemTrayIconSys"));
@@ -114,15 +111,6 @@ QSystemTrayIconSys::QSystemTrayIconSys(QSystemTrayIcon *qIn)
     setMinimumSize(size);
     setAttribute(Qt::WA_TranslucentBackground);
     setMouseTracking(true);
-}
-
-void QSystemTrayIconSys::systemTrayWindowChanged(QScreen *)
-{
-    if (!locateSystemTray()) {
-        QBalloonTip::hideBalloon();
-        hide(); // still no luck
-        destroy();
-    }
 }
 
 QRect QSystemTrayIconSys::globalGeometry() const
@@ -163,11 +151,11 @@ bool QSystemTrayIconSys::event(QEvent *e)
 {
     switch (e->type()) {
     case QEvent::ToolTip:
-        QApplication::sendEvent(q, e);
+        QCoreApplication::sendEvent(q, e);
         break;
 #if QT_CONFIG(wheelevent)
     case QEvent::Wheel:
-        return QApplication::sendEvent(q, e);
+        return QCoreApplication::sendEvent(q, e);
 #endif
     default:
         break;
@@ -199,10 +187,41 @@ void QSystemTrayIconSys::resizeEvent(QResizeEvent *event)
 }
 ////////////////////////////////////////////////////////////////////////////
 
+class QSystemTrayWatcher: public QObject
+{
+    Q_OBJECT
+public:
+    QSystemTrayWatcher(QSystemTrayIcon *trayIcon)
+        : QObject(trayIcon)
+        , mTrayIcon(trayIcon)
+    {
+        // This code uses string-based syntax because we want to connect to a signal
+        // which is defined in XCB plugin - QXcbNativeInterface::systemTrayWindowChanged().
+        connect(qGuiApp->platformNativeInterface(), SIGNAL(systemTrayWindowChanged(QScreen*)),
+                this, SLOT(systemTrayWindowChanged(QScreen*)));
+    }
+
+private slots:
+    void systemTrayWindowChanged(QScreen *)
+    {
+        auto icon = static_cast<QSystemTrayIconPrivate *>(QObjectPrivate::get(mTrayIcon));
+        icon->destroyIcon();
+        if (icon->visible && locateSystemTray()) {
+            icon->sys = new QSystemTrayIconSys(mTrayIcon);
+            icon->sys->show();
+        }
+    }
+
+private:
+    QSystemTrayIcon *mTrayIcon = nullptr;
+};
+////////////////////////////////////////////////////////////////////////////
+
 QSystemTrayIconPrivate::QSystemTrayIconPrivate()
-    : sys(0),
+    : sys(nullptr),
       qpa_sys(QGuiApplicationPrivate::platformTheme()->createPlatformSystemTrayIcon()),
-      visible(false)
+      visible(false),
+      trayWatcher(nullptr)
 {
 }
 
@@ -213,16 +232,21 @@ QSystemTrayIconPrivate::~QSystemTrayIconPrivate()
 
 void QSystemTrayIconPrivate::install_sys()
 {
+    Q_Q(QSystemTrayIcon);
+
     if (qpa_sys) {
         install_sys_qpa();
         return;
     }
-    Q_Q(QSystemTrayIcon);
-    if (!sys && locateSystemTray()) {
-        sys = new QSystemTrayIconSys(q);
-        QObject::connect(QGuiApplication::platformNativeInterface(), SIGNAL(systemTrayWindowChanged(QScreen*)),
-                         sys, SLOT(systemTrayWindowChanged(QScreen*)));
-        sys->show();
+
+    if (!sys) {
+        if (!trayWatcher)
+            trayWatcher = new QSystemTrayWatcher(q);
+
+        if (locateSystemTray()) {
+            sys = new QSystemTrayIconSys(q);
+            sys->show();
+        }
     }
 }
 
@@ -241,13 +265,20 @@ void QSystemTrayIconPrivate::remove_sys()
         remove_sys_qpa();
         return;
     }
+
+    destroyIcon();
+}
+
+void QSystemTrayIconPrivate::destroyIcon()
+{
     if (!sys)
         return;
     QBalloonTip::hideBalloon();
-    sys->hide(); // this should do the trick, but...
-    delete sys; // wm may resize system tray only for DestroyEvents
-    sys = 0;
+    sys->hide();
+    delete sys;
+    sys = nullptr;
 }
+
 
 void QSystemTrayIconPrivate::updateIcon_sys()
 {

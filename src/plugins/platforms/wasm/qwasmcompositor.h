@@ -62,8 +62,9 @@ class QWasmCompositor : public QObject
 {
     Q_OBJECT
 public:
-    QWasmCompositor();
+    QWasmCompositor(QWasmScreen *screen);
     ~QWasmCompositor();
+    void destroy();
 
     enum QWasmSubControl {
         SC_None =                  0x00000000,
@@ -103,7 +104,6 @@ public:
 
     void addWindow(QWasmWindow *window, QWasmWindow *parentWindow = nullptr);
     void removeWindow(QWasmWindow *window);
-    void setScreen(QWasmScreen *screen);
 
     void setVisible(QWasmWindow *window, bool visible);
     void raise(QWasmWindow *window);
@@ -117,7 +117,7 @@ public:
     void redrawWindowContent();
     void requestRedraw();
 
-    QWindow *windowAt(QPoint p, int padding = 0) const;
+    QWindow *windowAt(QPoint globalPoint, int padding = 0) const;
     QWindow *keyWindow() const;
 
     bool event(QEvent *event);
@@ -125,12 +125,13 @@ public:
     static QWasmTitleBarOptions makeTitleBarOptions(const QWasmWindow *window);
     static QRect titlebarRect(QWasmTitleBarOptions tb, QWasmCompositor::SubControls subcontrol);
 
+    QWasmScreen *screen();
+    QOpenGLContext *context();
+
 private slots:
     void frame();
 
 private:
-    void createFrameBuffer();
-    void flushCompletedCallback(int32_t);
     void notifyTopWindowChanged(QWasmWindow *window);
     void drawWindow(QOpenGLTextureBlitter *blitter, QWasmScreen *screen, QWasmWindow *window);
     void drawWindowContent(QOpenGLTextureBlitter *blitter, QWasmScreen *screen, QWasmWindow *window);
@@ -139,10 +140,8 @@ private:
     void drawWindowDecorations(QOpenGLTextureBlitter *blitter, QWasmScreen *screen, QWasmWindow *window);
     void drwPanelButton();
 
-    QImage *m_frameBuffer;
     QScopedPointer<QOpenGLContext> m_context;
     QScopedPointer<QOpenGLTextureBlitter> m_blitter;
-    QWasmScreen *m_screen;
 
     QHash<QWasmWindow *, QWasmCompositedWindow> m_compositedWindows;
     QList<QWasmWindow *> m_windowStack;

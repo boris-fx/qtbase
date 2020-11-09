@@ -48,11 +48,20 @@
 **
 ****************************************************************************/
 
-#include <QtWidgets>
-
 #include "mainwindow.h"
 #include "encodingdialog.h"
 #include "previewform.h"
+
+#include <QAction>
+#include <QApplication>
+#include <QFileDialog>
+#include <QMenuBar>
+#include <QMessageBox>
+#include <QPlainTextEdit>
+#include <QRegularExpression>
+#include <QScreen>
+#include <QTextCodec>
+#include <QTextStream>
 
 MainWindow::MainWindow()
 {
@@ -69,7 +78,7 @@ MainWindow::MainWindow()
 
     setWindowTitle(tr("Codecs"));
 
-    const QRect screenGeometry = QApplication::desktop()->screenGeometry(this);
+    const QRect screenGeometry = screen()->geometry();
     resize(screenGeometry.width() / 2, screenGeometry.height() * 2 / 3);
 }
 
@@ -127,11 +136,10 @@ void MainWindow::about()
 
 void MainWindow::aboutToShowSaveAsMenu()
 {
-    QString currentText = textEdit->toPlainText();
-
-    foreach (QAction *action, saveAsActs) {
-        QByteArray codecName = action->data().toByteArray();
-        QTextCodec *codec = QTextCodec::codecForName(codecName);
+    const QString currentText = textEdit->toPlainText();
+    for (QAction *action : qAsConst(saveAsActs)) {
+        const QByteArray codecName = action->data().toByteArray();
+        const QTextCodec *codec = QTextCodec::codecForName(codecName);
         action->setVisible(codec && codec->canEncode(currentText));
     }
 }
@@ -142,18 +150,19 @@ void MainWindow::findCodecs()
     QRegularExpression iso8859RegExp("^ISO[- ]8859-([0-9]+).*$");
     QRegularExpressionMatch match;
 
-    foreach (int mib, QTextCodec::availableMibs()) {
+    const QList<int> mibs = QTextCodec::availableMibs();
+    for (int mib : mibs) {
         QTextCodec *codec = QTextCodec::codecForMib(mib);
 
         QString sortKey = codec->name().toUpper();
-        int rank;
+        char rank;
 
         if (sortKey.startsWith(QLatin1String("UTF-8"))) {
             rank = 1;
         } else if (sortKey.startsWith(QLatin1String("UTF-16"))) {
             rank = 2;
         } else if ((match = iso8859RegExp.match(sortKey)).hasMatch()) {
-            if (match.captured(1).size() == 1)
+            if (match.capturedRef(1).size() == 1)
                 rank = 3;
             else
                 rank = 4;
@@ -164,7 +173,8 @@ void MainWindow::findCodecs()
 
         codecMap.insert(sortKey, codec);
     }
-    codecs = codecMap.values();
+    for (const auto &codec : qAsConst(codecMap))
+      codecs += codec;
 }
 
 void MainWindow::createMenus()
@@ -177,7 +187,7 @@ void MainWindow::createMenus()
     QMenu *saveAsMenu = fileMenu->addMenu(tr("&Save As"));
     connect(saveAsMenu, &QMenu::aboutToShow,
             this, &MainWindow::aboutToShowSaveAsMenu);
-    foreach (const QTextCodec *codec, codecs) {
+    for (const QTextCodec *codec : qAsConst(codecs)) {
         const QByteArray name = codec->name();
         QAction *action = saveAsMenu->addAction(tr("%1...").arg(QLatin1String(name)));
         action->setData(QVariant(name));
@@ -206,7 +216,7 @@ void MainWindow::encodingDialog()
 {
     if (!m_encodingDialog) {
         m_encodingDialog = new EncodingDialog(this);
-        const QRect screenGeometry = QApplication::desktop()->screenGeometry(this);
+        const QRect screenGeometry = screen()->geometry();
         m_encodingDialog->setMinimumWidth(screenGeometry.width() / 4);
     }
     m_encodingDialog->show();

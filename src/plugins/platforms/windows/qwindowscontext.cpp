@@ -593,8 +593,8 @@ QString QWindowsContext::registerWindowClass(const QWindow *w)
         break;
     }
     // Create a unique name for the flag combination
-    QString cname = classNamePrefix();
-    cname += QLatin1String("QWindow");
+    QString cname;
+    cname += QLatin1String(QT_STRINGIFY(QT_MANGLE_NAMESPACE(Qt5QWindow)));
     switch (type) {
     case Qt::Tool:
         cname += QLatin1String("Tool");

@@ -187,9 +187,15 @@ void QWindowsClipboard::releaseIData()
 
 void QWindowsClipboard::registerViewer()
 {
+#define QT_STRINGIFY2_W(x) L#x
+#define QT_STRINGIFY_W(x) QT_STRINGIFY2_W(x)
+#define QT_MANGLED_UNICODE_LITERAL(str) QT_STRINGIFY_W(QT_MANGLE_NAMESPACE(str))
+
     m_clipboardViewer = QWindowsContext::instance()->
-        createDummyWindow(QStringLiteral("ClipboardView"), L"QtClipboardView",
-                          qClipboardViewerWndProc, WS_OVERLAPPED);
+        createDummyWindow(
+            QStringLiteral(QT_STRINGIFY(QT_MANGLE_NAMESPACE(Qt5ClipboardView))),
+            QT_MANGLED_UNICODE_LITERAL(Qt5ClipboardView),
+            qClipboardViewerWndProc, WS_OVERLAPPED);
 
     // Try format listener API (Vista onwards) first.
     if (QWindowsContext::user32dll.addClipboardFormatListener && QWindowsContext::user32dll.removeClipboardFormatListener) {

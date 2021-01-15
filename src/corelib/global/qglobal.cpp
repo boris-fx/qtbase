@@ -4313,6 +4313,14 @@ bool QInternal::activateCallbacks(Callback cb, void **parameters)
     return false;
 }
 
+#if !defined(QT_BUILD_QMAKE) && !defined(QT_BUILD_CONFIGURE) && !defined(QT_BOOTSTRAPPED)
+extern void qt_set_current_thread_to_main_thread();
+
+void QInternal::setCurrentThreadToMainThread()
+{
+   qt_set_current_thread_to_main_thread();
+}
+#endif
 /*!
     \macro Q_BYTE_ORDER
     \relates <QtGlobal>

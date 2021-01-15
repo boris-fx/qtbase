@@ -1917,6 +1917,9 @@ public:
     static bool registerCallback(Callback, qInternalCallback);
     static bool unregisterCallback(Callback, qInternalCallback);
     static bool activateCallbacks(Callback, void **);
+#if !defined(QT_BUILD_QMAKE) && !defined(QT_BUILD_CONFIGURE) && !defined(QT_BOOTSTRAPPED)
+    static void setCurrentThreadToMainThread();
+#endif
 };
 
 QT_END_NAMESPACE

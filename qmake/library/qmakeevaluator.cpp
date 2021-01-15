@@ -1960,14 +1960,14 @@ QMakeEvaluator::VisitReturn QMakeEvaluator::evaluateFileChecked(
 {
     if (fileName.isEmpty())
         return ReturnFalse;
-    const QMakeEvaluator *ref = this;
-    do {
-        for (const ProFile *pf : ref->m_profileStack)
-            if (pf->fileName() == fileName) {
-                evalError(fL1S("Circular inclusion of %1.").arg(fileName));
-                return ReturnFalse;
-            }
-    } while ((ref = ref->m_caller));
+//    QMakeEvaluator *ref = this;
+//    do {
+//        foreach (const ProFile *pf, ref->m_profileStack)
+//            if (pf->fileName() == fileName) {
+//                evalError(fL1S("Circular inclusion of %1.").arg(fileName));
+//                return ReturnFalse;
+//            }
+//    } while ((ref = ref->m_caller));
     return evaluateFile(fileName, type, flags);
 }
 

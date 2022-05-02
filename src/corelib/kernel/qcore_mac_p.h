@@ -85,6 +85,9 @@ struct mach_header;
 
 #define QT_MAC_WEAK_IMPORT(symbol) extern "C" decltype(symbol) symbol __attribute__((weak_import));
 
+// @compatibility_alias doesn't work with categories or their methods
+#define QtExtras QT_MANGLE_NAMESPACE(QtExtras)
+
 QT_BEGIN_NAMESPACE
 template <typename T, typename U, U (*RetainFunction)(U), void (*ReleaseFunction)(U)>
 class QAppleRefCounted

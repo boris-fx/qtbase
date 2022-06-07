@@ -801,9 +801,15 @@ static HGLRC createContext(const QOpenGLStaticContext &staticContext,
 // Helpers for temporary contexts
 static inline HWND createDummyGLWindow()
 {
+#define QT_STRINGIFY2_W(x) L#x
+#define QT_STRINGIFY_W(x) QT_STRINGIFY2_W(x)
+#define QT_MANGLED_UNICODE_LITERAL(str) QT_STRINGIFY_W(QT_MANGLE_NAMESPACE(str))
+
     return QWindowsContext::instance()->
-        createDummyWindow(QStringLiteral("OpenGLDummyWindow"),
-                          L"OpenGLDummyWindow", nullptr, WS_OVERLAPPED | WS_CLIPCHILDREN | WS_CLIPSIBLINGS);
+        createDummyWindow(
+            QStringLiteral(QT_STRINGIFY(QT_MANGLE_NAMESPACE(QtOpenGLDummyWindow))),
+            QT_MANGLED_UNICODE_LITERAL(QtOpenGLDummyWindow),
+            nullptr, WS_OVERLAPPED | WS_CLIPCHILDREN | WS_CLIPSIBLINGS);
 }
 
 // Create a dummy GL context (see QOpenGLTemporaryContext).

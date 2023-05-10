@@ -54,6 +54,7 @@
 #include <qmetaobject.h>
 #include "qstylehelper_p.h"
 #include <qstringbuilder.h>
+#include "qapplication.h"
 
 QT_BEGIN_NAMESPACE
 

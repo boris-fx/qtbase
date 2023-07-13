@@ -88,6 +88,28 @@ defineReplace(qtExportLibsForModule) {
     return($$result)
 }
 
+defineReplace(qtDefinesForModule) {
+    result =
+    mod_defines = $$val_escape(MODULE_DEFINES)
+
+    # Find any QT_NAMESPACE item in mod_defines
+    qt_namespace_item = $$find(mod_defines, "^QT_NAMESPACE=")
+    isEmpty(qt_namespace_item) {
+        result = "QT.$${MODULE_ID}.DEFINES = $$mod_defines"
+    } else {
+        # Remove the QT_NAMESPACE item and add code to use the
+        # run-time value of QT_NAMESPACE
+        mod_defines = $$replace(mod_defines, $${qt_namespace_item}, "")
+        result = \
+            "QT.$${MODULE_ID}.DEFINES = $$mod_defines" \
+            "isEmpty(QT_NAMESPACE):\\" \
+            "   QT.$${MODULE_ID}.DEFINES *= $${qt_namespace_item}" \
+            "else:\\" \
+            "   QT.$${MODULE_ID}.DEFINES *= QT_NAMESPACE=\$\${QT_NAMESPACE}"
+    }
+    return($$result)
+}
+
 !build_pass {
 
     # Create a module .pri file
@@ -142,13 +164,14 @@ defineReplace(qtExportLibsForModule) {
     !host_build: MODULE_PRI_CONT += \
         "QT.$${MODULE_ID}.bins = \$\$QT_MODULE_BIN_BASE" \
         $$module_plugtypes
+    defines_for_modude = $$qtDefinesForModule()
     MODULE_PRI_CONT += \
         "QT.$${MODULE_ID}.depends =$$join(MODULE_DEPENDS, " ", " ")" \
         $$module_rundep \
         "QT.$${MODULE_ID}.uses =$$join(QMAKE_USE, " ", " ")" \
         "QT.$${MODULE_ID}.module_config =$$join(module_build_type, " ", " ")" \
         $$module_config \
-        "QT.$${MODULE_ID}.DEFINES = $$val_escape(MODULE_DEFINES)" \
+        $$defines_for_modude \
         $$qtGetFeaturesForModule($$MODULE_ID) \
         $$qtGetExportsForModule($$MODULE_ID) \
         "QT_CONFIG +=$$join(QT.$${MODULE_ID}.QT_CONFIG, " ", " ")" \

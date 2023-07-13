@@ -1212,8 +1212,12 @@ defineReplace(qtConfOutputPostProcess_publicPro) {
 
     #libinfix and namespace
     !isEmpty(config.input.qt_libinfix): output += "QT_LIBINFIX = $$config.input.qt_libinfix"
-    !isEmpty(config.input.qt_namespace): output += "QT_NAMESPACE = $$config.input.qt_namespace"
-
+    !isEmpty(config.input.qt_namespace) {
+        # If the QT_NAMESPACE environment variable is set, use it.
+        # Else use the value of the qmake QT_NAMESPACE variable
+        output += "QT_NAMESPACE = \$\$(QT_NAMESPACE)"
+        output += "isEmpty(QT_NAMESPACE) : QT_NAMESPACE = $$config.input.qt_namespace"
+    }
     !isEmpty(QMAKE_GCC_MAJOR_VERSION) {
         output += \
             "QT_GCC_MAJOR_VERSION = $$QMAKE_GCC_MAJOR_VERSION" \

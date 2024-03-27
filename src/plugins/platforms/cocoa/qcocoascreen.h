@@ -136,6 +136,10 @@ QDebug operator<<(QDebug debug, const QCocoaScreen *screen);
 
 QT_END_NAMESPACE
 
+
+// @compatibility_alias doesn't work with categories or their methods
+#define qt_displayId QT_MANGLE_NAMESPACE(qt_displayId)
+
 @interface NSScreen (QtExtras)
 @property(readonly) CGDirectDisplayID qt_displayId;
 @end

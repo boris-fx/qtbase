@@ -75,7 +75,7 @@ class QWindow;
 
 namespace QStyleHelper
 {
-    QString uniqueName(const QString &key, const QStyleOption *option, const QSize &size);
+    Q_WIDGETS_EXPORT QString uniqueName(const QString &key, const QStyleOption *option, const QSize &size);
 
     Q_WIDGETS_EXPORT qreal dpi(const QStyleOption *option);
 

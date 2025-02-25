@@ -104,6 +104,9 @@ void QCocoaInputContext::reset()
         return;
 
     QCocoaWindow *window = static_cast<QCocoaWindow *>(m_focusWindow->handle());
+    if (!window)
+        return;
+
     QNSView *view = qnsview_cast(window->view());
     if (!view)
         return;

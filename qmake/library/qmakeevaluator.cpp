@@ -1938,10 +1938,16 @@ QMakeEvaluator::VisitReturn QMakeEvaluator::evaluateFileChecked(
         return ReturnFalse;
     const QMakeEvaluator *ref = this;
     do {
+        static bool allowCircular = propertyValue("QMAKE_ALLOW_CIRCULAR_INCLUDES").toInt();
         for (const ProFile *pf : ref->m_profileStack)
             if (pf->fileName() == fileName) {
-                evalError(fL1S("Circular inclusion of %1.").arg(fileName));
-                return ReturnFalse;
+                if (!allowCircular) {
+                    evalError(fL1S("Circular inclusion of %1.").arg(fileName));
+                    return ReturnFalse;
+                } else {
+                   languageWarning(fL1S("Circular inclusion of %1.").arg(fileName));
+                   break;
+                }
             }
     } while ((ref = ref->m_caller));
     return evaluateFile(fileName, type, flags);

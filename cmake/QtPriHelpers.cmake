@@ -260,6 +260,26 @@ function(qt_internal_get_module_run_dependencies out_var target)
     set("${out_var}" "${run_dependencies}" PARENT_SCOPE)
 endfunction()
 
+function(qt_generate_module_defines_text target_defines out_var)
+    # Does target_defines contain a QT_NAMESPACE item?
+    set(qt_namespace_item ${target_defines})
+    list(FILTER qt_namespace_item INCLUDE REGEX "^QT_NAMESPACE=")
+    list(JOIN qt_namespace_item "" qt_namespace_item)
+    if(NOT qt_namespace_item)
+        set(qt_module_target_defines "QT.${config_module_name}.DEFINES = ${target_defines}")
+    else()
+        # Remove the QT_NAMESPACE item and add code to use the run-time value of QT_NAMESPACE
+        list(FILTER target_defines EXCLUDE REGEX "^QT_NAMESPACE=")
+        list(JOIN target_defines " " joined_target_defines)
+
+        set(qt_module_target_defines "isEmpty(QT_NAMESPACE):\\
+  QT.core.DEFINES *= QT_NAMESPACE=${QT_NAMESPACE}
+else:\\
+  QT.core.DEFINES *= QT_NAMESPACE=\$\${QT_NAMESPACE}")
+    endif() 
+    set(${out_var} ${qt_module_target_defines} PARENT_SCOPE)
+endfunction()
+
 # Generates module .pri files for consumption by qmake
 function(qt_generate_module_pri_file target)
     set(flags INTERNAL_MODULE NO_PRIVATE_MODULE)
@@ -448,10 +468,13 @@ QT.${config_module_name}.depends = ${public_module_dependencies}
         string(APPEND content
             "QT.${config_module_name}.run_depends = ${public_module_run_dependencies}\n")
     endif()
+
+    qt_generate_module_defines_text("${target_defines}" qt_module_target_defines)
+
     string(APPEND content
         "QT.${config_module_name}.uses = ${joined_module_uses}
 QT.${config_module_name}.module_config = ${joined_module_internal_config}${module_build_config}
-QT.${config_module_name}.DEFINES = ${joined_target_defines}
+${qt_module_target_defines}
 QT.${config_module_name}.enabled_features = ${enabled_features}
 QT.${config_module_name}.disabled_features = ${disabled_features}${extra_assignments}
 QT_CONFIG += ${enabled_features}
@@ -741,7 +764,8 @@ QT_PATCH_VERSION = ${PROJECT_VERSION_PATCH}
 
     set(extra_statements "")
     if(QT_NAMESPACE)
-        list(APPEND extra_statements "QT_NAMESPACE = ${QT_NAMESPACE}")
+        list(APPEND extra_statements "QT_NAMESPACE = \$\$(QT_NAMESPACE)")
+        list(APPEND extra_statements "isEmpty(QT_NAMESPACE) : QT_NAMESPACE = ${QT_NAMESPACE}")
     endif()
 
     if(QT_LIBINFIX)

@@ -159,32 +159,36 @@ static inline int area(const QSize &s) { return s.width() * s.height(); }
 // the 2x pixmaps then.)
 static QPixmapIconEngineEntry *bestSizeScaleMatch(const QSize &size, qreal scale, QPixmapIconEngineEntry *pa, QPixmapIconEngineEntry *pb)
 {
-
+    const auto scaleA = pa->pixmap.devicePixelRatio();
+    const auto scaleB = pb->pixmap.devicePixelRatio();
     // scale: we can only differentiate on scale if the scale differs
-    if (pa->scale != pb->scale) {
+    if (scaleA != scaleB) {
 
         // Score the pixmaps: 0 is an exact scale match, positive
         // scores have more detail than requested, negative scores
         // have less detail than requested.
-        qreal ascore = pa->scale - scale;
-        qreal bscore = pb->scale - scale;
+        qreal ascore = scaleA - scale;
+        qreal bscore = scaleB - scale;
 
+        // always prefer positive scores to prevent upscaling
+        if ((ascore < 0) != (bscore < 0))
+            return bscore < 0 ? pa : pb;
         // Take the one closest to 0
         return (qAbs(ascore) < qAbs(bscore)) ? pa : pb;
     }
 
-    int s = area(size);
+    qint64 s = area(size * scale);
     if (pa->size == QSize() && pa->pixmap.isNull()) {
         pa->pixmap = QPixmap(pa->fileName);
         pa->size = pa->pixmap.size();
     }
-    int a = area(pa->size);
+    qint64 a = area(pa->size);
     if (pb->size == QSize() && pb->pixmap.isNull()) {
         pb->pixmap = QPixmap(pb->fileName);
         pb->size = pb->pixmap.size();
     }
-    int b = area(pb->size);
-    int res = a;
+    qint64 b = area(pb->size);
+    qint64 res = a;
     if (qMin(a,b) >= s)
         res = qMin(a,b);
     else

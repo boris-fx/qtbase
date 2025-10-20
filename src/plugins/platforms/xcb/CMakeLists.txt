@@ -47,7 +47,6 @@ qt_internal_add_module(XcbQpaPrivate
     INCLUDE_DIRECTORIES
         gl_integrations
     PUBLIC_LIBRARIES
-        PkgConfig::XKB_COMMON_X11
         Qt::CorePrivate
         Qt::GuiPrivate
         XCB::CURSOR
@@ -65,6 +64,7 @@ qt_internal_add_module(XcbQpaPrivate
         # XCB::XINPUT # special case remove handled below
         XCB::XKB
         XKB::XKB
+        XKB::XKB_COMMON_X11
     NO_UNITY_BUILD # X11 define clashes
 )
 

@@ -213,6 +213,21 @@ bool QInternal::activateCallbacks(Callback cb, void **parameters)
     return false;
 }
 
+#if !defined(QT_BUILD_QMAKE) && !defined(QT_BUILD_CONFIGURE) && !defined(QT_BOOTSTRAPPED)
+extern void qt_set_main_thread(QThread *thread);
+extern QThread * qt_get_main_thread();
+
+void QInternal::setMainThread(QThread *thread)
+{
+   qt_set_main_thread(thread);
+}
+
+QThread * QInternal::getMainThread()
+{
+   return qt_get_main_thread();
+}
+#endif
+
 /*!
     \macro QT_NAMESPACE
     \internal

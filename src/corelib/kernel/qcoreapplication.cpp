@@ -520,6 +520,16 @@ QThread *QCoreApplicationPrivate::mainThread()
     return theMainThread.loadRelaxed();
 }
 
+void qt_set_main_thread(QThread *thread)
+{
+    QCoreApplicationPrivate::theMainThread.storeRelease(thread);
+}
+
+QThread *qt_get_main_thread()
+{
+    return QCoreApplicationPrivate::theMainThread.loadAcquire();
+}
+
 bool QCoreApplicationPrivate::threadRequiresCoreApplication()
 {
     QThreadData *data = QThreadData::current(false);

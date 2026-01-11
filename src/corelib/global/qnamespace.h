@@ -16,6 +16,8 @@
 #  warning "File built in Objective-C mode (.m), but using Qt requires Objective-C++ (.mm)"
 #endif
 
+QT_FORWARD_DECLARE_CLASS(QThread);
+
 QT_BEGIN_NAMESPACE
 
 struct QMetaObject;
@@ -1852,6 +1854,14 @@ public:
     static bool registerCallback(Callback, qInternalCallback);
     static bool unregisterCallback(Callback, qInternalCallback);
     static bool activateCallbacks(Callback, void **);
+#if !defined(QT_BUILD_QMAKE) && !defined(QT_BUILD_CONFIGURE) && !defined(QT_BOOTSTRAPPED)
+    // Sets the QCoreApplicationPrivate::theMainThread variable to reference the given thread.
+    // This function designates the given thread as the application's main thread.
+    static void setMainThread(QThread *thread);
+
+    // Returns the application's main thread.
+    static QThread *getMainThread();
+#endif
 };
 
 class QKeyCombination
